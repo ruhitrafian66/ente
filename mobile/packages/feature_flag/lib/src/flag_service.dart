@@ -52,7 +52,10 @@ class FlagService {
 
   bool get internalUser {
     final isDisabled = _prefs.getBool("ls.internal_user_disabled") ?? false;
-    return (flags.internalUser || kDebugMode) && !isDisabled;
+    // Offline fork: upstream also returns true for every debug build. That
+    // made debug and release builds pick different ML database backends
+    // (`rustMlDb`), so a debug run could not read a release face index.
+    return flags.internalUser && !isDisabled;
   }
 
   bool get librarySharing =>

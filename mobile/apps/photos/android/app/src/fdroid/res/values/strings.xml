@@ -1,0 +1,4 @@
+<resources>
+    <!-- Offline fork: launcher label for the io.ente.photos.offline build. -->
+    <string name="app_name">Ente Offline</string>
+</resources>

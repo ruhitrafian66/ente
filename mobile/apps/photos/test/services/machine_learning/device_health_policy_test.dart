@@ -28,11 +28,11 @@ void main() {
 
   test('enforces the compute safety limits', () {
     expect(
-      issues(_snapshot(now, battery: _androidBattery(level: 19))),
+      issues(_snapshot(now, battery: _androidBattery(level: 9))),
       contains(DeviceHealthIssue.lowBattery),
     );
     expect(
-      issues(_snapshot(now, battery: _androidBattery(temperature: 42.1))),
+      issues(_snapshot(now, battery: _androidBattery(temperature: 45.1))),
       contains(DeviceHealthIssue.batteryTooHot),
     );
     expect(

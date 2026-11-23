@@ -10,6 +10,7 @@ import "package:permission_handler/permission_handler.dart";
 import "package:photos/db/upload_locks_db.dart";
 import "package:photos/main.dart";
 import "package:photos/module/upload/service/file_uploader.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/services/process_activity.dart";
 import "package:photos/utils/background_tasks.dart";
 import "package:shared_preferences/shared_preferences.dart";
@@ -293,7 +294,10 @@ class BgTaskUtils {
       androidPushRefreshTask,
       androidPushRefreshTask,
       constraints: workmanager.Constraints(
-        networkType: workmanager.NetworkType.connected,
+        // Offline fork: run on a device with no network.
+        networkType: kOfflineFork
+            ? workmanager.NetworkType.notRequired
+            : workmanager.NetworkType.connected,
       ),
       existingWorkPolicy: workmanager.ExistingWorkPolicy.keep,
     );
@@ -330,7 +334,10 @@ class BgTaskUtils {
             : const Duration(minutes: 15),
         initialDelay: kDebugMode ? Duration.zero : const Duration(minutes: 10),
         constraints: workmanager.Constraints(
-          networkType: workmanager.NetworkType.connected,
+          // Offline fork: run on a device with no network.
+          networkType: kOfflineFork
+              ? workmanager.NetworkType.notRequired
+              : workmanager.NetworkType.connected,
           requiresCharging: false,
           requiresStorageNotLow: false,
           requiresDeviceIdle: false,
@@ -371,7 +378,10 @@ class BgTaskUtils {
       flexInterval: const Duration(hours: 2),
       initialDelay: Duration.zero,
       constraints: workmanager.Constraints(
-        networkType: workmanager.NetworkType.connected,
+        // Offline fork: run on a device with no network.
+        networkType: kOfflineFork
+            ? workmanager.NetworkType.notRequired
+            : workmanager.NetworkType.connected,
         requiresCharging: true,
         requiresDeviceIdle: true,
       ),
@@ -401,7 +411,10 @@ class BgTaskUtils {
         iOSBackgroundProcessingTask,
         initialDelay: kDebugMode ? Duration.zero : const Duration(minutes: 30),
         constraints: workmanager.Constraints(
-          networkType: workmanager.NetworkType.connected,
+          // Offline fork: run on a device with no network.
+          networkType: kOfflineFork
+              ? workmanager.NetworkType.notRequired
+              : workmanager.NetworkType.connected,
           requiresCharging: true,
         ),
       );

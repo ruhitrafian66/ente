@@ -12,6 +12,7 @@ import "package:photos/models/base/id.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/face/person.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_ml/face_detection/detection.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
@@ -85,7 +86,10 @@ class _FileInfoFaceWidgetState extends State<FileInfoFaceWidget> {
                   : isEditMode
                   ? hasPerson
                         ? _onMinusIconTap
-                        : (isLocalGalleryMode ? null : _onPlusIconTap)
+                        // Offline fork: a face can get a name locally.
+                        : (isLocalGalleryMode && !kOfflineFork
+                              ? null
+                              : _onPlusIconTap)
                   : _routeToPersonOrClusterPage,
               onLongPress: isEditMode && !isSelectionMode && !hasPerson
                   ? widget.onLongPressSelected
@@ -208,7 +212,8 @@ class _FileInfoFaceWidgetState extends State<FileInfoFaceWidget> {
     final mlDataDB = isLocalGalleryMode
         ? MLDataDB.localGalleryInstance
         : MLDataDB.instance;
-    if (!isLocalGalleryMode && widget.person != null) {
+    // Offline fork: persons exist locally, so open the person page.
+    if ((!isLocalGalleryMode || kOfflineFork) && widget.person != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) =>
@@ -265,13 +270,15 @@ class _FileInfoFaceWidgetState extends State<FileInfoFaceWidget> {
           builder: (context) => ClusterPage(
             clusterFiles,
             clusterID: clusterID,
-            showNamingBanner: !isLocalGalleryMode,
+            // Offline fork: the save-person banner also shows locally.
+            showNamingBanner: !isLocalGalleryMode || kOfflineFork,
           ),
         ),
       );
       return;
     }
-    if (isLocalGalleryMode) {
+    // Offline fork: unclustered faces follow the normal flow.
+    if (isLocalGalleryMode && !kOfflineFork) {
       return;
     }
     if (widget.face.score <= kMinimumQualityFaceScore) {

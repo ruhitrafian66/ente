@@ -34,11 +34,13 @@ import 'package:photos/core/event_bus.dart';
 import 'package:photos/core/network/network.dart';
 import 'package:photos/db/files_db.dart';
 import "package:photos/db/ml/db.dart";
+import "package:photos/db/offline_files_db.dart";
 import 'package:photos/ente_theme_data.dart';
 import 'package:photos/events/guest_view_event.dart';
 import "package:photos/locale.dart";
 import 'package:photos/module/upload/service/file_uploader.dart';
 import 'package:photos/module/upload/service/local_file_update_service.dart';
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/account/purchase_update_listener.dart";
 import "package:photos/services/account/user_service.dart";
@@ -203,13 +205,17 @@ Future<void> _runInForeground(
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(SemanticSearchService.instance.init());
       unawaited(MemoryLaneService.instance.init());
-      unawaited(MemoryMusicService.instance.prepare());
-      unawaited(
-        Future.delayed(
-          const Duration(seconds: 5),
-          installSourceService.autoAttributePendingSource,
-        ),
-      );
+      // Offline fork: no memory-music download and no install-source
+      // attribution, both need the network.
+      if (!kOfflineFork) {
+        unawaited(MemoryMusicService.instance.prepare());
+        unawaited(
+          Future.delayed(
+            const Duration(seconds: 5),
+            installSourceService.autoAttributePendingSource,
+          ),
+        );
+      }
     });
     unawaited(_scheduleFGSync('appStart in FG'));
   });
@@ -324,6 +330,10 @@ Future<void> _runMinimally(
       NetworkClient.instance.downloadDio,
       packageInfo,
     );
+    // Offline fork: warm the offline int-ID cache before any service reads it.
+    if (kOfflineFork) {
+      await OfflineFilesDB.instance.refreshIntIdCache();
+    }
     MLDataDB.initialize(preferRust: flagService.rustMlDb);
     NotificationService.instance.init(prefs);
 
@@ -360,8 +370,11 @@ Future<void> _runMinimally(
     await NotificationService.instance.initializeForBackground();
 
     if (shouldStop?.call() ?? false) return;
-    _logger.info("[BG TASK] update notification");
-    updateService.showUpdateNotification().ignore();
+    // Offline fork: no update check.
+    if (!kOfflineFork) {
+      _logger.info("[BG TASK] update notification");
+      updateService.showUpdateNotification().ignore();
+    }
     _logger.info("[BG TASK] sync starting");
     await _sync('bgTaskActiveProcess');
     _logger.info("[BG TASK] sync completed");
@@ -454,6 +467,8 @@ Future<void> _init(
     Future.delayed(const Duration(seconds: 15), () {
       if (!initComplete && !isBackground) {
         _logger.severe("Stuck on splash screen for >= 15 seconds");
+        // Offline fork: do not open the "send logs to support" flow.
+        if (kOfflineFork) return;
         triggerSendLogs(
           "support@ente.com",
           "Stuck on splash screen for >= 15 seconds on ${Platform.operatingSystem}",
@@ -495,6 +510,11 @@ Future<void> _init(
       NetworkClient.instance.downloadDio,
       packageInfo,
     );
+
+    // Offline fork: warm the offline int-ID cache before any service reads it.
+    if (kOfflineFork) {
+      await OfflineFilesDB.instance.refreshIntIdCache();
+    }
 
     if (!isBackground) {
       await localSettings.migrateGalleryLayoutPreferences();
@@ -580,7 +600,12 @@ Future<void> _init(
       await _scheduleFGHomeWidgetSync();
     }
 
-    PushService.instance.init(onBackgroundPush: _handleBackgroundPush).ignore();
+    // Offline fork: no push notifications (no Firebase, no network).
+    if (!kOfflineFork) {
+      PushService.instance
+          .init(onBackgroundPush: _handleBackgroundPush)
+          .ignore();
+    }
     _logger.info("PushService/HomeWidget done $tlog");
     unawaited(MLService.instance.init());
     try {
@@ -709,8 +734,11 @@ Future runWithLogs(
       body: function,
       logDirPath: (await getApplicationSupportDirectory()).path + "/logs",
       maxLogFiles: 5,
-      sentryDsn: kDebugMode ? sentryDebugDSN : sentryDSN,
-      tunnel: sentryTunnel,
+      // Offline fork: no Sentry DSN and no tunnel, so no crash report upload.
+      sentryDsn: kOfflineFork
+          ? null
+          : (kDebugMode ? sentryDebugDSN : sentryDSN),
+      tunnel: kOfflineFork ? null : sentryTunnel,
       sentryInitTimeout: sentryInitTimeout,
       enableInDebugMode: true,
       prefix: prefix,

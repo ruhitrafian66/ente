@@ -1,4 +1,5 @@
 import 'package:ente_photos_platform/ente_photos_platform.dart';
+import 'package:photos/offline_fork.dart';
 
 enum DeviceHealthIssue {
   staleObservation,
@@ -22,8 +23,11 @@ class DeviceHealthEvaluation {
 
 class DeviceHealthPolicy {
   const DeviceHealthPolicy({
-    this.minimumBatteryLevel = 20,
-    this.maximumAndroidBatteryTemperature = 42,
+    // Offline fork (S25 tuning): upstream was 20.
+    this.minimumBatteryLevel = kOfflineMinimumBatteryLevel,
+    // Offline fork (S25 tuning): upstream was 42.
+    this.maximumAndroidBatteryTemperature =
+        kOfflineMaximumAndroidBatteryTemperature,
     this.maximumObservationAge = const Duration(minutes: 2),
   });
 

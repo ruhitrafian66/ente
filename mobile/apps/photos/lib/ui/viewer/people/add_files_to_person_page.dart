@@ -8,6 +8,7 @@ import "package:flutter/material.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/people_sort_order_change_event.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/search/generic_search_result.dart";
 import "package:photos/models/search/search_constants.dart";
@@ -471,7 +472,8 @@ class _AddFilesToPersonPageState extends State<AddFilesToPersonPage> {
       return;
     }
     final uploadIds = widget.files
-        .map((file) => file.uploadedFileID)
+        // Offline fork: manual assignments are keyed by `mlFileID`.
+        .map((file) => file.mlFileID)
         .whereType<int>()
         .toSet();
     if (uploadIds.isEmpty) {

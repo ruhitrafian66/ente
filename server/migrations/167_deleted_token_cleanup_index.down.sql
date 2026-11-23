@@ -1,1 +1,0 @@
-DROP INDEX CONCURRENTLY tokens_deleted_last_used_at_idx;

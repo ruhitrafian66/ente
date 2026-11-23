@@ -8,7 +8,6 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:intl/intl.dart";
 import "package:logging/logging.dart";
-import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/base.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/ente_theme_data.dart";
@@ -389,7 +388,8 @@ class _MemoryLanePageState extends State<MemoryLanePage>
     Future<List<FaceWithoutEmbedding>?>? facesFuture,
   }) async {
     EnteFile? effectiveFile = file;
-    effectiveFile ??= await FilesDB.instance.getAnyUploadedFile(entry.fileId);
+    // Offline fork: the entry is keyed by `mlFileID`.
+    effectiveFile ??= await getFileForMlFileID(entry.fileId);
     MemoryImage? image;
     double? cropAspectRatio;
     Uint8List? bytes;

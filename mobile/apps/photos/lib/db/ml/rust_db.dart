@@ -18,6 +18,7 @@ import "package:photos/models/ml/face/face.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/models/ml/vector.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/filedata/model/file_data.dart";
 import "package:photos/services/machine_learning/ml_process_lock.dart";
@@ -44,7 +45,12 @@ class RustMLDataDB implements IMLDataDB<int> {
            dartClusterCentroidVectorDB ??
            UsearchClusterCentroidVectorDB.instance;
 
-  static final RustMLDataDB instance = RustMLDataDB._privateConstructor();
+  // Offline fork: there is no account database. Every "account" singleton
+  // resolves to the local gallery one, so person and feedback code that was
+  // written for accounts works on the on-device data.
+  static RustMLDataDB get instance =>
+      kOfflineFork ? localGalleryInstance : _accountInstance;
+  static final RustMLDataDB _accountInstance = RustMLDataDB._privateConstructor();
   static final RustMLDataDB localGalleryInstance =
       RustMLDataDB._privateConstructor(
         databaseName: "ente.ml.offline.db",

@@ -22,6 +22,7 @@ import "package:photos/models/ml/ml_typedefs.dart";
 import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/module/download/file.dart";
 import "package:photos/module/download/thumbnail.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/collections_service.dart";
 import "package:photos/services/filedata/model/file_data.dart";
@@ -329,7 +330,9 @@ Future<List<FileMLInstruction>> getLocalGalleryFilesForMlIndexing() async {
   final Map<int, int> clipIndexedFileIDs = await mlDataDB
       .clipIndexedFileWithVersion();
   final bool petEnabled =
-      flagService.petEnabled && localSettings.petRecognitionEnabled;
+      kOfflineRunPets &&
+      flagService.petEnabled &&
+      localSettings.petRecognitionEnabled;
   final Map<int, int> petIndexedFileIDs = petEnabled
       ? await mlDataDB.petIndexedFileIds()
       : const {};
@@ -372,11 +375,13 @@ Future<List<FileMLInstruction>> getLocalGalleryFilesForMlIndexing() async {
       faceIndexedFileIDs,
       faceMlVersion,
     );
-    final shouldRunClip = _shouldRunIndexingWithFileId(
-      localIntId,
-      clipIndexedFileIDs,
-      clipMlVersion,
-    );
+    final shouldRunClip =
+        kOfflineRunClip &&
+        _shouldRunIndexingWithFileId(
+          localIntId,
+          clipIndexedFileIDs,
+          clipMlVersion,
+        );
     final shouldRunPets =
         petEnabled &&
         _shouldRunIndexingWithFileId(

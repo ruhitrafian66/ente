@@ -14,6 +14,7 @@ import "package:photos/app_mode.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/app_mode_changed_event.dart";
 import "package:photos/events/permission_granted_event.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/ml_service.dart";
 import "package:photos/services/machine_learning/semantic_search/semantic_search_service.dart";
@@ -298,8 +299,10 @@ class _GrantPermissionsWidgetState extends State<GrantPermissionsWidget>
   }
 
   Future<void> _enterLocalGalleryIfPermitted() async {
+    // Offline fork: do not wait for the "onboarding pending" flag. Enter the
+    // gallery as soon as the OS permission is present.
     if (!widget.startWithoutAccount ||
-        !localSettings.isLocalGalleryOnboardingPending) {
+        (!kOfflineFork && !localSettings.isLocalGalleryOnboardingPending)) {
       return;
     }
     try {
@@ -495,7 +498,9 @@ class _GrantPermissionsWidgetState extends State<GrantPermissionsWidget>
                           onTap: _onTapOfflineGrantPermission,
                         ),
                         const Flexible(child: SizedBox(height: 42)),
-                        _buildOfflineTermsAndPrivacy(context),
+                        // Offline fork: no Terms / Privacy WebView links.
+                        if (!kOfflineFork)
+                          _buildOfflineTermsAndPrivacy(context),
                         const Flexible(child: SizedBox(height: 24)),
                       ],
                     ),

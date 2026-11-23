@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import "package:photos/app.dart";
 import 'package:photos/core/configuration.dart';
 import "package:photos/locale.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/theme/ente_theme.dart";
 import 'package:photos/ui/account/email_entry_page.dart';
@@ -258,6 +259,12 @@ class _LandingPageWidgetState extends State<LandingPageWidget> {
   }
 
   Future<void> _navigateToSignUpPage() async {
+    // Offline fork: no sign-up. HomeWidget never builds this page; this is a
+    // second barrier.
+    if (kOfflineFork) {
+      widget.onStartWithoutAccount();
+      return;
+    }
     updateService.hideChangeLog().ignore();
     Widget page;
     if (Configuration.instance.getEncryptedToken() == null) {
@@ -283,6 +290,11 @@ class _LandingPageWidgetState extends State<LandingPageWidget> {
   }
 
   void _navigateToSignInPage() {
+    // Offline fork: no login.
+    if (kOfflineFork) {
+      widget.onStartWithoutAccount();
+      return;
+    }
     updateService.hideChangeLog().ignore();
     Widget page;
     if (Configuration.instance.getEncryptedToken() == null) {

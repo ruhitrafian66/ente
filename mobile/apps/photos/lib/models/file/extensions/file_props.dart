@@ -1,10 +1,23 @@
 import "package:photos/core/configuration.dart";
+import "package:photos/db/offline_files_db.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/file/trash_file.dart";
+import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/collections_service.dart";
 
 extension FilePropsExtn on EnteFile {
+  /// The file ID used as the key in the ML database (face IDs, clusters,
+  /// manual person assignments).
+  ///
+  /// Account mode keys ML data by `uploadedFileID`. Local gallery mode (the
+  /// only mode of the offline fork) keys it by the int ID that
+  /// `OfflineFilesDB` assigns to the device `localID`. Use this getter instead
+  /// of `uploadedFileID` in all people / face code.
+  int? get mlFileID => isLocalGalleryMode
+      ? OfflineFilesDB.instance.cachedLocalIntId(localID)
+      : uploadedFileID;
+
   bool get isLivePhoto => fileType == FileType.livePhoto;
 
   bool get isMotionPhoto => (pubMagicMetadata?.mvi ?? 0) > 0;

@@ -4,7 +4,6 @@ import "package:collection/collection.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
-import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/models/memory_lane/memory_lane_models.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
@@ -307,7 +306,8 @@ class _MemoryLaneBannerSectionState extends State<MemoryLaneBannerSection> {
   }
 
   Future<MemoryImage?> _loadFaceThumbnail(MemoryLaneEntry entry) async {
-    final file = await FilesDB.instance.getAnyUploadedFile(entry.fileId);
+    // Offline fork: the entry is keyed by `mlFileID`.
+    final file = await getFileForMlFileID(entry.fileId);
     if (file == null) {
       return null;
     }

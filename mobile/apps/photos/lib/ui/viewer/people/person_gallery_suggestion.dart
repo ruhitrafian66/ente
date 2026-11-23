@@ -7,6 +7,7 @@ import "package:logging/logging.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/events/people_changed_event.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
@@ -219,7 +220,9 @@ class _PersonGallerySuggestionState extends State<PersonGallerySuggestion>
     final faceCropsList = await Future.wait(futures);
     final faceCrops = <int, Uint8List?>{};
     for (var i = 0; i < faceCropsList.length; i++) {
-      faceCrops[files[i].uploadedFileID!] = faceCropsList[i];
+      // Offline fork: face crops are keyed by `mlFileID`.
+      final fileID = files[i].mlFileID;
+      if (fileID != null) faceCrops[fileID] = faceCropsList[i];
     }
     return faceCrops;
   }
@@ -683,7 +686,7 @@ class _PersonGallerySuggestionState extends State<PersonGallerySuggestion>
       Uint8List? faceCrop;
       if (i != -1) {
         file = files[i];
-        faceCrop = faceCrops[file.uploadedFileID!];
+        faceCrop = faceCrops[file.mlFileID];
       }
 
       if (i > start) {
@@ -708,7 +711,7 @@ class _PersonGallerySuggestionState extends State<PersonGallerySuggestion>
                       )
                     : FileFaceWidget(
                         key: ValueKey(
-                          'face_${currentSuggestionIndex}_${file!.uploadedFileID}',
+                          'face_${currentSuggestionIndex}_${file!.mlFileID}',
                         ),
                         file,
                         faceCrop: faceCrop,

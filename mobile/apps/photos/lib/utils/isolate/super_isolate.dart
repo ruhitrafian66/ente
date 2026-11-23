@@ -6,6 +6,7 @@ import "package:logging/logging.dart";
 import "package:photos/core/error-reporting/isolate_logging.dart";
 import "package:photos/core/error-reporting/super_logging.dart";
 import "package:photos/models/base/id.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/utils/isolate/isolate_operations.dart";
 import "package:synchronized/synchronized.dart";
 
@@ -14,7 +15,12 @@ abstract class SuperIsolate {
   Logger get logger;
 
   Timer? _inactivityTimer;
-  final Duration _inactivityDuration = const Duration(seconds: 60);
+  // Offline fork (S25 tuning): upstream was a fixed 60 seconds for every
+  // isolate. Only the ML indexing isolate gets the longer timeout.
+  Duration get _inactivityDuration =>
+      kOfflineFork && isolateName == "MLIndexingIsolate"
+      ? kOfflineMlIndexingIsolateIdleTimeout
+      : const Duration(seconds: 60);
   int _activeTasks = 0;
 
   final _initIsolateLock = Lock();

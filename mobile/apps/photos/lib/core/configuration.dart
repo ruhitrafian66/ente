@@ -34,6 +34,7 @@ import 'package:photos/events/signed_in_event.dart';
 import 'package:photos/events/user_logged_out_event.dart';
 import 'package:photos/gateways/users/models/key_attributes.dart';
 import 'package:photos/module/upload/upload_artifact.dart';
+import "package:photos/offline_fork.dart";
 import 'package:photos/service_locator.dart';
 import 'package:photos/services/authenticated_session.dart';
 import 'package:photos/services/collections_service.dart';
@@ -140,7 +141,9 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
         _logger.info(
           "(for debugging) Token not found, deleting all secure storage data",
         );
-        await _secureStorage.deleteAll();
+        // Offline fork: there is never a token. Upstream wipes the secure
+        // store here, which would also erase the app lock PIN on each start.
+        if (!kOfflineFork) await _secureStorage.deleteAll();
       } else {
         _logger.info(
           "(for debugging) Token found, loading secure storage data",

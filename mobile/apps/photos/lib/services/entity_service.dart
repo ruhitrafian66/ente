@@ -6,6 +6,7 @@ import "package:crypto/crypto.dart";
 import "package:ente_crypto/ente_crypto.dart";
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import "package:nanoid/nanoid.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/db/entities_db.dart";
 import "package:photos/db/files_db.dart";
@@ -14,6 +15,7 @@ import "package:photos/gateways/entity/models/data.dart";
 import "package:photos/gateways/entity/models/key.dart";
 import "package:photos/gateways/entity/models/type.dart";
 import "package:photos/models/local_entity_data.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/utils/gzip.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -64,6 +66,19 @@ class EntityService {
     int? expectedUpdatedAt,
   }) async {
     final String plainText = jsonEncode(jsonMap);
+    if (kOfflineFork) {
+      // Offline fork: entities (persons) live only in the local entities
+      // table. No entity key, no encryption, no server round trip.
+      final localData = LocalEntityData(
+        id: id ?? "local_${nanoid()}",
+        type: type,
+        data: plainText,
+        ownerID: 0,
+        updatedAt: DateTime.now().microsecondsSinceEpoch,
+      );
+      await _db.upsertEntities([localData]);
+      return localData;
+    }
     final key = await getOrCreateEntityKey(type);
     late String encryptedData, header;
     if (type.isZipped) {
@@ -108,11 +123,12 @@ class EntityService {
   }
 
   Future<void> deleteEntry(String id) async {
-    await _gateway.deleteEntity(id);
+    if (!kOfflineFork) await _gateway.deleteEntity(id);
     await _db.deleteEntities([id]);
   }
 
   Future<void> syncEntities() async {
+    if (kOfflineFork) return;
     try {
       await _remoteToLocalSync(EntityType.location);
       await _remoteToLocalSync(EntityType.cgroup);
@@ -123,6 +139,7 @@ class EntityService {
   }
 
   Future<int> syncEntity(EntityType type) async {
+    if (kOfflineFork) return 0;
     try {
       return await _remoteToLocalSync(type);
     } catch (e) {

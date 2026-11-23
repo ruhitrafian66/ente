@@ -16,6 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:photos/core/error-reporting/tunneled_transport.dart';
 import "package:photos/core/exceptions.dart";
 import 'package:photos/models/typedefs.dart';
+import 'package:photos/offline_fork.dart';
 import "package:photos/utils/device_info.dart";
 import "package:photos/utils/ram_check_util.dart";
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -493,6 +494,8 @@ class SuperLogging {
   }
 
   static bool shouldReportCrashes() {
+    // Offline fork: crash reporting is always off.
+    if (kOfflineFork) return false;
     if (_preferences.containsKey(keyShouldReportCrashes)) {
       return _preferences.getBool(keyShouldReportCrashes)!;
     } else {
@@ -559,6 +562,9 @@ class SuperLogging {
 
   // disable sentry on f-droid. We need to make it opt-in preference
   static Future<bool> isFDroidBuild() async {
+    // Offline fork: the package name is io.ente.photos.offline. Treat the
+    // fork as an F-Droid build so that crash reporting stays disabled.
+    if (kOfflineFork) return true;
     if (!Platform.isAndroid) {
       return false;
     }

@@ -7,6 +7,7 @@ import "package:flutter/material.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/app_mode_changed_event.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/account/email_entry_page.dart";
@@ -41,6 +42,9 @@ class _SaveFacesBannerState extends State<SaveFacesBanner> {
 
   @override
   Widget build(BuildContext context) {
+    // Offline fork: there is no account to sign up for, so this banner never
+    // shows.
+    if (kOfflineFork) return const SizedBox.shrink();
     if (_dismissed) return const SizedBox.shrink();
     if (!(isLocalGalleryMode &&
         !Configuration.instance.hasConfiguredAccount())) {

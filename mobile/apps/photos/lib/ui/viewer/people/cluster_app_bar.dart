@@ -7,12 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
-import "package:photos/db/files_db.dart";
 import "package:photos/events/people_changed_event.dart";
 import 'package:photos/events/subscription_purchased_event.dart';
 import "package:photos/models/file/file.dart";
 import 'package:photos/models/gallery_type.dart';
 import 'package:photos/models/selected_files.dart';
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import 'package:photos/services/collections_service.dart';
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
@@ -27,6 +27,7 @@ import 'package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.da
 import "package:photos/ui/viewer/people/cluster_page.dart";
 import "package:photos/ui/viewer/people/person_face_widget.dart";
 import "package:photos/utils/dialog_util.dart";
+import "package:photos/utils/face/face_thumbnail_cache.dart";
 
 class ClusterAppBar extends StatefulWidget {
   static GalleryAppBarConfig sliverConfig(
@@ -222,7 +223,8 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
             size: IconSizes.small,
           ),
         ),
-      if (!isLocalGalleryMode && hasAccount) ...[
+      // Offline fork: ignore and split work on local data.
+      if (kOfflineFork || (!isLocalGalleryMode && hasAccount)) ...[
         EntePopupMenuOption(
           value: ClusterPopupAction.ignore,
           label: context.strings.ignorePerson,
@@ -319,12 +321,13 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
           final biggestClusterFileIDs = newClusterIDToFaceIDs[biggestClusterID]!
               .map((e) => getFileIdFromFaceId<int>(e))
               .toList();
-          biggestClusterFiles = await FilesDB.instance
-              .getFileIDToFileFromIDs(biggestClusterFileIDs)
-              .then((mapping) => mapping.values.toList());
+          // Offline fork: face IDs are keyed by `mlFileID`.
+          biggestClusterFiles = await getFilesForMlFileIDs(
+            biggestClusterFileIDs,
+          ).then((mapping) => mapping.values.toList());
           // Keep the replacement gallery in newest-first order.
           biggestClusterFiles.sort(
-            (a, b) => b.creationTime!.compareTo(a.creationTime!),
+            (a, b) => (b.creationTime ?? 0).compareTo(a.creationTime ?? 0),
           );
 
           userConfirmed = true;

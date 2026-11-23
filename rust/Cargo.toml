@@ -187,3 +187,8 @@ opt-level = 3
 
 [profile.dev.package.ente-vecdb]
 opt-level = 3
+
+# Offline fork (S25 tuning): upstream had no [profile.release] overrides.
+[profile.release]
+lto = "thin"
+codegen-units = 1

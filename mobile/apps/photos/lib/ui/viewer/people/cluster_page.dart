@@ -9,11 +9,13 @@ import "package:photos/events/app_mode_changed_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/local_photos_updated_event.dart";
 import "package:photos/events/people_changed_event.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file_load_result.dart";
 import "package:photos/models/gallery_type.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/models/selected_files.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -72,8 +74,12 @@ class _ClusterPageState extends State<ClusterPage> {
   late final StreamSubscription<AppModeChangedEvent> _appModeChangedEvent;
   late final ValueNotifier<Set<String>> _timelineNotifier;
   late final VoidCallback _timelineListener;
+  // Offline fork: persons are local, so the "sign up to name" UI mode is
+  // never active and the normal save-person flow runs.
   bool get _localGalleryUiMode =>
-      isLocalGalleryMode && !Configuration.instance.hasConfiguredAccount();
+      !kOfflineFork &&
+      isLocalGalleryMode &&
+      !Configuration.instance.hasConfiguredAccount();
 
   @override
   void initState() {
@@ -106,7 +112,8 @@ class _ClusterPageState extends State<ClusterPage> {
         if (event.type == PeopleEventType.removedFaceFromCluster) {
           for (final String removedFaceID in event.relevantFaceIDs!) {
             final int fileID = getFileIdFromFaceId<int>(removedFaceID);
-            files.removeWhere((file) => file.uploadedFileID == fileID);
+            // Offline fork: face IDs are keyed by `mlFileID`.
+            files.removeWhere((file) => file.mlFileID == fileID);
           }
           widget.onFilesChanged?.call();
           setState(() {});

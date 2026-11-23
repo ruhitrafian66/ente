@@ -13,6 +13,7 @@ import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/search/search_result.dart";
 import "package:photos/models/search/search_types.dart";
 import "package:photos/models/selected_people.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/components/collection_share_badge.dart";
@@ -292,7 +293,8 @@ class PersonSearchExample extends StatelessWidget {
                 ],
               ),
               isCluster
-                  ? isLocalGalleryMode
+                  // Offline fork: "Add name" also shows in local gallery mode.
+                  ? isLocalGalleryMode && !kOfflineFork
                         ? const SizedBox.shrink()
                         : GestureDetector(
                             behavior: HitTestBehavior.translucent,

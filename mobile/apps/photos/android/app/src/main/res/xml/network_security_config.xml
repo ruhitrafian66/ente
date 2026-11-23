@@ -1,5 +1,6 @@
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <!-- Offline fork: upstream permits cleartext traffic here. -->
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />

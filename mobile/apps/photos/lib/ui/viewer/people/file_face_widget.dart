@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import "package:logging/logging.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
@@ -55,7 +56,8 @@ class _FileFaceWidgetState extends State<FileFaceWidget> {
   void dispose() {
     super.dispose();
     if (widget.faceCrop == null) {
-      final fileId = widget.file.uploadedFileID;
+      // Offline fork: face crop tasks are keyed by `mlFileID`.
+      final fileId = widget.file.mlFileID;
       if (fileId != null) {
         checkStopTryingToGenerateFaceThumbnails(
           fileId,
@@ -153,7 +155,7 @@ class _FileFaceWidgetState extends State<FileFaceWidget> {
       }
     } catch (e, s) {
       _logger.severe(
-        "Failed to get face crop for file ${widget.file.uploadedFileID}",
+        "Failed to get face crop for file ${widget.file.mlFileID}",
         e,
         s,
       );

@@ -9,6 +9,7 @@ import "package:photos/core/cache/lru_map.dart";
 import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/ml/face/box.dart";
@@ -17,6 +18,7 @@ import "package:photos/module/download/file.dart";
 import "package:photos/module/download/thumbnail.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_thumbnail_generator.dart";
+import "package:photos/services/search_service.dart";
 
 final _logger = Logger("FaceCropUtils");
 
@@ -36,6 +38,42 @@ TaskQueue _queueThumbnailFaceGenerations = TaskQueue<String>(
   taskTimeout: const Duration(minutes: 1),
   maxQueueSize: 100,
 );
+
+/// Offline fork: resolves ML file IDs (see `EnteFile.mlFileID`) to files.
+///
+/// Account mode: the ML file ID is the uploaded file ID, so `FilesDB` gives
+/// the files. Local gallery mode: the ML file ID is the int that
+/// `OfflineFilesDB` assigns to a device `localID`, so the files come from the
+/// search file list. People UI code must use this function and not
+/// `FilesDB.getAnyUploadedFile` / `getFileIDToFileFromIDs`.
+Future<Map<int, EnteFile>> getFilesForMlFileIDs(Iterable<int> mlFileIDs) async {
+  final ids = mlFileIDs.toSet();
+  if (ids.isEmpty) return {};
+  if (!isLocalGalleryMode) {
+    return FilesDB.instance.getFileIDToFileFromIDs(ids.toList());
+  }
+  final intIdToLocalId = await OfflineFilesDB.instance.getLocalIdsForIntIds(
+    ids,
+  );
+  if (intIdToLocalId.isEmpty) return {};
+  final localIdToIntId = <String, int>{
+    for (final entry in intIdToLocalId.entries) entry.value: entry.key,
+  };
+  final allFiles = await SearchService.instance.getAllFilesForSearch();
+  final result = <int, EnteFile>{};
+  for (final file in allFiles) {
+    final intId = localIdToIntId[file.localID];
+    if (intId == null || result.containsKey(intId)) continue;
+    result[intId] = file;
+    if (result.length == localIdToIntId.length) break;
+  }
+  return result;
+}
+
+/// Offline fork: single-file form of [getFilesForMlFileIDs].
+Future<EnteFile?> getFileForMlFileID(int mlFileID) async {
+  return (await getFilesForMlFileIDs([mlFileID]))[mlFileID];
+}
 
 Uint8List? checkInMemoryCachedCropForPersonOrClusterID(
   String personOrClusterID,
@@ -284,21 +322,27 @@ Future<Uint8List?> precomputeClusterFaceCrop(
   try {
     final w = (kDebugMode ? EnteWatch('precomputeClusterFaceCrop') : null)
       ?..start();
+    // Offline fork: ML data is keyed by `mlFileID`.
+    final recentFileID = file.mlFileID;
+    if (recentFileID == null) {
+      debugPrint("No ML file ID for cluster $clusterID cover file");
+      return null;
+    }
     final FaceWithoutEmbedding? face = await MLDataDB.instance
         .getCoverFaceForPerson(
-          recentFileID: file.uploadedFileID!,
+          recentFileID: recentFileID,
           clusterID: clusterID,
         );
     w?.log('getCoverFaceForPerson');
     if (face == null) {
       debugPrint(
-        "No cover face for cluster $clusterID and recentFile ${file.uploadedFileID}",
+        "No cover face for cluster $clusterID and recentFile $recentFileID",
       );
       return null;
     }
     EnteFile? fileForFaceCrop = file;
-    if (face.fileID != file.uploadedFileID!) {
-      fileForFaceCrop = await FilesDB.instance.getAnyUploadedFile(face.fileID);
+    if (face.fileID != recentFileID) {
+      fileForFaceCrop = await getFileForMlFileID(face.fileID);
       w?.log('getAnyUploadedFile');
     }
     if (fileForFaceCrop == null) {

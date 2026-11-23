@@ -9,6 +9,7 @@ import "package:flutter/foundation.dart" show kDebugMode;
 import "package:flutter/material.dart";
 import "package:photos/models/duplicate_files.dart";
 import "package:photos/models/freeable_space_info.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/collections_service.dart";
 import "package:photos/services/deduplication_service.dart";
@@ -18,8 +19,10 @@ import "package:photos/ui/components/models/button_type.dart";
 import "package:photos/ui/notification/toast.dart";
 import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/deduplicate_page.dart";
+import "package:photos/ui/tools/exact_duplicates_page.dart";
 import "package:photos/ui/tools/free_space_page.dart";
 import "package:photos/ui/tools/photo_review/review_old_photos_page.dart";
+import "package:photos/ui/tools/png_to_jpg_page.dart";
 import "package:photos/ui/tools/similar_images_page.dart";
 import "package:photos/ui/viewer/gallery/delete_suggestions_page.dart";
 import "package:photos/ui/viewer/gallery/large_files_page.dart";
@@ -53,15 +56,19 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
           icon: HugeIcons.strokeRoundedDelete01,
           onTap: () => showTrashPage(context),
         ),
-        const SizedBox(height: Spacing.sm),
-        _buildFreeSpaceOption(
-          title: l10n.freeUpDeviceSpace,
-          subtitle:
-              l10n.freeUpDeviceSpaceDesc +
-              (Platform.isIOS ? " ${l10n.freeUpDeviceSpaceDescICloud}" : ""),
-          icon: HugeIcons.strokeRoundedSmartPhone01,
-          onTap: () async => _onFreeUpDeviceSpaceTapped(),
-        ),
+        // Offline fork: "free up device space" deletes files that are backed
+        // up to an Ente account. There is no account, so it is hidden.
+        if (!kOfflineFork) ...[
+          const SizedBox(height: Spacing.sm),
+          _buildFreeSpaceOption(
+            title: l10n.freeUpDeviceSpace,
+            subtitle:
+                l10n.freeUpDeviceSpaceDesc +
+                (Platform.isIOS ? " ${l10n.freeUpDeviceSpaceDescICloud}" : ""),
+            icon: HugeIcons.strokeRoundedSmartPhone01,
+            onTap: () async => _onFreeUpDeviceSpaceTapped(),
+          ),
+        ],
         const SizedBox(height: Spacing.lg),
         Text(
           l10n.review,
@@ -85,6 +92,33 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
   }
 
   Widget _buildReviewOptions(BuildContext context, StringsLocalizations l10n) {
+    // Offline fork: only tools that work on device files, without an account,
+    // a server or CLIP embeddings.
+    if (kOfflineFork) {
+      return MenuGroupComponent(
+        items: [
+          _buildFreeSpaceOption(
+            title: "Exact duplicates", // Offline fork: not localized
+            subtitle:
+                "Find files with identical content and delete the extra copies", // Offline fork: not localized
+            icon: HugeIcons.strokeRoundedCopy01,
+            onTap: () async {
+              await routeToPage(context, const ExactDuplicatesPage());
+            },
+          ),
+          _buildFreeSpaceOption(
+            title: "Convert PNG to JPG", // Offline fork: not localized
+            subtitle:
+                "Compress PNG images to save space", // Offline fork: not localized
+            icon: HugeIcons.strokeRoundedImageCrop,
+            onTap: () async {
+              await routeToPage(context, const PngToJpgPage());
+            },
+          ),
+        ],
+      );
+    }
+
     final options = <Widget>[
       if (flagService.internalUser)
         _buildFreeSpaceOption(

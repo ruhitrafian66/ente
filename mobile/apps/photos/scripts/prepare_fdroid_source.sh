@@ -40,6 +40,14 @@ assert_fdroid_source() {
     fi
 }
 
+# Offline fork: this preparation is applied permanently in the fork. A second
+# run only copies the overlay again and checks the result.
+if ! rg -q "^  (firebase_core|firebase_messaging|in_app_purchase|in_app_purchase_storekit):" pubspec.yaml; then
+    echo "prepare_fdroid_source: already applied (offline fork); checking only"
+    assert_fdroid_source
+    exit 0
+fi
+
 remove_direct_dependencies
 remove_playstore_sources
 copy_fdroid_overlay

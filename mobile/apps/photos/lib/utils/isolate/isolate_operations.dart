@@ -6,6 +6,7 @@ import "package:photos/db/ml/db.dart";
 import "package:photos/db/ml/usearch_clip_vector_db.dart";
 import "package:photos/models/ml/face/box.dart";
 import "package:photos/models/ml/vector.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering_service.dart";
 import "package:photos/services/machine_learning/ml_constants.dart";
 import "package:photos/services/machine_learning/ml_exceptions.dart";
@@ -241,7 +242,7 @@ Future<void> _ensureRustRuntimePrepared(Map<String, dynamic> args) async {
   await rust_ml.initMlRuntime(
     assetsDir: assetsDir,
     runFaces: true,
-    runClip: true,
+    runClip: kOfflineRunClip,
     runPets: preparePets,
   );
   _isolateCache[_rustMlRuntimeConfigCacheKey] = runtimeConfigKey;

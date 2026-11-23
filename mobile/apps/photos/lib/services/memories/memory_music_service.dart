@@ -5,6 +5,7 @@ import "package:crypto/crypto.dart";
 import "package:dio/dio.dart";
 import "package:logging/logging.dart";
 import "package:photos/models/memories/memory_music_track.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/remote_assets_service.dart";
 import "package:shared_preferences/shared_preferences.dart";
@@ -70,6 +71,9 @@ class MemoryMusicService {
       _preparation ??= _prepare().whenComplete(() => _preparation = null);
 
   Future<List<MemoryMusicTrack>> _prepare() async {
+    // Offline fork: no manifest fetch and no track download. There is no
+    // memory music in this fork.
+    if (kOfflineFork) return const [];
     _tracks ??= _readCachedManifest();
     if (!_manifestRefreshed) await _refreshManifest();
     return _availableTracks(_tracks!);

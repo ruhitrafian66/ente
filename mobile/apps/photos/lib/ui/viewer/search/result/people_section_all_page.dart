@@ -17,6 +17,7 @@ import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/search/search_result.dart";
 import "package:photos/models/search/search_types.dart";
 import "package:photos/models/selected_people.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
 import "package:photos/services/search_service.dart";
@@ -160,7 +161,8 @@ class SelectablePersonSearchExample extends StatelessWidget {
   });
 
   void _handleTap(BuildContext context) {
-    if (isLocalGalleryMode) {
+    // Offline fork: multi-select works in local gallery mode.
+    if (isLocalGalleryMode && !kOfflineFork) {
       _handleNavigation(context);
       return;
     }
@@ -172,7 +174,8 @@ class SelectablePersonSearchExample extends StatelessWidget {
   }
 
   void _handleLongPress() {
-    if (isLocalGalleryMode) {
+    // Offline fork: multi-select works in local gallery mode.
+    if (isLocalGalleryMode && !kOfflineFork) {
       return;
     }
     _toggleSelection();
@@ -788,7 +791,9 @@ class _PeopleSectionAllWidgetState extends State<PeopleSectionAllWidget> {
             final showExtraFaces =
                 showAllFaces && filteredExtraFaces.isNotEmpty;
             slivers.addAll([
-              if (isLocalGalleryMode &&
+              // Offline fork: no sign-up banner.
+              if (!kOfflineFork &&
+                  isLocalGalleryMode &&
                   !Configuration.instance.hasConfiguredAccount())
                 const SliverToBoxAdapter(child: SaveFacesBanner()),
               (!userDismissedPersonGallerySuggestion &&

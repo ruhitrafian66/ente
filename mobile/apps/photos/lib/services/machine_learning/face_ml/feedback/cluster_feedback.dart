@@ -5,14 +5,15 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/event_bus.dart";
-import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/base.dart";
 import "package:photos/db/ml/cluster_centroid_vector_db.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/events/people_changed_event.dart";
 import "package:photos/models/base/id.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/person.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
@@ -23,6 +24,7 @@ import "package:photos/services/machine_learning/face_ml/feedback/store_cluster_
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/search_service.dart";
+import "package:photos/utils/ml_file_ids.dart";
 
 class ClusterSuggestion {
   final PersonEntity person;
@@ -49,7 +51,7 @@ class ClusterFeedbackService<T> {
 
   ClusterFeedbackService._privateConstructor();
   late final mlDataDB = MLDataDB.instance;
-  // Person suggestions belong to the Ente account, not the local gallery.
+  // Offline fork: MLDataDB.instance resolves to the local gallery database.
   IMLDataDB<int> get _mlDataDBForCentroidVectorDb => MLDataDB.instance;
   ClusterCentroidVectorDB get _clusterCentroidVectorDB =>
       ClusterCentroidVectorDB.instance;
@@ -79,11 +81,9 @@ class ClusterFeedbackService<T> {
     PersonEntity person, {
     bool extremeFilesFirst = true,
   }) async {
-    assert(
-      !isLocalGalleryMode,
-      "Person suggestions require an Ente account and should not run in local gallery mode.",
-    );
-    if (isLocalGalleryMode) {
+    // Offline fork: persons are local, so suggestions also run in local
+    // gallery mode.
+    if (isLocalGalleryMode && !kOfflineFork) {
       _logger.info(
         "Skipping getSuggestionForPerson in local gallery mode because person suggestions require an Ente account",
       );
@@ -111,10 +111,10 @@ class ClusterFeedbackService<T> {
       final Map<String, List<EnteFile>> clusterIDToFiles = {};
       final allFiles = await SearchService.instance.getAllFilesForSearch();
       for (final f in allFiles) {
-        if (!fileIdToClusterID.containsKey(f.uploadedFileID ?? -1)) {
+        if (!fileIdToClusterID.containsKey(f.mlFileID ?? -1)) {
           continue;
         }
-        final cluserIds = fileIdToClusterID[f.uploadedFileID ?? -1]!;
+        final cluserIds = fileIdToClusterID[f.mlFileID ?? -1]!;
         for (final cluster in cluserIds) {
           if (clusterIDToFiles.containsKey(cluster)) {
             clusterIDToFiles[cluster]!.add(f);
@@ -166,7 +166,7 @@ class ClusterFeedbackService<T> {
   ) async {
     try {
       final fileIDsToRemove = files
-          .map((file) => file.uploadedFileID)
+          .map((file) => file.mlFileID)
           .whereType<int>()
           .toSet();
 
@@ -188,7 +188,7 @@ class ClusterFeedbackService<T> {
           .then((iterable) => iterable.toList());
       faceIDs.retainWhere((faceID) {
         final fileID = getFileIdFromFaceId<int>(faceID);
-        return files.any((file) => file.uploadedFileID == fileID);
+        return files.any((file) => file.mlFileID == fileID);
       });
 
       if (faceIDs.isEmpty) {
@@ -202,8 +202,7 @@ class ClusterFeedbackService<T> {
         return;
       }
 
-      final fileIDToCreationTime = await FilesDB.instance
-          .getFileIDToCreationTime();
+      final fileIDToCreationTime = await getMlFileIdToCreationTime();
 
       final newFaceIdToClusterID = await FaceClustering.instance.reclusterFaces(
         faceIDs,
@@ -281,10 +280,9 @@ class ClusterFeedbackService<T> {
           .then((iterable) => iterable.toList());
       faceIDs.retainWhere((faceID) {
         final fileID = getFileIdFromFaceId<int>(faceID);
-        return files.any((file) => file.uploadedFileID == fileID);
+        return files.any((file) => file.mlFileID == fileID);
       });
-      final fileIDToCreationTime = await FilesDB.instance
-          .getFileIDToCreationTime();
+      final fileIDToCreationTime = await getMlFileIdToCreationTime();
 
       final newFaceIdToClusterID = await FaceClustering.instance.reclusterFaces(
         faceIDs,
@@ -844,7 +842,7 @@ class ClusterFeedbackService<T> {
       final clusterIDToFiles = <String, List<EnteFile>>{};
       final allFiles = await SearchService.instance.getAllFilesForSearch();
       for (final file in allFiles) {
-        final fileID = file.uploadedFileID;
+        final fileID = file.mlFileID;
         if (fileID == null) {
           continue;
         }
@@ -1018,7 +1016,7 @@ class ClusterFeedbackService<T> {
     final clusterIDToFiles = <String, List<EnteFile>>{};
     final allFiles = await SearchService.instance.getAllFilesForSearch();
     for (final file in allFiles) {
-      final fileID = file.uploadedFileID;
+      final fileID = file.mlFileID;
       if (fileID == null) {
         continue;
       }
@@ -1212,8 +1210,7 @@ class ClusterFeedbackService<T> {
 
   Future<Map<String, List<String>>> splitCluster(String clusterID) async {
     final faceIDs = await mlDataDB.getFaceIDsForCluster(clusterID);
-    final fileIDToCreationTime = await FilesDB.instance
-        .getFileIDToCreationTime();
+    final fileIDToCreationTime = await getMlFileIdToCreationTime();
     final newFaceIdToClusterID = await FaceClustering.instance.reclusterFaces(
       faceIDs.toList(),
       fileIDToCreationTime: fileIDToCreationTime,
@@ -1422,11 +1419,9 @@ class ClusterFeedbackService<T> {
     double threshold, {
     Set<String>? extraIgnoredClusters,
   }) async {
-    assert(
-      !isLocalGalleryMode,
-      "Fast person suggestions require an Ente account and should not run in local gallery mode.",
-    );
-    if (isLocalGalleryMode) {
+    // Offline fork: persons are local, so suggestions also run in local
+    // gallery mode.
+    if (isLocalGalleryMode && !kOfflineFork) {
       _logger.info(
         "Skipping _getFastSuggestions in local gallery mode because person suggestions require an Ente account",
       );
@@ -1624,13 +1619,13 @@ class ClusterFeedbackService<T> {
         fileIdToDistanceMap[getFileIdFromFaceId<int>(faceID)] = distance;
       }
       suggestion.filesInCluster.sort((b, a) {
-        final double distanceA = fileIdToDistanceMap[a.uploadedFileID!] ?? -1;
-        final double distanceB = fileIdToDistanceMap[b.uploadedFileID!] ?? -1;
+        final double distanceA = fileIdToDistanceMap[a.mlFileID!] ?? -1;
+        final double distanceB = fileIdToDistanceMap[b.mlFileID!] ?? -1;
         return distanceA.compareTo(distanceB);
       });
 
       debugPrint(
-        "[${_logger.name}] Sorted suggestions for cluster $clusterID based on distance to person: ${suggestion.filesInCluster.map((e) => fileIdToDistanceMap[e.uploadedFileID]).toList()}",
+        "[${_logger.name}] Sorted suggestions for cluster $clusterID based on distance to person: ${suggestion.filesInCluster.map((e) => fileIdToDistanceMap[e.mlFileID]).toList()}",
       );
     }
 

@@ -13,6 +13,7 @@ import "package:photos/events/people_changed_event.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/models/search/generic_search_result.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/theme/ente_theme.dart";
@@ -266,7 +267,9 @@ class _SaveOrEditPersonState extends State<SaveOrEditPerson> {
     );
   }
 
+  // Offline fork: "This is me" needs an account email, so it never shows.
   bool get _showThisIsMe =>
+      !kOfflineFork &&
       Configuration.instance.getEmail() != null &&
       (_isMe || !_isMeAssignedToAnotherPerson);
 

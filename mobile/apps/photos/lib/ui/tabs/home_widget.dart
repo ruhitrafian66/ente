@@ -38,6 +38,7 @@ import "package:photos/models/home_tab.dart";
 import "package:photos/models/search/index_of_indexed_stack.dart";
 import "package:photos/models/selected_albums.dart";
 import "package:photos/models/selected_files.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/account/user_service.dart";
 import "package:photos/services/album_home_widget_service.dart";
@@ -120,7 +121,10 @@ class _HomeWidgetState extends State<HomeWidget> {
   bool _personSyncTriggered = false;
   bool _collectionsSyncTriggered = false;
   bool _isShowingChangeLog = false;
-  bool _startWithoutAccount = localSettings.isLocalGalleryOnboardingPending;
+  // Offline fork: always use the account-free entry flow, so the landing
+  // (sign-up / login) page is unreachable.
+  bool _startWithoutAccount =
+      kOfflineFork || localSettings.isLocalGalleryOnboardingPending;
   final isOnSearchTabNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isAlbumsSearchActiveNotifier = ValueNotifier<bool>(
     false,
@@ -235,7 +239,8 @@ class _HomeWidgetState extends State<HomeWidget> {
     _accountConfiguredEvent = Bus.instance.on<AccountConfiguredEvent>().listen((
       event,
     ) {
-      _startWithoutAccount = false;
+      // Offline fork: never leave the account-free flow.
+      _startWithoutAccount = kOfflineFork;
       unawaited(localSettings.setLocalGalleryOnboardingPending(false));
       setState(() {});
       _handleMissingRecoveryKey();
@@ -253,7 +258,8 @@ class _HomeWidgetState extends State<HomeWidget> {
       _selectedTabIndex = 0;
       _selectedTabIndexNotifier.value = 0;
       isOnSearchTabNotifier.value = false;
-      _startWithoutAccount = false;
+      // Offline fork: never leave the account-free flow.
+      _startWithoutAccount = kOfflineFork;
       if (mounted) {
         setState(() {});
       }
@@ -282,7 +288,10 @@ class _HomeWidgetState extends State<HomeWidget> {
                 ),
               );
             });
-            _scheduleChangeLogCheck(delay: const Duration(milliseconds: 250));
+            // Offline fork: no automatic changelog sheet.
+            if (!kOfflineFork) {
+              _scheduleChangeLogCheck(delay: const Duration(milliseconds: 250));
+            }
           }
         });
     _firstImportEvent = Bus.instance.on<SyncStatusUpdate>().listen((
@@ -309,26 +318,34 @@ class _HomeWidgetState extends State<HomeWidget> {
             setState(() {});
           }
         });
-    _initDeepLinks();
-    updateService.shouldShowUpdateNotification().then((value) {
-      Future.delayed(Duration.zero, () {
-        if (value) {
-          if (!mounted) return;
-          showAppUpdateSheet(
-            context,
-            latestVersionInfo: updateService.getLatestVersionInfo()!,
-          ).ignore();
-          updateService.resetUpdateAvailableShownTime();
-        }
+    // Offline fork: no auth deep links, no update check, no public album
+    // links and no automatic changelog sheet.
+    if (!kOfflineFork) {
+      _initDeepLinks();
+      updateService.shouldShowUpdateNotification().then((value) {
+        Future.delayed(Duration.zero, () {
+          if (value) {
+            if (!mounted) return;
+            showAppUpdateSheet(
+              context,
+              latestVersionInfo: updateService.getLatestVersionInfo()!,
+            ).ignore();
+            updateService.resetUpdateAvailableShownTime();
+          }
+        });
       });
-    });
 
-    _initDeepLinkSubscriptionForPublicAlbums();
+      _initDeepLinkSubscriptionForPublicAlbums();
+    }
 
     _initMediaShareSubscription();
-    _scheduleChangeLogCheck(delay: const Duration(seconds: 1));
+    if (!kOfflineFork) {
+      _scheduleChangeLogCheck(delay: const Duration(seconds: 1));
+    }
 
-    if (Platform.isAndroid &&
+    // Offline fork: no "open links in app" prompt. The fork has no deep links.
+    if (!kOfflineFork &&
+        Platform.isAndroid &&
         !localSettings.hasConfiguredInAppLinkPermissions() &&
         RemoteSyncService.instance.isFirstRemoteSyncDone() &&
         endpointConfig.isProduction) {
@@ -392,6 +409,8 @@ class _HomeWidgetState extends State<HomeWidget> {
       AppNavigationService.instance.isGuestViewActive;
 
   Future<void> _handlePublicAlbumLink(Uri uri, String via) async {
+    // Offline fork: a public album link needs the network. Ignore it.
+    if (kOfflineFork) return;
     if (!mounted) {
       _logger.warning("Cannot handle public album link - widget not mounted");
       return;
@@ -883,6 +902,8 @@ class _HomeWidgetState extends State<HomeWidget> {
               _startWithoutAccount &&
               !Configuration.instance.hasConfiguredAccount() &&
               !localSettings.isAppModeSet;
+          // Offline fork: isAppModeSet is always true, so this branch (back
+          // to the landing page) cannot run.
           if (isStartWithoutAccountFlow) {
             unawaited(localSettings.setLocalGalleryOnboardingPending(false));
             setState(() {
@@ -1056,6 +1077,10 @@ class _HomeWidgetState extends State<HomeWidget> {
         return const GrantPermissionsWidget(startWithoutAccount: true);
       }
       if (shouldUseLocalGalleryEntryFlow && _shouldShowPermissionWidget()) {
+        return const GrantPermissionsWidget(startWithoutAccount: true);
+      }
+      // Offline fork: the landing (sign-up / login) page is unreachable.
+      if (kOfflineFork && !shouldUseLocalGalleryEntryFlow) {
         return const GrantPermissionsWidget(startWithoutAccount: true);
       }
       if (!shouldUseLocalGalleryEntryFlow) {
@@ -1269,6 +1294,8 @@ class _HomeWidgetState extends State<HomeWidget> {
   }
 
   void _getCredentials(BuildContext context, Uri? link) {
+    // Offline fork: no sign-in from a deep link.
+    if (kOfflineFork) return;
     if (Configuration.instance.hasConfiguredAccount() || link == null) {
       return;
     }
@@ -1281,6 +1308,8 @@ class _HomeWidgetState extends State<HomeWidget> {
   }
 
   Future<void> showChangeLog(BuildContext context) async {
+    // Offline fork: never show the changelog sheet.
+    if (kOfflineFork) return;
     if (_isShowingChangeLog || !mounted) {
       return;
     }

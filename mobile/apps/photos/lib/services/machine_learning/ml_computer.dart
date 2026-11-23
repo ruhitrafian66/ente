@@ -7,6 +7,7 @@ import "package:logging/logging.dart";
 import "package:photos/core/errors.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/models/ml/vector.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/ml_constants.dart";
 import "package:photos/services/machine_learning/ml_exceptions.dart";
@@ -80,7 +81,9 @@ class MLComputer extends SuperIsolate {
         assetsDir: assetsDir,
         includeVocab: false,
       );
-      if (!hasModel && !(isLocalGalleryMode || await canUseHighBandwidth())) {
+      if (!hasModel &&
+          (kOfflineFork ||
+              !(isLocalGalleryMode || await canUseHighBandwidth()))) {
         throw WiFiUnavailableError(
           "Could not download clip text model because high bandwidth "
           "connectivity is unavailable",

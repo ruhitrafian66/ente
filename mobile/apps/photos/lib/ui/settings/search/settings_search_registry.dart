@@ -6,6 +6,7 @@ import "package:ente_ui/models/settings_search_item.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:photos/core/configuration.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/ui/settings/about/about_us_page.dart";
 import "package:photos/ui/settings/account/account_settings_page.dart";
@@ -545,6 +546,44 @@ class SettingsSearchRegistry {
           routeBuilder: (_) => const VideoStreamingSettingsPage(),
           isSubPage: true,
           keywords: ["enable", "streaming"],
+        ),
+      ]);
+    }
+
+    // Offline fork: the "Free up space" screen holds the device-only tools.
+    if (kOfflineFork) {
+      items.addAll([
+        SettingsSearchItem(
+          title: l10n.freeUpSpace,
+          sectionPath: l10n.freeUpSpace,
+          icon: HugeIcons.strokeRoundedRocket01,
+          routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
+          keywords: ["storage", "space", "clean", "delete", "local", "device"],
+        ),
+        SettingsSearchItem(
+          title: "Exact duplicates", // Offline fork: not localized
+          subtitle: l10n.freeUpSpace,
+          sectionPath: l10n.freeUpSpace,
+          icon: HugeIcons.strokeRoundedCopy01,
+          routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
+          isSubPage: true,
+          keywords: [
+            "duplicate",
+            "duplicates",
+            "same",
+            "identical",
+            "copy",
+            "copies",
+          ],
+        ),
+        SettingsSearchItem(
+          title: "Convert PNG to JPG", // Offline fork: not localized
+          subtitle: l10n.freeUpSpace,
+          sectionPath: l10n.freeUpSpace,
+          icon: HugeIcons.strokeRoundedImageCrop,
+          routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
+          isSubPage: true,
+          keywords: ["png", "jpg", "jpeg", "convert", "compress"],
         ),
       ]);
     }

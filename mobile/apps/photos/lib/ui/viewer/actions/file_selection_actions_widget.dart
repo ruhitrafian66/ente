@@ -28,6 +28,7 @@ import "package:photos/models/metadata/common_keys.dart";
 import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/module/download/gallery.dart';
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import 'package:photos/services/collections_service.dart';
 import 'package:photos/services/hidden_service.dart';
@@ -154,6 +155,10 @@ class _FileSelectionActionsWidgetState
     final bool anyUploadedFiles = split.ownedByCurrentUser.isNotEmpty;
     final bool hasUploadedFileIDs = widget.selectedFiles.files.any(
       (file) => file.uploadedFileID != null,
+    );
+    // Offline fork: people actions need an ML file ID, not an upload.
+    final bool hasMlFileIDs = widget.selectedFiles.files.any(
+      (file) => file.mlFileID != null,
     );
     final showCollageOption =
         CollageCreatorPage.isValidCount(widget.selectedFiles.files.length) &&
@@ -413,8 +418,8 @@ class _FileSelectionActionsWidgetState
           SelectionSheetAction(
             hugeIcon: HugeIcons.strokeRoundedUserAdd01,
             labelText: context.strings.addToPerson,
-            onTap: hasUploadedFileIDs ? _onAddFilesToPerson : null,
-            shouldShow: hasUploadedFileIDs,
+            onTap: hasMlFileIDs ? _onAddFilesToPerson : null,
+            shouldShow: hasMlFileIDs,
           ),
         );
       }
@@ -429,12 +434,18 @@ class _FileSelectionActionsWidgetState
             onTap: _onNotpersonClicked,
           ),
         );
-        if (ownedFilesCount == 1) {
+        // Offline fork: local files are never "owned uploads", so the cover
+        // action depends on the selection count and the ML file ID.
+        if (kOfflineFork
+            ? widget.selectedFiles.files.length == 1
+            : ownedFilesCount == 1) {
           items.add(
             SelectionSheetAction(
               hugeIcon: HugeIcons.strokeRoundedImage01,
               labelText: context.strings.useAsCover,
-              onTap: anyUploadedFiles ? _setPersonCover : null,
+              onTap: (kOfflineFork ? hasMlFileIDs : anyUploadedFiles)
+                  ? _setPersonCover
+                  : null,
             ),
           );
         }
@@ -763,8 +774,9 @@ class _FileSelectionActionsWidgetState
   }
 
   Future<void> _onAddFilesToPerson() async {
+    // Offline fork: manual assignments are keyed by `mlFileID`.
     final filesWithIds = widget.selectedFiles.files
-        .where((file) => file.uploadedFileID != null)
+        .where((file) => file.mlFileID != null)
         .toList();
     if (filesWithIds.isEmpty) {
       showShortToast(
@@ -795,8 +807,8 @@ class _FileSelectionActionsWidgetState
       final addedFiles = filesWithIds
           .where(
             (file) =>
-                file.uploadedFileID != null &&
-                result.addedFileIds.contains(file.uploadedFileID),
+                file.mlFileID != null &&
+                result.addedFileIds.contains(file.mlFileID),
           )
           .toList();
       Bus.instance.fire(
@@ -986,7 +998,7 @@ class _FileSelectionActionsWidgetState
       );
     } catch (e, s) {
       _logger.warning(
-        "Failed to update cover for person ${widget.person!.remoteID} using file ${file.uploadedFileID}",
+        "Failed to update cover for person ${widget.person!.remoteID} using file ${file.mlFileID}",
         e,
         s,
       );

@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:photos/core/constants.dart';
 import 'package:photos/core/network/network.dart';
+import 'package:photos/offline_fork.dart';
 import "package:photos/services/language_service.dart";
 import 'package:photos/services/notification_service.dart';
 import 'package:photos/ui/notification/update/change_log_strings.dart';
@@ -31,6 +32,8 @@ class UpdateService {
   }
 
   Future<bool> shouldShowChangeLog() async {
+    // Offline fork: never show the upstream changelog sheet.
+    if (kOfflineFork) return false;
     final lastShownAtVersion = _prefs.getInt(changeLogVersionKey);
     if (lastShownAtVersion == null) {
       // Fresh installs have no earlier version whose changelog should be shown.
@@ -68,6 +71,8 @@ class UpdateService {
 
   Future<bool> shouldUpdate() async {
     _latestVersion = null;
+    // Offline fork: no update check.
+    if (kOfflineFork) return false;
     if (!isIndependent()) {
       return false;
     }
@@ -157,6 +162,8 @@ class UpdateService {
   }
 
   bool isIndependent() {
+    // Offline fork: no update check, also in debug builds.
+    if (kOfflineFork) return false;
     if (Platform.isIOS) {
       return false;
     }
@@ -168,6 +175,8 @@ class UpdateService {
   }
 
   bool isIndependentFlavor() {
+    // Offline fork: never the self-updating independent flavor.
+    if (kOfflineFork) return false;
     if (Platform.isIOS) {
       return false;
     }
@@ -175,6 +184,9 @@ class UpdateService {
   }
 
   bool isFDroidFlavor() {
+    // Offline fork: the package name is io.ente.photos.offline, but the
+    // fork behaves as the F-Droid flavor (no store, no update check).
+    if (kOfflineFork) return true;
     if (Platform.isIOS) {
       return false;
     }

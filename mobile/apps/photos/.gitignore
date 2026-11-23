@@ -1,3 +1,6 @@
 .env
 
 test/**/*.mocks.dart
+
+# Offline fork: bundled ML models are fetched by tool/fetch_bundled_ml_models.sh
+assets/ml_models/*.onnx

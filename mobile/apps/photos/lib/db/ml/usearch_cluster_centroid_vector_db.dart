@@ -7,6 +7,7 @@ import "package:path/path.dart";
 import "package:path_provider/path_provider.dart";
 import "package:photos/db/ml/cluster_centroid_vector_db.dart";
 import "package:photos/db/ml/dart_db.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/src/rust/api/usearch_api.dart";
 import "package:shared_preferences/shared_preferences.dart";
 import "package:synchronized/synchronized.dart";
@@ -30,7 +31,12 @@ class UsearchClusterCentroidVectorDB implements ClusterCentroidVectorDB {
     required bool localGallery,
   }) : _localGallery = localGallery;
 
-  static final instance = UsearchClusterCentroidVectorDB._privateConstructor(
+  // Offline fork: there is no account database. Every "account" singleton
+  // resolves to the local gallery one, so person and feedback code that was
+  // written for accounts works on the on-device data.
+  static UsearchClusterCentroidVectorDB get instance =>
+      kOfflineFork ? localGalleryInstance : _accountInstance;
+  static final UsearchClusterCentroidVectorDB _accountInstance = UsearchClusterCentroidVectorDB._privateConstructor(
     "ente.ml.vectordb.cluster_centroid.usearch",
     "cluster_centroid_vectordb_migration",
     localGallery: false,

@@ -11,6 +11,7 @@ import "package:flutter/material.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/emergency/emergency_page.dart";
 import "package:photos/models/user_details.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/account/user_service.dart";
 import "package:photos/services/review_service.dart";
@@ -64,7 +65,9 @@ class _SettingsBody extends StatelessWidget {
     final colors = context.componentColors;
     final hasLoggedIn = Configuration.instance.isLoggedIn();
     final hasConfiguredAccount = Configuration.instance.hasConfiguredAccount();
-    final showLoginEntry = isLocalGalleryMode && !hasConfiguredAccount;
+    // Offline fork: no sign-up banner and no "already have an account" card.
+    final showLoginEntry =
+        !kOfflineFork && isLocalGalleryMode && !hasConfiguredAccount;
 
     return AnimatedBuilder(
       animation: emailNotifier,
@@ -145,8 +148,11 @@ class _SettingsBody extends StatelessWidget {
               _buildFeaturesAndPlansCard(context),
               const SizedBox(height: 8),
             ],
-            AppEngagementSection(reviewUrl: ReviewService.url),
-            const SizedBox(height: 8),
+            // Offline fork: no "rate us" / share links, they need the network.
+            if (!kOfflineFork) ...[
+              AppEngagementSection(reviewUrl: ReviewService.url),
+              const SizedBox(height: 8),
+            ],
             _buildMenuItem(
               title: context.strings.helpAndSupport,
               icon: HugeIcons.strokeRoundedHelpCircle,
@@ -166,10 +172,12 @@ class _SettingsBody extends StatelessWidget {
               const SizedBox(height: 8),
               _buildLogoutCard(context),
             ],
-            MoreFromEnteFooter(
-              currentApp: ComponentApp.photos,
-              onVersionTap: () => showChangeLogSheet(context),
-            ),
+            // Offline fork: no "More from Ente" footer and no changelog sheet.
+            if (!kOfflineFork)
+              MoreFromEnteFooter(
+                currentApp: ComponentApp.photos,
+                onVersionTap: () => showChangeLogSheet(context),
+              ),
             if (hasLoggedIn &&
                 !isLocalGalleryMode &&
                 (flagService.flags.internalUser || kDebugMode)) ...[
@@ -269,6 +277,15 @@ class _SettingsBody extends StatelessWidget {
   Widget _buildOfflineFeaturesCard(BuildContext context) {
     return MenuGroupComponent(
       items: [
+        // Offline fork: the tools (exact duplicates, PNG to JPG, device
+        // trash) live on this screen. Upstream only links it for accounts.
+        _buildMenuItem(
+          title: context.strings.freeUpSpace,
+          icon: HugeIcons.strokeRoundedRocket01,
+          onTap: () async {
+            await routeToPage(context, const FreeUpSpaceOptionsScreen());
+          },
+        ),
         _buildMenuItem(
           title: context.strings.machineLearning,
           icon: HugeIcons.strokeRoundedMagicWand01,

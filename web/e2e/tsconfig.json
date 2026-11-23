@@ -1,6 +1,0 @@
-{
-    "extends": "ente-build-config/tsconfig-typecheck.json",
-    "compilerOptions": { "allowImportingTsExtensions": true },
-    "include": ["**/*.ts"],
-    "exclude": ["test-results", "playwright-report", ".auth"]
-}

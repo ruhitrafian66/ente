@@ -4,8 +4,10 @@ import "package:connectivity_plus/connectivity_plus.dart";
 import "package:logging/logging.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart"
     show flagService, hasGrantedMLConsent, isLocalGalleryMode, localSettings;
+import "package:photos/services/machine_learning/bundled_ml_models.dart";
 import "package:photos/services/machine_learning/ml_exceptions.dart";
 import "package:photos/src/rust/api/ml_indexing_api.dart" as rust_ml;
 import "package:photos/utils/network_util.dart";
@@ -49,6 +51,7 @@ class MLModelDownloadService {
     )) {
       return true;
     }
+    if (kOfflineFork) return false;
     return isLocalGalleryMode || await canUseHighBandwidth();
   }
 
@@ -89,6 +92,14 @@ class MLModelDownloadService {
           "Skipping ML model download because local indexing is disabled",
         );
         await _cancelModelDownloadRetry();
+        return;
+      }
+      if (kOfflineFork) {
+        // Offline fork: the face models ship inside the APK. Copy them into
+        // place and never ask Rust to download anything.
+        await installBundledMlModels(await getAssetsDirectory());
+        _areIndexingModelsDownloaded = true;
+        _areNonIndexingModelsDownloaded = true;
         return;
       }
       final goodInternet = isLocalGalleryMode || await canUseHighBandwidth();
@@ -160,6 +171,7 @@ class MLModelDownloadService {
   }
 
   bool get _shouldDownloadPetModels {
+    if (kOfflineFork) return false;
     return flagService.petEnabled && localSettings.petRecognitionEnabled;
   }
 

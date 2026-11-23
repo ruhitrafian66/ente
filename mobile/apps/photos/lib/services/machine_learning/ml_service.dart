@@ -23,6 +23,7 @@ import "package:photos/models/ml/clip.dart";
 import "package:photos/models/ml/face/face.dart";
 import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/module/download/file.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/filedata/model/file_data.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering.dart";
@@ -76,7 +77,9 @@ class MLService {
       MlProcessLock.instance.activeOperation == MlOperation.fullRun;
 
   static const _kForceClusteringFaceCount = 8000;
-  static const _kForceClusteringFaceCountLocalGallery = 100;
+  // Offline fork (S25 tuning): upstream was 100.
+  static const _kForceClusteringFaceCountLocalGallery =
+      kOfflineForceClusteringFaceCount;
   int _forceClusteringFaceCountForMode(MLMode mode) {
     return mode == MLMode.localGallery
         ? _kForceClusteringFaceCountLocalGallery
@@ -745,7 +748,16 @@ class MLService {
     } catch (e, s) {
       _logger.severe("indexAllImages failed", e, s);
     } finally {
-      await MLIndexingIsolate.instance.releaseRustRuntime();
+      // Offline fork (S25 tuning): upstream always released here. Keep the
+      // sessions warm in the foreground; the isolate idle timeout releases
+      // them later through MLIndexingIsolate.onDispose.
+      final keepRuntimeWarm =
+          kOfflineFork &&
+          !isProcessBg &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      if (!keepRuntimeWarm) {
+        await MLIndexingIsolate.instance.releaseRustRuntime();
+      }
       MLModelDownloadService.instance.invalidateModelDownloadCache();
     }
   }
@@ -781,7 +793,9 @@ class MLService {
     final clusterAllImagesTime = DateTime.now();
 
     final faceIdNotToCluster = <String, List<String>>{};
-    if (!isLocalGalleryMode) {
+    // Offline fork: persons are local, so "not this person" feedback also
+    // applies in local gallery mode.
+    if (!isLocalGalleryMode || kOfflineFork) {
       _logger.info('Pulling remote feedback before actually clustering');
       await PersonService.instance.sync();
       final persons = await PersonService.instance.getPersons();

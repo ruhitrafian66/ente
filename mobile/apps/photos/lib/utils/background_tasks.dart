@@ -13,6 +13,7 @@ import "package:permission_handler/permission_handler.dart";
 import "package:photos/db/upload_locks_db.dart";
 import "package:photos/main.dart";
 import "package:photos/module/upload/service/file_uploader.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/ml_run_control.dart";
 import "package:photos/services/notification_service.dart";
 import "package:photos/settings/local_settings.dart";
@@ -114,7 +115,8 @@ class BackgroundTasks {
                   initialDelay: kDebugMode
                       ? Duration.zero
                       : const Duration(minutes: 10),
-                  requiresNetwork: Platform.isAndroid,
+                  // Offline fork: run on a device with no network.
+                  requiresNetwork: !kOfflineFork && Platform.isAndroid,
                   runBudget: Platform.isIOS
                       ? BgTaskUtils.taskTimeoutFor(
                           BgTaskUtils.iOSBackgroundAppRefreshTask,
@@ -133,7 +135,8 @@ class BackgroundTasks {
                 flexInterval: Platform.isAndroid
                     ? const Duration(hours: 1)
                     : null,
-                requiresNetwork: true,
+                // Offline fork: run on a device with no network.
+                requiresNetwork: !kOfflineFork,
                 requiresCharging: Platform.isAndroid,
                 runBudget: Platform.isIOS
                     ? null

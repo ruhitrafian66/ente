@@ -14,6 +14,7 @@ import 'package:photos/models/file/file.dart';
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
+import "package:photos/offline_fork.dart";
 import 'package:photos/services/collections_service.dart';
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
@@ -25,6 +26,7 @@ import "package:photos/ui/viewer/gallery/gallery_app_bar_config.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart";
 import "package:photos/ui/viewer/gallery/hooks/pick_person_avatar.dart";
 import 'package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart';
+import "package:photos/ui/viewer/people/merge_persons_offline.dart";
 import "package:photos/ui/viewer/people/person_cluster_suggestion.dart";
 import "package:photos/ui/viewer/people/person_face_widget.dart";
 import "package:photos/ui/viewer/people/reassign_me_selection_page.dart";
@@ -111,6 +113,8 @@ enum PeoplePopupAction {
   unignore,
   reassignMe,
   memoryLane,
+  // Offline fork: merge this person into another named person.
+  mergeWithPerson,
 }
 
 class _AppBarWidgetState extends State<PeopleAppBar> {
@@ -129,10 +133,12 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     required PersonEntity sourcePerson,
     required String? title,
   }) {
-    if (isCurrentUserContactLink(
-      email: sourcePerson.data.email,
-      userID: sourcePerson.data.userID,
-    )) {
+    // Offline fork: there is no account, so no person is "me".
+    if (!kOfflineFork &&
+        isCurrentUserContactLink(
+          email: sourcePerson.data.email,
+          userID: sourcePerson.data.userID,
+        )) {
       if (title == null) {
         return context.strings.me;
       }
@@ -276,8 +282,9 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     final bool hideFromMemories = person.data.hideFromMemories;
     final bool hasAssignedCluster = person.data.assigned.isNotEmpty;
     final List<Widget> actions = <Widget>[];
+    // Offline fork: person actions work without an account.
     if (widget.selectedFiles.files.isNotEmpty ||
-        !Configuration.instance.hasConfiguredAccount()) {
+        (!kOfflineFork && !Configuration.instance.hasConfiguredAccount())) {
       return actions;
     }
 
@@ -376,10 +383,22 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
             size: IconSizes.small,
           ),
         ),
-        if (isCurrentUserContactLink(
-          email: person.data.email,
-          userID: person.data.userID,
-        ))
+        // Offline fork: person-to-person merge. Not localized.
+        if (kOfflineFork && person.data.name.trim().isNotEmpty)
+          const EntePopupMenuOption(
+            value: PeoplePopupAction.mergeWithPerson,
+            label: "Merge with another person",
+            leadingWidget: HugeIcon(
+              icon: HugeIcons.strokeRoundedGitMerge,
+              size: IconSizes.small,
+            ),
+          ),
+        // Offline fork: "me" needs an account, so reassign never shows.
+        if (!kOfflineFork &&
+            isCurrentUserContactLink(
+              email: person.data.email,
+              userID: person.data.userID,
+            ))
           EntePopupMenuOption(
             value: PeoplePopupAction.reassignMe,
             label: context.strings.reassignMe,
@@ -476,12 +495,23 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
             await _resetPerson(context);
           } else if (value == PeoplePopupAction.reassignMe) {
             await _reassignMe(context);
+          } else if (value == PeoplePopupAction.mergeWithPerson) {
+            await _mergeWithAnotherPerson(context);
           }
         },
       ),
     );
 
     return actions;
+  }
+
+  // Offline fork: merges this person into a person that the user picks,
+  // then closes this page because this person no longer exists.
+  Future<void> _mergeWithAnotherPerson(BuildContext context) async {
+    final target = await mergePersonIntoPickedPerson(context, person);
+    if (target == null || !context.mounted) return;
+    showShortToast(context, "Merged into ${target.data.name}");
+    Navigator.of(context).pop();
   }
 
   Future<void> _togglePinState() async {

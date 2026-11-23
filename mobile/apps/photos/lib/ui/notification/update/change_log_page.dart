@@ -2,6 +2,7 @@ import "package:ente_components/ente_components.dart";
 import 'package:ente_components/hugeicons.dart';
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/review_service.dart";
 import 'package:photos/ui/notification/toast.dart';
@@ -57,52 +58,55 @@ class _ChangeLogPageState extends State<ChangeLogPage> {
       content: _getChangeLog(),
       actions: [
         continueButton,
-        Theme(
-          data: Theme.of(context).copyWith(
-            extensions: [
-              ComponentColorTokens(
-                ComponentTheme.colorsForApp(
-                  ComponentApp.locker,
-                  brightness: Theme.of(context).brightness,
+        // Offline fork: no "Rate us" / "Meet Ente Locker" button. Both open
+        // a web link.
+        if (!kOfflineFork)
+          Theme(
+            data: Theme.of(context).copyWith(
+              extensions: [
+                ComponentColorTokens(
+                  ComponentTheme.colorsForApp(
+                    ComponentApp.locker,
+                    brightness: Theme.of(context).brightness,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          child: ButtonComponent(
-            variant: isLocalGallery
-                ? ButtonComponentVariant.secondary
-                : ButtonComponentVariant.primary,
-            size: ButtonComponentSize.large,
-            label: isLocalGallery ? l10n.rateUs : l10n.meetEnteLocker,
-            leading: isLocalGallery
-                ? Icon(Icons.favorite_rounded, color: colors.primary)
-                : const EnteAppIcon(app: ComponentApp.locker),
-            shouldSurfaceExecutionStates: false,
-            onTap: () async {
-              if (isLocalGallery) {
-                await ReviewService.launch();
-              } else {
-                final navigator = Navigator.of(context);
-                final route = ModalRoute.of(context);
-                bool launched;
-                try {
-                  launched = await launchUrlString(
-                    'https://ente.com/locker/get',
-                    mode: LaunchMode.externalApplication,
-                  );
-                } catch (_) {
-                  launched = false;
-                }
-                if (!context.mounted || route?.isCurrent != true) return;
-                if (launched) {
-                  navigator.pop();
+              ],
+            ),
+            child: ButtonComponent(
+              variant: isLocalGallery
+                  ? ButtonComponentVariant.secondary
+                  : ButtonComponentVariant.primary,
+              size: ButtonComponentSize.large,
+              label: isLocalGallery ? l10n.rateUs : l10n.meetEnteLocker,
+              leading: isLocalGallery
+                  ? Icon(Icons.favorite_rounded, color: colors.primary)
+                  : const EnteAppIcon(app: ComponentApp.locker),
+              shouldSurfaceExecutionStates: false,
+              onTap: () async {
+                if (isLocalGallery) {
+                  await ReviewService.launch();
                 } else {
-                  showShortToast(context, l10n.somethingWentWrong);
+                  final navigator = Navigator.of(context);
+                  final route = ModalRoute.of(context);
+                  bool launched;
+                  try {
+                    launched = await launchUrlString(
+                      'https://ente.com/locker/get',
+                      mode: LaunchMode.externalApplication,
+                    );
+                  } catch (_) {
+                    launched = false;
+                  }
+                  if (!context.mounted || route?.isCurrent != true) return;
+                  if (launched) {
+                    navigator.pop();
+                  } else {
+                    showShortToast(context, l10n.somethingWentWrong);
+                  }
                 }
-              }
-            },
+              },
+            ),
           ),
-        ),
       ],
     );
   }

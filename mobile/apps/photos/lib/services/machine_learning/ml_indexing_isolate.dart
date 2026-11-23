@@ -2,6 +2,7 @@ import "package:flutter/foundation.dart" show debugPrint, kDebugMode;
 import "package:logging/logging.dart";
 import "package:photos/models/ml/ml_versions.dart"
     show mlIndexFlagCoreML, mlIndexFlagRuntimeRust, mlIndexFlagWebGPU;
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart" show flagService, localSettings;
 import "package:photos/services/machine_learning/ml_exceptions.dart";
 import "package:photos/services/machine_learning/ml_model_download_service.dart";
@@ -184,7 +185,9 @@ class MLIndexingIsolate extends SuperIsolate {
     return {
       "assetsDir": await MLModelDownloadService.instance.getAssetsDirectory(),
       "preparePets":
-          flagService.petEnabled && localSettings.petRecognitionEnabled,
+          kOfflineRunPets &&
+          flagService.petEnabled &&
+          localSettings.petRecognitionEnabled,
       "enableWebGpu": await webGpuExecutionPolicy.isEligible(),
     };
   }

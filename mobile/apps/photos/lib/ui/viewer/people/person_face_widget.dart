@@ -15,6 +15,7 @@ import "package:photos/events/people_changed_event.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/face/person.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -307,7 +308,9 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
       final mlDataDB = isLocalGalleryMode
           ? MLDataDB.localGalleryInstance
           : MLDataDB.instance;
-      if (isPerson && !isLocalGalleryMode) {
+      // Offline fork: persons exist locally, so the person branch also runs
+      // in local gallery mode.
+      if (isPerson && (!isLocalGalleryMode || kOfflineFork)) {
         personEntity =
             PersonService.instance.getCachedPerson(widget.personId!) ??
             await PersonService.instance.getPerson(widget.personId!);
@@ -329,10 +332,13 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
           return null;
         }
         final personData = personEntity.data;
-        final contact = PhotosContactsService.instance.getCachedContact(
-          contactUserId: personData.userID,
-          email: personData.email,
-        );
+        // Offline fork: no Ente contacts without an account.
+        final contact = kOfflineFork
+            ? null
+            : PhotosContactsService.instance.getCachedContact(
+                contactUserId: personData.userID,
+                email: personData.email,
+              );
         _personIdentity = AvatarIdentity.account(
           label: trimToNull(contact?.name) ?? personData.name,
           email: trimToNull(contact?.email) ?? personData.email,
@@ -520,7 +526,9 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
         );
         return null;
       }
-      final FaceWithoutEmbedding? face = isLocalGalleryMode
+      // Offline fork: use the person-aware cover face lookup, which also
+      // handles a manually picked avatar face.
+      final FaceWithoutEmbedding? face = isLocalGalleryMode && !kOfflineFork
           ? await mlDataDB.getCoverFaceForPerson(
               recentFileID: recentFileID,
               avatarFaceId: fixedFaceID,

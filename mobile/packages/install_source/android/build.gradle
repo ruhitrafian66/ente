@@ -39,5 +39,4 @@ android {
 }
 
 dependencies {
-    playstoreImplementation 'com.android.installreferrer:installreferrer:2.2'
 }

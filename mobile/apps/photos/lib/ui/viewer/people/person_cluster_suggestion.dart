@@ -10,6 +10,7 @@ import "package:logging/logging.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/events/people_changed_event.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/person.dart";
 import 'package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart';
@@ -135,7 +136,7 @@ class _PersonClustersState extends State<PersonReviewClusterSuggestion> {
                 if (event.type == PeopleEventType.removedFaceFromCluster) {
                   for (final String removedFaceID in event.relevantFaceIDs!) {
                     final int fileID = getFileIdFromFaceId<int>(removedFaceID);
-                    files.removeWhere((file) => file.uploadedFileID == fileID);
+                    files.removeWhere((file) => file.mlFileID == fileID);
                   }
                   setState(() {});
                 }
@@ -477,8 +478,7 @@ class _PersonClustersState extends State<PersonReviewClusterSuggestion> {
                 child: FileFaceWidget(
                   files[start + index],
                   clusterID: cluserId,
-                  faceCrop:
-                      faceThumbnails[files[start + index].uploadedFileID!],
+                  faceCrop: faceThumbnails[files[start + index].mlFileID],
                 ),
               ),
               if (start + index == 5 && files.length > 6)
@@ -515,7 +515,9 @@ class _PersonClustersState extends State<PersonReviewClusterSuggestion> {
     final faceCropsList = await Future.wait(futures);
     final faceCrops = <int, Uint8List?>{};
     for (var i = 0; i < faceCropsList.length; i++) {
-      faceCrops[files[i].uploadedFileID!] = faceCropsList[i];
+      // Offline fork: face crops are keyed by `mlFileID`.
+      final fileID = files[i].mlFileID;
+      if (fileID != null) faceCrops[fileID] = faceCropsList[i];
     }
     return faceCrops;
   }

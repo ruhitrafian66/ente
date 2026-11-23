@@ -39,7 +39,37 @@ class OfflineFilesDB with SqlDbBase {
     return asyncDBConnection;
   }
 
+  // In-memory mirror of the localId -> int ID table. It lets UI and service
+  // code resolve the ML file ID of a device file synchronously, the same way
+  // account mode reads `uploadedFileID`. See `EnteFile.mlFileID`.
+  final Map<String, int> _localIdToIntIdCache = {};
+
+  /// Loads the whole mapping into memory. Call once at startup, and again
+  /// whenever another isolate may have added rows (for example before
+  /// building the People list).
+  Future<void> refreshIntIdCache() async {
+    final db = await asyncDB;
+    final rows = await db.getAll(
+      'SELECT $offlineFileKeyLocalIdColumn, $offlineFileKeyIntIdColumn FROM $offlineFileKeyMapTable',
+    );
+    for (final row in rows) {
+      _localIdToIntIdCache[row[offlineFileKeyLocalIdColumn] as String] =
+          row[offlineFileKeyIntIdColumn] as int;
+    }
+  }
+
+  /// The int ID for [localId], or null if the file has never been queued for
+  /// ML indexing (or the cache has not seen it yet).
+  int? cachedLocalIntId(String? localId) =>
+      localId == null ? null : _localIdToIntIdCache[localId];
+
   Future<int> getOrCreateLocalIntId(String localId) async {
+    final id = await _getOrCreateLocalIntId(localId);
+    _localIdToIntIdCache[localId] = id;
+    return id;
+  }
+
+  Future<int> _getOrCreateLocalIntId(String localId) async {
     final db = await asyncDB;
     final existing = await db.getAll(
       'SELECT $offlineFileKeyIntIdColumn FROM $offlineFileKeyMapTable WHERE $offlineFileKeyLocalIdColumn = ?',
@@ -108,6 +138,7 @@ class OfflineFilesDB with SqlDbBase {
             row[offlineFileKeyIntIdColumn] as int;
       }
     }
+    _localIdToIntIdCache.addAll(mapping);
     return mapping;
   }
 

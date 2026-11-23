@@ -231,7 +231,8 @@ pub(super) fn build_session(model_path: &str, attempt: ProviderAttempt) -> MlRes
     let mut builder = Session::builder(&environment)?
         .with_auto_device(AutoDevicePolicy::PreferCPU)?
         .with_optimization_level(GraphOptimizationLevel::All)?
-        .with_intra_threads(1)?
+        // Offline fork (S25 tuning): upstream was 1. Affects CPU-EP nodes only.
+        .with_intra_threads(4)?
         .with_inter_threads(1)?;
 
     if attempt.disable_cpu_fallback {
@@ -424,8 +425,9 @@ fn webgpu_attempt_providers() -> Vec<ExecutionProviderDispatch> {
 #[cfg(target_os = "android")]
 fn xnnpack_provider() -> ExecutionProviderDispatch {
     #[expect(clippy::expect_used, reason = "The fixed thread count is nonzero")]
+    // Offline fork (S25 tuning): upstream was 4.
     XNNPACK::default()
-        .with_intra_op_num_threads(NonZeroUsize::new(4).expect("four is non-zero"))
+        .with_intra_op_num_threads(NonZeroUsize::new(6).expect("six is non-zero"))
         .build()
         .error_on_failure()
 }

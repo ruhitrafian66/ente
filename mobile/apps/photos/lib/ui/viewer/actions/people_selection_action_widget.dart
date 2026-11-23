@@ -9,6 +9,7 @@ import "package:photos/events/people_changed_event.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/selected_people.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
@@ -17,6 +18,7 @@ import "package:photos/ui/collections/collection_action_sheet.dart";
 import "package:photos/ui/components/bottom_action_bar/selection_action_sheet.dart";
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/viewer/people/merge_clusters_to_person_sheet.dart";
+import "package:photos/ui/viewer/people/merge_persons_offline.dart";
 import "package:photos/ui/viewer/people/person_cluster_suggestion.dart";
 import "package:photos/ui/viewer/people/save_or_edit_person.dart";
 import "package:photos/utils/dialog_util.dart";
@@ -144,14 +146,21 @@ class _PeopleSelectionActionWidgetState
             );
         final bool showEditAction = onlyOnePerson;
         final bool showReviewAction = onlySelectedPersonHasAssignedCluster;
+        // Offline fork: merge is also available for two or more named
+        // persons (person-to-person merge).
+        final bool canMergeNamedPersons =
+            kOfflineFork &&
+            _getNamedSelectedPersonIds(selectedPersonIds, personMap).length > 1;
         final bool showMergeAction = onlyIgnoredPersonsSelected
             ? false
-            : selectedClusterIds.isNotEmpty;
+            : selectedClusterIds.isNotEmpty || canMergeNamedPersons;
         final bool showResetAction = onlyIgnoredPersonsSelected
             ? false
             : onlyOnePerson;
         final bool showShowPersonAction = onlyIgnoredPersonsSelected;
-        final bool showAutoAddAction = onlyIgnoredPersonsSelected
+        // Offline fork: auto-add needs Ente albums, so it never shows.
+        final bool showAutoAddAction =
+            onlyIgnoredPersonsSelected || kOfflineFork
             ? false
             : onlyPersonSelected;
         final bool showPinAction = onlyIgnoredPersonsSelected
@@ -589,13 +598,22 @@ class _PeopleSelectionActionWidgetState
     final personMap = await personEntitiesMapFuture;
     final selectedPersonIds = _getSelectedPersonIds(personMap);
     final selectedClusterIds = _getSelectedClusterIds();
-    if (selectedClusterIds.isEmpty) return;
 
     if (!mounted) return;
     final namedSelectedPersonIds = _getNamedSelectedPersonIds(
       selectedPersonIds,
       personMap,
     );
+    // Offline fork: two or more named persons use the person-to-person merge.
+    if (kOfflineFork && namedSelectedPersonIds.length > 1) {
+      await _mergeNamedPersons(
+        personMap: personMap,
+        namedPersonIds: namedSelectedPersonIds,
+        clusterIds: selectedClusterIds,
+      );
+      return;
+    }
+    if (selectedClusterIds.isEmpty) return;
 
     String? targetPersonId;
     PersonEntity? targetPerson;
@@ -643,6 +661,57 @@ class _PeopleSelectionActionWidgetState
       widget.selectedPeople.clearAll();
     } catch (e, s) {
       _logger.severe('Merging clusters failed', e, s);
+    }
+  }
+
+  // Offline fork: merges the selected named persons and the selected unnamed
+  // clusters into one person that the user selects.
+  Future<void> _mergeNamedPersons({
+    required Map<String, PersonEntity> personMap,
+    required List<String> namedPersonIds,
+    required List<String> clusterIds,
+  }) async {
+    final candidates = [
+      for (final id in namedPersonIds)
+        if (personMap[id] != null) personMap[id]!,
+    ];
+    if (candidates.length < 2) return;
+    final target = await showKeepPersonSheet(context, candidates);
+    if (target == null || !mounted) return;
+    final confirmed = await confirmMergeIntoPerson(
+      context,
+      targetName: target.data.name,
+    );
+    if (!confirmed || !mounted) return;
+
+    final dialog = createProgressDialog(context, context.strings.pleaseWait);
+    await dialog.show();
+    Object? failure;
+    try {
+      for (final clusterID in clusterIds) {
+        await ClusterFeedbackService.instance.addClusterToExistingPerson(
+          clusterID: clusterID,
+          person: target,
+        );
+      }
+      for (final candidate in candidates) {
+        if (candidate.remoteID == target.remoteID) continue;
+        await PersonService.instance.mergePersons(
+          sourceID: candidate.remoteID,
+          targetID: target.remoteID,
+        );
+      }
+      widget.selectedPeople.clearAll();
+    } catch (e, s) {
+      failure = e;
+      _logger.severe('Merging persons failed', e, s);
+      // A part of the merge can be complete, so refresh the People views.
+      Bus.instance.fire(PeopleChangedEvent());
+    } finally {
+      await dialog.hide();
+    }
+    if (failure != null && mounted) {
+      await showGenericErrorDialog(context: context, error: failure);
     }
   }
 }

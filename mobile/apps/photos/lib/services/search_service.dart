@@ -45,6 +45,7 @@ import "package:photos/models/search/hierarchical/top_level_generic_filter.dart"
 import "package:photos/models/search/hierarchical/uploader_filter.dart";
 import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/search/search_types.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/account/user_service.dart";
 import 'package:photos/services/collections_service.dart';
@@ -339,10 +340,17 @@ class SearchService {
   }
 
   Future<Map<int, EnteFile>> _getFilesByUploadedID() {
-    return _cachedFilesByUploadedID ??= getAllFilesForSearch().then((files) {
+    // Offline fork: keyed by `mlFileID`, which is the local int ID in local
+    // gallery mode and the uploaded file ID in account mode.
+    return _cachedFilesByUploadedID ??= getAllFilesForSearch().then((
+      files,
+    ) async {
+      if (isLocalGalleryMode) {
+        await OfflineFilesDB.instance.refreshIntIdCache();
+      }
       final filesByUploadedID = <int, EnteFile>{};
       for (final file in files) {
-        final uploadedID = file.uploadedFileID;
+        final uploadedID = file.mlFileID;
         if (uploadedID != null && !filesByUploadedID.containsKey(uploadedID)) {
           filesByUploadedID[uploadedID] = file;
         }
@@ -1239,10 +1247,10 @@ class SearchService {
     final Map<String, List<EnteFile>> clusterIDToFiles = {};
     final allFiles = await getAllFilesForSearch();
     for (final f in allFiles) {
-      if (!fileIdToClusterID.containsKey(f.uploadedFileID ?? -1)) {
+      if (!fileIdToClusterID.containsKey(f.mlFileID ?? -1)) {
         continue;
       }
-      final cluserIds = fileIdToClusterID[f.uploadedFileID ?? -1]!;
+      final cluserIds = fileIdToClusterID[f.mlFileID ?? -1]!;
       for (final cluster in cluserIds) {
         if (clusterIDToFiles.containsKey(cluster)) {
           clusterIDToFiles[cluster]!.add(f);
@@ -1310,7 +1318,9 @@ class SearchService {
     String coverHeroTagPrefix = "people_search",
   }) async {
     try {
-      if (isLocalGalleryMode) {
+      // Offline fork: persons exist locally, so the cluster-only local gallery
+      // branch below is bypassed and the full person-aware path runs.
+      if (isLocalGalleryMode && !kOfflineFork) {
         final effectiveMinClusterSize = minClusterSize > 1 ? 1 : minClusterSize;
         if (showIgnoredOnly) {
           return [];
@@ -1503,7 +1513,7 @@ class SearchService {
         final params = {
           kPersonWidgetKey: p.data.avatarFaceID ?? p.hashCode.toString(),
           kPersonParamID: personID,
-          if (previewFile != null) kFileID: previewFile.uploadedFileID,
+          if (previewFile != null) kFileID: previewFile.mlFileID,
           kPersonPinned: p.data.isPinned,
         };
         facesResult.add(
@@ -1594,7 +1604,7 @@ class SearchService {
               files,
               params: {
                 kClusterParamId: clusterId,
-                kFileID: files.first.uploadedFileID,
+                kFileID: files.first.mlFileID,
               },
               onResultTap: (ctx) {
                 routeToPage(

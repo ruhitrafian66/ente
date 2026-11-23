@@ -13,11 +13,13 @@ import "package:photos/db/ml/base.dart";
 import "package:photos/events/diff_sync_complete_event.dart";
 import "package:photos/events/people_changed_event.dart";
 import "package:photos/gateways/entity/models/type.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/local_entity_data.dart";
 import "package:photos/models/ml/face/detection.dart";
 import 'package:photos/models/ml/face/face_with_embedding.dart';
 import "package:photos/models/ml/face/person.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/entity_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -107,6 +109,9 @@ class PersonService {
       Bus.instance.on<PeopleChangedEvent>().listen((event) {
         if (event.type != PeopleEventType.syncDone) {
           _shouldReconcilePeople = true;
+          // Offline fork: no remote sync will ever trigger the reconcile, so
+          // run it after each local people change.
+          if (kOfflineFork) unawaited(instance.sync());
         }
       });
     }
@@ -307,10 +312,13 @@ class PersonService {
   }
 
   Future<void> _syncOnce() async {
-    if (isLocalGalleryMode) {
+    if (isLocalGalleryMode && !kOfflineFork) {
       logger.finest("Skipping person feedback sync in local gallery mode");
       return;
     }
+    // Offline fork: there is nothing to pull, but the local reconcile still
+    // runs. It keeps `PersonData.assigned` in step with the cluster -> person
+    // table, which the People UI reads.
 
     if (_shouldReconcilePeople) {
       _shouldReconcilePeople = false;
@@ -601,6 +609,57 @@ class PersonService {
     Bus.instance.fire(PeopleChangedEvent());
   }
 
+  /// Offline fork: merges person [sourceID] into person [targetID].
+  ///
+  /// Every face cluster and manual file assignment of the source moves to the
+  /// target, then the source person is deleted. The target keeps its own
+  /// name, avatar and other attributes. Upstream has no person-to-person
+  /// merge; it can only assign an unnamed cluster to a person.
+  Future<PersonEntity> mergePersons({
+    required String sourceID,
+    required String targetID,
+  }) async {
+    if (sourceID == targetID) {
+      throw ArgumentError("Cannot merge a person into itself");
+    }
+    final source = await getPerson(sourceID);
+    final target = await getPerson(targetID);
+    if (source == null || target == null) {
+      throw Exception("Person not found for merge ($sourceID -> $targetID)");
+    }
+
+    final sourceClusterIDs = await faceMLDataDB.getPersonClusterIDs(sourceID);
+    // Remove the source mappings first so that a cluster never maps to two
+    // persons, whatever the uniqueness rules of the mapping table are.
+    await faceMLDataDB.removePerson(sourceID);
+    if (sourceClusterIDs.isNotEmpty) {
+      await faceMLDataDB.bulkAssignClusterToPersonID({
+        for (final clusterID in sourceClusterIDs) clusterID: targetID,
+      });
+    }
+
+    final mergedManual = <int>{
+      ...target.data.manuallyAssigned,
+      ...source.data.manuallyAssigned,
+    }.toList();
+    final targetClusters = await faceMLDataDB.getPersonToClusterIdToFaceIds();
+    final updatedTarget = target.copyWith(
+      data: target.data.copyWith(
+        manuallyAssigned: mergedManual,
+        assigned: (targetClusters[targetID] ?? const {}).entries
+            .map((e) => ClusterInfo(id: e.key, faces: e.value))
+            .toList(),
+      ),
+    );
+    await updatePerson(updatedTarget);
+    await entityService.deleteEntry(sourceID);
+    _invalidatePersonCache();
+    await refreshPersonCache();
+    memoriesCacheService.queueUpdateCache();
+    Bus.instance.fire(PeopleChangedEvent());
+    return updatedTarget;
+  }
+
   Future<bool> _pullAndApplyRemotePersons({
     bool skipClusterUpdateIfNoChange = true,
   }) async {
@@ -799,12 +858,12 @@ class PersonService {
     EnteFile file,
   ) async {
     final FaceWithoutEmbedding? face = await getCoverFace(
-      fileID: file.uploadedFileID!,
+      fileID: file.mlFileID!,
       personID: p.remoteID,
     );
     if (face == null) {
       throw Exception(
-        "No face found for person ${p.remoteID} in file ${file.uploadedFileID}",
+        "No face found for person ${p.remoteID} in file ${file.mlFileID}",
       );
     }
 
@@ -980,11 +1039,14 @@ class PersonService {
     }
   }
 
-  Future<contacts.ContactRecord?> _getLinkedContact(PersonEntity person) =>
-      _contactsService.getContact(
-        contactUserId: person.data.userID,
-        email: person.data.email,
-      );
+  Future<contacts.ContactRecord?> _getLinkedContact(PersonEntity person) async {
+    // Offline fork: Ente contacts need an account. A person is never linked.
+    if (kOfflineFork) return null;
+    return _contactsService.getContact(
+      contactUserId: person.data.userID,
+      email: person.data.email,
+    );
+  }
 
   Future<ManualPersonAssignmentResult> addManualFileAssignments({
     required String personID,

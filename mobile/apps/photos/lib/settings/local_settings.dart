@@ -4,6 +4,7 @@ import 'package:home_widget/home_widget.dart' as hw;
 import 'package:photos/app_mode.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/constants.dart';
+import 'package:photos/offline_fork.dart';
 import 'package:photos/ui/viewer/gallery/component/group/type.dart';
 import "package:photos/utils/ram_check_util.dart";
 import 'package:shared_preferences/shared_preferences.dart';
@@ -355,8 +356,9 @@ class LocalSettings {
   Future<void> setLocalGalleryMLConsent(bool value) =>
       _setFlag(LocalGalleryFlag.mlConsent, value);
 
+  // Offline fork: the map needs network tiles, so the default is off.
   bool get localGalleryMapEnabled =>
-      _prefs.getBool(_kLocalGalleryMapEnabled) ?? true;
+      _prefs.getBool(_kLocalGalleryMapEnabled) ?? !kOfflineFork;
 
   Future<void> setLocalGalleryMapEnabled(bool value) async {
     await _prefs.setBool(_kLocalGalleryMapEnabled, value);
@@ -611,6 +613,8 @@ class LocalSettings {
   }
 
   AppMode get appMode {
+    // Offline fork: the app is always in local gallery mode.
+    if (kOfflineFork) return AppMode.localGallery;
     if (_cachedAppMode != null) return _cachedAppMode!;
 
     final savedIndex = _prefs.getInt(_kAppMode);
@@ -625,9 +629,12 @@ class LocalSettings {
     return _cachedAppMode!;
   }
 
-  bool get isAppModeSet => _prefs.containsKey(_kAppMode);
+  // Offline fork: the mode is fixed, so it always counts as set.
+  bool get isAppModeSet => kOfflineFork || _prefs.containsKey(_kAppMode);
 
   Future<void> setAppMode(AppMode mode) async {
+    // Offline fork: never switch to the account (enteGallery) mode.
+    if (kOfflineFork) mode = AppMode.localGallery;
     await _prefs.setInt(_kAppMode, mode.index);
     _cachedAppMode = mode;
   }

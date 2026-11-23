@@ -4,6 +4,7 @@ import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/ui/account/email_entry_page.dart";
 
@@ -34,6 +35,8 @@ class _GetStartedBannerState extends State<GetStartedBanner> {
 
   @override
   Widget build(BuildContext context) {
+    // Offline fork: never show the sign-up banner.
+    if (kOfflineFork) return const SizedBox.shrink();
     if (_dismissed) return const SizedBox.shrink();
     if (localSettings.isLocalGalleryGetStartedBannerDismissed) {
       return const SizedBox.shrink();
@@ -210,6 +213,8 @@ class _GetStartedBannerState extends State<GetStartedBanner> {
   }
 
   Future<void> _onGetStarted() async {
+    // Offline fork: no sign-up page.
+    if (kOfflineFork) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const EmailEntryPage(
