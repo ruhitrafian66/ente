@@ -2,7 +2,6 @@ import 'package:ente_components/ente_components.dart';
 import 'package:ente_lock_screen/auth_util.dart';
 import 'package:ente_strings/ente_strings.dart';
 import 'package:ente_ui/utils/toast_util.dart';
-import 'package:ente_utils/platform_util.dart';
 import 'package:flutter/material.dart';
 
 const linuxSystemAuthGuideUrl =
@@ -43,12 +42,9 @@ Future<void> showLinuxSystemAuthSetupDialog(
           label: pendingTranslation('Open guide'),
           dismissModalOnSuccess: true,
           onTap: () async {
+            // Offline fork: Android only and no network, so the guide URL
+            // is not opened. This dialog shows only on Linux.
             onOpenGuide?.call();
-            await PlatformUtil.openWebView(
-              context,
-              pendingTranslation('Linux setup required'),
-              linuxSystemAuthGuideUrl,
-            );
           },
         ),
       ],

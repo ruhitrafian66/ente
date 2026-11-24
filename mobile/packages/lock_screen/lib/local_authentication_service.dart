@@ -9,7 +9,6 @@ import 'package:ente_lock_screen/ui/lock_screen_password.dart';
 import 'package:ente_lock_screen/ui/lock_screen_pin.dart';
 import 'package:ente_strings/ente_strings.dart';
 import 'package:ente_ui/utils/toast_util.dart';
-import 'package:ente_utils/platform_util.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -66,9 +65,6 @@ class LocalAuthenticationService {
         appLock?.setEnabled(
           await LockScreenSettings.instance.shouldShowLockScreen(),
         );
-        if (refocusWindows) {
-          await PlatformUtil.refocusWindows();
-        }
       }
       if (windowsLocalAuthException != null) {
         if (context.mounted) {

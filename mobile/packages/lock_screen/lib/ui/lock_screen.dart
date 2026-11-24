@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:ente_accounts/ente_accounts.dart';
 import 'package:ente_components/ente_components.dart';
 import 'package:ente_lock_screen/auth_util.dart';
 import 'package:ente_lock_screen/lock_screen_host.dart';
@@ -201,7 +200,10 @@ class _LockScreenState extends State<LockScreen> with WidgetsBindingObserver {
                 if (widget.onLogout != null) {
                   await widget.onLogout!(context);
                 } else {
-                  await UserService.instance.logout(context);
+                  // Offline fork: the host does the logout (the accounts
+                  // package is gone). The button shows only when the host
+                  // says it is logged in.
+                  await widget.config.logout();
                 }
                 // Restart from a clean process after logout.
                 Process.killPid(pid, ProcessSignal.sigkill);

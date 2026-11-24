@@ -1,1 +1,0 @@
-- Fixed non-English keyboard input in Auth search on Android.

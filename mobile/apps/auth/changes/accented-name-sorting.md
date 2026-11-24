@@ -1,1 +1,0 @@
-- Fixed sorting of codes and tags with accented letters, which were listed after Z.

@@ -1,1 +1,0 @@
-- Improved screen reader announcements for buttons and menus.

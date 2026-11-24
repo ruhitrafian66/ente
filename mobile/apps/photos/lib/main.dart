@@ -28,7 +28,6 @@ import 'package:photos/core/configuration.dart';
 import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/errors.dart';
 import 'package:photos/core/event_bus.dart';
-import 'package:photos/db/files_db.dart';
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
 import 'package:photos/ente_theme_data.dart';
@@ -84,8 +83,6 @@ bool _isRustInitialized = false;
 Future<void>? _rustInitFuture;
 late final photos_rust_log.LogSinkGuard _photosRustLogSinkGuard;
 
-enum ForegroundStartupMode { normal, picker }
-
 @pragma('vm:entry-point')
 Future<void> wallpaperMain() => runWallpaperApp();
 
@@ -133,18 +130,7 @@ Future<void> _runInForeground(
   return await runWithLogs(() async {
     _logger.info("Starting app in foreground");
     isProcessBg = false;
-    final isPickerStartup =
-        initialMediaExtensionAction.action == IntentAction.pick;
-    if (isPickerStartup) {
-      unawaited(_warmPickerFilesDb());
-    }
-    await _init(
-      false,
-      via: 'mainMethod',
-      startupMode: isPickerStartup
-          ? ForegroundStartupMode.picker
-          : ForegroundStartupMode.normal,
-    );
+    await _init(false, via: 'mainMethod');
     final Locale? locale = await getLocale(noFallback: true);
     runApp(
       AppLock(
@@ -181,26 +167,12 @@ Future<void> _runInForeground(
         savedThemeMode: _themeMode(savedThemeMode),
       ),
     );
-    if (isPickerStartup) {
-      return;
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(SemanticSearchService.instance.init());
       unawaited(MemoryLaneService.instance.init());
     });
     unawaited(_scheduleFGSync('appStart in FG'));
   });
-}
-
-Future<void> _warmPickerFilesDb() async {
-  final tlog = TimeLogger();
-  try {
-    _logger.info("Picker FilesDB warm-up init $tlog");
-    await FilesDB.instance.sqliteAsyncDB;
-    _logger.info("Picker FilesDB warm-up done $tlog");
-  } catch (e, s) {
-    _logger.warning("Picker FilesDB warm-up failed", e, s);
-  }
 }
 
 ThemeMode _themeMode(AdaptiveThemeMode? savedThemeMode) {
@@ -366,15 +338,9 @@ Future<void> _runMinimally(
   }
 }
 
-Future<void> _init(
-  bool isBackground, {
-  String via = '',
-  ForegroundStartupMode startupMode = ForegroundStartupMode.normal,
-}) async {
+Future<void> _init(bool isBackground, {String via = ''}) async {
   try {
     bool initComplete = false;
-    final isPickerStartup =
-        !isBackground && startupMode == ForegroundStartupMode.picker;
     final TimeLogger tlog = TimeLogger();
     Future.delayed(const Duration(seconds: 15), () {
       if (!initComplete && !isBackground) {
@@ -429,13 +395,6 @@ Future<void> _init(
     );
 
     SearchService.instance.init();
-
-    if (isPickerStartup) {
-      _logger.info("Picker startup init done $tlog");
-      initComplete = true;
-      _stopHearBeat = true;
-      return;
-    }
 
     _logger.info("LocalSyncService init $tlog");
     await LocalSyncService.instance.init(preferences);

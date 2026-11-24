@@ -7,12 +7,8 @@ environment:
   flutter: ">=1.17.0"
 
 dependencies:
-  ente_accounts:
-    path: ../accounts
   ente_components:
     path: ../ente_components
-  ente_configuration:
-    path: ../configuration
   ente_crypto_api:
     path: ../ente_crypto_api
   ente_pure_utils:
@@ -23,8 +19,6 @@ dependencies:
     path: ../strings
   ente_ui:
     path: ../ui
-  ente_utils:
-    path: ../utils
   flutter:
     sdk: flutter
   flutter_animate: 4.5.2

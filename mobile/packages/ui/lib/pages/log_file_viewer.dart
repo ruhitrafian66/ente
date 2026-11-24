@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:ente_components/components/popup_menu_component.dart';
-import 'package:ente_logging/logging.dart';
 import 'package:ente_strings/ente_strings.dart';
 import 'package:ente_ui/components/loading_widget.dart';
+import 'package:ente_ui/utils/log_file_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';

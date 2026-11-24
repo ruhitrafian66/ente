@@ -10,7 +10,6 @@ import "package:flutter_svg/flutter_svg.dart";
 import "package:local_auth/local_auth.dart";
 import 'package:logging/logging.dart';
 import 'package:media_extension/media_extension.dart';
-import "package:media_extension/media_extension_action_types.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/guest_view_event.dart";
 import "package:photos/models/file/extensions/file_props.dart";
@@ -18,7 +17,6 @@ import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
 import 'package:photos/module/download/file.dart';
 import "package:photos/service_locator.dart";
-import "package:photos/services/app_lifecycle_service.dart";
 import "package:photos/states/detail_page_state.dart";
 import "package:photos/theme/colors.dart";
 import "package:photos/ui/actions/file/file_actions.dart";
@@ -159,10 +157,6 @@ class FileAppBarState extends State<FileAppBar> {
 
   List<Widget> _getActions() {
     _actions.clear();
-    if (AppLifecycleService.instance.mediaExtensionAction.action ==
-        IntentAction.pick) {
-      return _actions;
-    }
 
     final fallbackFileId = InheritedDetailPageState.maybeOf(
       context,

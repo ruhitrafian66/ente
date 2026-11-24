@@ -24,7 +24,6 @@ import "package:photos/services/machine_learning/ml_service.dart";
 import "package:photos/services/memory_home_widget_service.dart";
 import "package:photos/services/people_home_widget_service.dart";
 import 'package:photos/services/sync/sync_service.dart';
-import "package:photos/ui/picker/external_media_picker_page.dart";
 import 'package:photos/ui/tabs/home_widget.dart';
 import "package:photos/ui/viewer/actions/file_viewer.dart";
 import "package:photos/utils/background_tasks.dart";
@@ -62,8 +61,6 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
   bool _didInitWidgetLaunchHandling = false;
   bool _wasPaused = false;
   late Future<Widget> _initialAndroidHome;
-  bool get _isPickerLaunch =>
-      widget.initialMediaExtensionAction?.action == IntentAction.pick;
 
   @override
   void initState() {
@@ -111,9 +108,6 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
       return;
     }
     _didInitWidgetLaunchHandling = true;
-    if (_isPickerLaunch) {
-      return;
-    }
     _checkForWidgetLaunch();
   }
 
@@ -143,12 +137,6 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
     AppLifecycleService.instance.setMediaExtensionAction(lifecycleAction);
     if (lifecycleAction.action == IntentAction.main) {
       unawaited(BackgroundTasks.configure().catchError((Object _) {}));
-    }
-    if (mediaExtentionAction.action == IntentAction.pick) {
-      return ExternalMediaPickerPage(
-        requestedType: mediaExtentionAction.type,
-        allowMultiple: mediaExtentionAction.allowMultiple,
-      );
     }
     if (_shouldOpenFileViewer(mediaExtentionAction)) {
       return const FileViewer();
@@ -183,16 +171,6 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
       );
     }
 
-    if (mediaExtentionAction.action == IntentAction.pick) {
-      await AppNavigationService.instance.pushPage(
-        ExternalMediaPickerPage(
-          requestedType: mediaExtentionAction.type,
-          allowMultiple: mediaExtentionAction.allowMultiple,
-        ),
-        onBeforePush: updateIntentAction,
-      );
-      return;
-    }
     if (!_shouldOpenFileViewer(mediaExtentionAction)) {
       updateIntentAction();
       return;
@@ -270,9 +248,6 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
       AppLifecycleService.instance.onAppInForeground(
         stateChangeReason + ': sync now',
       );
-      if (_isPickerLaunch) {
-        return;
-      }
       if (_wasPaused) {
         _wasPaused = false;
         unawaited(_reloadCachesUpdatedInBackground(lastAppOpenTime));

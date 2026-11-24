@@ -3,7 +3,6 @@ export 'src/date_time_util.dart';
 export 'src/debouncer.dart';
 export 'src/directory_content_util.dart';
 export 'src/directory_utils.dart';
-export 'src/email_validator.dart';
 export 'src/extensions/input_formatter.dart';
 export 'src/extensions/list.dart';
 export 'src/extensions/string.dart';

@@ -1,1 +1,0 @@
-- Fixed sorting of collections and contacts with accented letters, which were listed after Z.

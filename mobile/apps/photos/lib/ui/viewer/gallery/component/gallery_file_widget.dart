@@ -2,15 +2,11 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:logging/logging.dart";
-import "package:media_extension/media_extension.dart";
-import "package:media_extension/media_extension_action_types.dart";
 import "package:photos/core/constants.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/gallery_type.dart";
 import "package:photos/models/selected_files.dart";
-import "package:photos/module/share/picker_result_uri.dart";
-import "package:photos/services/app_lifecycle_service.dart";
 import "package:photos/ui/common/touch_cross_detector.dart";
 import "package:photos/ui/viewer/actions/select_all_status_icon.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
@@ -258,7 +254,7 @@ class _GalleryFileWidgetState extends State<GalleryFileWidget> {
     _toggleFileSelection(file);
   }
 
-  void _onTapNoSelectionLimit(BuildContext context, EnteFile file) async {
+  void _onTapNoSelectionLimit(BuildContext context, EnteFile file) {
     final bool shouldToggleSelection =
         (widget.selectedFiles?.files.isNotEmpty ?? false) ||
         (GalleryContextState.of(context)?.inSelectionMode ?? false);
@@ -268,12 +264,7 @@ class _GalleryFileWidgetState extends State<GalleryFileWidget> {
       }
       _toggleFileSelection(file);
     } else {
-      if (AppLifecycleService.instance.mediaExtensionAction.action ==
-          IntentAction.pick) {
-        await _returnPickerResult(file);
-      } else {
-        _routeToDetailPage(file, context);
-      }
+      _routeToDetailPage(file, context);
     }
   }
 
@@ -303,18 +294,7 @@ class _GalleryFileWidgetState extends State<GalleryFileWidget> {
     BuildContext context,
     EnteFile file,
   ) async {
-    if (AppLifecycleService.instance.mediaExtensionAction.action ==
-            IntentAction.pick &&
-        !(GalleryContextState.of(context)?.inSelectionMode ?? false)) {
-      await _returnPickerResult(file);
-    } else {
-      _routeToDetailPage(file, context);
-    }
-  }
-
-  Future<void> _returnPickerResult(EnteFile file) async {
-    final uri = await getPickerResultUri(file);
-    if (uri != null) await MediaExtension().setResult(uri);
+    _routeToDetailPage(file, context);
   }
 
   void _routeToDetailPage(EnteFile file, BuildContext context) {
@@ -336,12 +316,7 @@ class _GalleryFileWidgetState extends State<GalleryFileWidget> {
         galleryFiles,
         selectedIndex,
         widget.tag,
-        mode:
-            AppLifecycleService.instance.mediaExtensionAction.action ==
-                    IntentAction.pick &&
-                (GalleryContextState.of(context)?.inSelectionMode ?? false)
-            ? DetailPageMode.minimalistic
-            : DetailPageMode.full,
+        mode: DetailPageMode.full,
         isLocalOnlyContext: isLocalOnlyContext,
         showGalleryFilmstrip: true,
         onDismissed: context

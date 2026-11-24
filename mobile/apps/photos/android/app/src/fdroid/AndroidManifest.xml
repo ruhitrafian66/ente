@@ -1,14 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"
     package="io.ente.photos">
 
-    <!-- Strips MainActivity's launcher entry; see independent/AndroidManifest.xml. -->
+    <!-- Strips MainActivity's launcher entry, so that the app does not have
+         several launcher entries: the activity-alias entries in the main
+         manifest are the launcher icons. We can remove this along with the
+         `LAUNCHER` category from main/AndroidManifest.xml once
+         https://github.com/flutter/flutter/issues/38965 is fixed. -->
     <application>
-        <meta-data android:name="io.sentry.dsn" tools:node="remove"/>
-        <meta-data
-            android:name="io.sentry.auto-init"
-            android:value="false"
-            tools:replace="android:value"/>
-
         <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
