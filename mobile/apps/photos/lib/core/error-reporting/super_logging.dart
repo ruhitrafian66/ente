@@ -462,7 +462,9 @@ class SuperLogging {
   static var logChunkSize = 800;
 
   static void printLog(String text) {
-    if (kDebugMode) {
+    // Offline fork: `--dart-define=OFFLINE_FORK_LOGCAT=true` also prints the
+    // log in release builds, so `adb logcat` can read it on a test device.
+    if (kDebugMode || kOfflineLogToConsole) {
       // ignore: avoid_print
       text.chunked(logChunkSize).forEach(print);
     }

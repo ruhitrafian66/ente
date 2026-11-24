@@ -28,3 +28,7 @@ const Duration kOfflineMlIndexingIsolateIdleTimeout = Duration(minutes: 10);
 
 /// Files fetched per ML indexing chunk on Android. Upstream: 10.
 const int kOfflineFileDownloadMlLimit = 24;
+
+/// Set with `--dart-define=OFFLINE_FORK_LOGCAT=true` to print the app log to
+/// the console (logcat) in release builds. Off by default.
+const bool kOfflineLogToConsole = bool.fromEnvironment("OFFLINE_FORK_LOGCAT");

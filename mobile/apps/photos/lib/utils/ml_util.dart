@@ -112,9 +112,11 @@ Future<IndexStatus> getIndexStatus() async {
         flagService.petEnabled &&
         localSettings.petRecognitionEnabled &&
         (localGallery || localSettings.isMLLocalIndexingEnabled);
-    final Set<int> indexedFileKeys = await mlDataDB.getFullyIndexedFileIds(
-      includePets: petActive,
-    );
+    // Offline fork: CLIP does not run, so "fully indexed" (faces AND CLIP)
+    // never becomes true. Count a file as done when its faces are indexed.
+    final Set<int> indexedFileKeys = kOfflineRunClip
+        ? await mlDataDB.getFullyIndexedFileIds(includePets: petActive)
+        : (await mlDataDB.faceIndexedFileIds()).keys.toSet();
     final enteFiles = await SearchService.instance.getAllFilesForSearch();
     final Set<int> seenKeys = {};
     int total = 0;
