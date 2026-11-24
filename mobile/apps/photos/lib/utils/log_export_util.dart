@@ -4,9 +4,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import "package:ente_strings/ente_strings.dart";
 import 'package:ente_ui/pages/log_file_viewer.dart';
-import "package:file_saver/file_saver.dart";
 import 'package:flutter/material.dart';
-import "package:intl/intl.dart";
 import 'package:path_provider/path_provider.dart';
 import 'package:photos/core/error-reporting/super_logging.dart';
 import "package:photos/ui/common/progress_dialog.dart";
@@ -62,8 +60,8 @@ void showLogsDialog(BuildContext context) {
   );
 }
 
-/// Puts all log files in one zip file, then lets the user save that file
-/// (Android) or share it (other platforms).
+/// Puts all log files in one zip file, then opens the system share sheet for
+/// that file.
 Future<void> zipAndExportLogs(BuildContext context) async {
   final zipFilePath = await getZippedLogsFile(context);
   if (!context.mounted) return;
@@ -96,23 +94,10 @@ Future<String> getZippedLogsFile(BuildContext? context) async {
 
 Future<void> exportLogs(BuildContext context, String zipFilePath) async {
   final Size size = MediaQuery.of(context).size;
-  if (Platform.isAndroid) {
-    final DateTime now = DateTime.now().toUtc();
-    final String shortMonthName = DateFormat('MMM').format(now);
-    final String logFileName =
-        'ente-logs-${now.year}-$shortMonthName-${now.day}-${now.hour}-${now.minute}';
-    await FileSaver.instance.saveAs(
-      name: logFileName,
-      filePath: zipFilePath,
-      mimeType: MimeType.zip,
-      fileExtension: 'zip',
-    );
-  } else {
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(zipFilePath, mimeType: 'application/zip')],
-        sharePositionOrigin: Rect.fromLTWH(0, 0, size.width, size.height / 2),
-      ),
-    );
-  }
+  await SharePlus.instance.share(
+    ShareParams(
+      files: [XFile(zipFilePath, mimeType: 'application/zip')],
+      sharePositionOrigin: Rect.fromLTWH(0, 0, size.width, size.height / 2),
+    ),
+  );
 }
