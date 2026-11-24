@@ -1,5 +1,4 @@
 import "package:dio/dio.dart";
-import "package:ente_cast/ente_cast.dart";
 import "package:ente_feature_flag/ente_feature_flag.dart";
 import "package:ente_install_source/ente_install_source.dart";
 import "package:package_info_plus/package_info_plus.dart";
@@ -8,8 +7,6 @@ import "package:photos/core/event_bus.dart";
 import "package:photos/core/network/endpoint_config.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/events/ml_consent_changed_event.dart";
-import "package:photos/gateways/billing/billing_gateway.dart";
-import "package:photos/gateways/cast/cast_gateway.dart";
 import "package:photos/gateways/collections/collection_files_gateway.dart";
 import "package:photos/gateways/collections/collection_share_gateway.dart";
 import "package:photos/gateways/collections/collections_gateway.dart";
@@ -18,20 +15,14 @@ import "package:photos/gateways/files/file_data_gateway.dart";
 import "package:photos/gateways/files/file_magic_gateway.dart";
 import "package:photos/gateways/files/file_upload_gateway.dart";
 import "package:photos/gateways/files/files_gateway.dart";
-import "package:photos/gateways/push/push_gateway.dart";
-import "package:photos/gateways/social/social_gateway.dart";
 import "package:photos/gateways/trash/trash_gateway.dart";
 import "package:photos/gateways/users/users_gateway.dart";
 import "package:photos/module/download/gallery_download_queue_service.dart";
 import "package:photos/module/download/manager.dart";
-import "package:photos/services/account/billing_service.dart";
-import "package:photos/services/auto_cast_service.dart";
 import "package:photos/services/backup_preference_service.dart";
 import "package:photos/services/collections_service.dart";
 import "package:photos/services/entity_service.dart";
 import "package:photos/services/filedata/filedata_service.dart";
-import "package:photos/services/library_sharing_service.dart";
-import "package:photos/services/library_sharing_store.dart";
 import "package:photos/services/location_service.dart";
 import "package:photos/services/machine_learning/compute_controller.dart";
 import "package:photos/services/machine_learning/ml_decryption_record_store.dart";
@@ -43,12 +34,9 @@ import "package:photos/services/memories/smart_memories_service.dart";
 import "package:photos/services/memories_cache_service.dart";
 import "package:photos/services/permission/service.dart";
 import "package:photos/services/rewind/rewind_service.dart";
-import "package:photos/services/rituals/rituals_service.dart";
 import "package:photos/services/smart_albums_service.dart";
-import "package:photos/services/storage_bonus_service.dart";
 import "package:photos/services/sync/trash_sync_service.dart";
 import "package:photos/services/text_embeddings_cache_service.dart";
-import "package:photos/services/update_service.dart";
 import "package:photos/services/wake_lock_service.dart";
 import "package:photos/settings/backup_settings.dart";
 import "package:photos/settings/local_settings.dart";
@@ -103,24 +91,6 @@ FlagService get flagService {
   return _flagService!;
 }
 
-CastService? _castService;
-
-CastService get castService {
-  _castService ??= CastService();
-  return _castService!;
-}
-
-AutoCastService? _autoCastService;
-
-AutoCastService get autoCastService {
-  _autoCastService ??= AutoCastService(
-    transport: castService,
-    gateway: CastGateway(ServiceLocator.instance.enteDio),
-    encodePayload: collectionsService.prepareCastPayloadForCollection,
-  );
-  return _autoCastService!;
-}
-
 LocalSettings get localSettings => ServiceLocator.instance.localSettings;
 
 BackupSettings get backupSettings => ServiceLocator.instance.backupSettings;
@@ -151,46 +121,12 @@ Future<void> setMLConsent(bool enabled) async {
   Bus.instance.fire(MLConsentChangedEvent(enabled));
 }
 
-bool get mapEnabled {
-  if (isLocalGalleryMode) {
-    return localSettings.localGalleryMapEnabled;
-  }
-  return flagService.mapEnabled;
-}
-
-Future<void> setMapEnabled(bool enabled) async {
-  if (isLocalGalleryMode) {
-    await localSettings.setLocalGalleryMapEnabled(enabled);
-    return;
-  }
-  await flagService.setMapEnabled(enabled);
-}
-
 BackupPreferenceService? _backupPreferenceService;
 BackupPreferenceService get backupPreferenceService {
   _backupPreferenceService ??= BackupPreferenceService(
     ServiceLocator.instance.prefs,
   );
   return _backupPreferenceService!;
-}
-
-StorageBonusService? _storageBonusService;
-StorageBonusService get storageBonusService {
-  _storageBonusService ??= StorageBonusService(
-    ServiceLocator.instance.prefs,
-    ServiceLocator.instance.enteDio,
-  );
-  return _storageBonusService!;
-}
-
-UpdateService? _updateService;
-
-UpdateService get updateService {
-  _updateService ??= UpdateService(
-    ServiceLocator.instance.prefs,
-    ServiceLocator.instance.packageInfo,
-  );
-  return _updateService!;
 }
 
 EntityService? _entityService;
@@ -259,12 +195,6 @@ TextEmbeddingsCacheService get textEmbeddingsCacheService {
   return _textEmbeddingsCacheService!;
 }
 
-BillingService? _billingService;
-BillingService get billingService {
-  _billingService ??= BillingService();
-  return _billingService!;
-}
-
 ComputeController? _computeController;
 ComputeController get computeController {
   _computeController ??= ComputeController(localSettings);
@@ -304,24 +234,10 @@ SmartAlbumsService get smartAlbumsService {
   return _smartAlbumsService!;
 }
 
-RitualsService? _ritualsService;
-RitualsService get ritualsService {
-  _ritualsService ??= RitualsService.instance;
-  return _ritualsService!;
-}
-
 CollectionsService? _collectionsService;
 CollectionsService get collectionsService {
   _collectionsService ??= CollectionsService.instance;
   return _collectionsService!;
-}
-
-LibrarySharingService? _librarySharingService;
-LibrarySharingService get librarySharingService {
-  _librarySharingService ??= LibrarySharingService(
-    store: LibrarySharingEntityStore(entityService),
-  );
-  return _librarySharingService!;
 }
 
 InstallSourceService? _installSourceService;
@@ -332,18 +248,6 @@ InstallSourceService get installSourceService {
     getToken: Configuration.instance.getToken,
   );
   return _installSourceService!;
-}
-
-PushGateway? _pushGateway;
-PushGateway get pushGateway {
-  _pushGateway ??= PushGateway(ServiceLocator.instance.enteDio);
-  return _pushGateway!;
-}
-
-SocialGateway? _socialGateway;
-SocialGateway get socialGateway {
-  _socialGateway ??= SocialGateway(ServiceLocator.instance.enteDio);
-  return _socialGateway!;
 }
 
 FilesGateway? _filesGateway;
@@ -396,12 +300,6 @@ CollectionsGateway? _collectionsGateway;
 CollectionsGateway get collectionsGateway {
   _collectionsGateway ??= CollectionsGateway(ServiceLocator.instance.enteDio);
   return _collectionsGateway!;
-}
-
-BillingGateway? _billingGateway;
-BillingGateway get billingGateway {
-  _billingGateway ??= BillingGateway(ServiceLocator.instance.enteDio);
-  return _billingGateway!;
 }
 
 UsersGateway? _usersGateway;

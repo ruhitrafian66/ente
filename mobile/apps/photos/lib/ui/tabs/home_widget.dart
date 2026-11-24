@@ -1,23 +1,16 @@
 import "dart:async";
-import "dart:convert";
 import "dart:io";
 
-import "package:app_links/app_links.dart";
-import "package:ente_crypto/ente_crypto.dart";
-import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
-import "package:flutter/services.dart";
 import "package:flutter_local_notifications/flutter_local_notifications.dart";
 import "package:logging/logging.dart";
 import "package:media_extension/media_extension_action_types.dart";
 import "package:move_to_background/move_to_background.dart";
-import "package:package_info_plus/package_info_plus.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/ente_theme_data.dart";
-import "package:photos/events/account_configured_event.dart";
 import "package:photos/events/app_mode_changed_event.dart";
 import "package:photos/events/backup_folders_updated_event.dart";
 import "package:photos/events/christmas_banner_event.dart";
@@ -25,22 +18,17 @@ import "package:photos/events/clear_and_unfocus_search_bar_event.dart";
 import "package:photos/events/homepage_swipe_to_select_in_progress_event.dart";
 import "package:photos/events/opened_settings_event.dart";
 import "package:photos/events/permission_granted_event.dart";
-import "package:photos/events/subscription_purchased_event.dart";
 import "package:photos/events/sync_status_update_event.dart";
 import "package:photos/events/tab_changed_event.dart";
 import "package:photos/events/trigger_logout_event.dart";
 import "package:photos/events/user_logged_out_event.dart";
-import "package:photos/models/collection/collection.dart";
 import "package:photos/models/collection/collection_items.dart";
-import "package:photos/models/file/file.dart";
-import "package:photos/models/gallery_type.dart";
 import "package:photos/models/home_tab.dart";
 import "package:photos/models/search/index_of_indexed_stack.dart";
 import "package:photos/models/selected_albums.dart";
 import "package:photos/models/selected_files.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/account/user_service.dart";
 import "package:photos/services/album_home_widget_service.dart";
 import "package:photos/services/app_lifecycle_service.dart";
 import "package:photos/services/app_navigation_service.dart";
@@ -48,14 +36,9 @@ import "package:photos/services/collections_service.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/semantic_search/semantic_search_service.dart";
 import "package:photos/services/memory_home_widget_service.dart";
-import "package:photos/services/memory_share_service.dart";
 import "package:photos/services/notification_service.dart";
 import "package:photos/services/people_home_widget_service.dart";
-import "package:photos/services/sync/diff_fetcher.dart";
 import "package:photos/services/sync/local_sync_service.dart";
-import "package:photos/services/sync/remote_sync_service.dart";
-import "package:photos/services/update_service.dart";
-import "package:photos/states/user_details_state.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/collections/collection_action_sheet.dart";
 import "package:photos/ui/components/buttons/button_widget.dart";
@@ -69,23 +52,13 @@ import "package:photos/ui/home/grant_permissions_widget.dart";
 import "package:photos/ui/home/header_widget.dart";
 import "package:photos/ui/home/home_bottom_nav_bar.dart";
 import "package:photos/ui/home/home_gallery_widget.dart";
-import "package:photos/ui/home/landing_page_widget.dart";
 import "package:photos/ui/home/loading_photos_widget.dart";
-import "package:photos/ui/notification/update/change_log_page.dart";
 import "package:photos/ui/rewind/entry/rewind_entry.dart";
-import "package:photos/ui/rituals/ritual_camera_page.dart";
-import "package:photos/ui/rituals/ritual_page.dart";
-import "package:photos/ui/rituals/ritual_privacy.dart";
-import "package:photos/ui/settings/app_update_sheet.dart";
 import "package:photos/ui/settings_page.dart";
-import "package:photos/ui/social/feed_screen.dart";
 import "package:photos/ui/tabs/albums_tab.dart";
 import "package:photos/ui/viewer/actions/file_viewer.dart";
-import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/gallery/collection_page.dart";
-import "package:photos/ui/viewer/gallery/shared_public_collection_page.dart";
 import "package:photos/ui/viewer/search_tab/search_tab.dart";
-import "package:photos/utils/collection_util.dart";
 import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/intent_util.dart";
 import "package:receive_sharing_intent/receive_sharing_intent.dart";
@@ -98,7 +71,6 @@ class HomeWidget extends StatefulWidget {
 }
 
 class _HomeWidgetState extends State<HomeWidget> {
-  static const _feedTab = FeedScreen(showBackButton: false);
   final _logger = Logger("HomeWidgetState");
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _selectedAlbums = SelectedAlbums();
@@ -120,7 +92,6 @@ class _HomeWidgetState extends State<HomeWidget> {
   bool _mediaViewFallbackNavigationScheduled = false;
   bool _personSyncTriggered = false;
   bool _collectionsSyncTriggered = false;
-  bool _isShowingChangeLog = false;
   // Offline fork: always use the account-free entry flow, so the landing
   // (sign-up / login) page is unreachable.
   bool _startWithoutAccount =
@@ -137,51 +108,18 @@ class _HomeWidgetState extends State<HomeWidget> {
       ValueNotifier<bool>(false);
 
   late StreamSubscription<TabChangedEvent> _tabChangedEventSubscription;
-  late StreamSubscription<SubscriptionPurchasedEvent>
-  _subscriptionPurchaseEvent;
   late StreamSubscription<TriggerLogoutEvent> _triggerLogoutEvent;
   late StreamSubscription<UserLoggedOutEvent> _loggedOutEvent;
   late StreamSubscription<PermissionGrantedEvent> _permissionGrantedEvent;
   late StreamSubscription<SyncStatusUpdate> _firstImportEvent;
   late StreamSubscription<BackupFoldersUpdatedEvent> _backupFoldersUpdatedEvent;
-  late StreamSubscription<AccountConfiguredEvent> _accountConfiguredEvent;
-  StreamSubscription? _publicAlbumLinkSubscription;
-  StreamSubscription<Uri?>? _authDeepLinkSubscription;
   late StreamSubscription<HomepageSwipeToSelectInProgressEvent>
   _homepageSwipeToSelectInProgressEventSubscription;
   late StreamSubscription<ChristmasBannerEvent>
   _christmasBannerEventSubscription;
   late StreamSubscription<AppModeChangedEvent> _appModeChangedEventSubscription;
 
-  final DiffFetcher _diffFetcher = DiffFetcher();
-
   List<int> get _tabIndices => homeTabIndices(showFeed: !isLocalGalleryMode);
-
-  void _startWithoutAccountFlow() {
-    setState(() {
-      _startWithoutAccount = true;
-    });
-  }
-
-  void _handleMissingRecoveryKey() {
-    final config = Configuration.instance;
-    if (!config.hasConfiguredAccount()) {
-      return;
-    }
-    final keyAttributes = config.getKeyAttributes();
-    if (keyAttributes == null) {
-      return;
-    }
-    final encryptedRecoveryKey =
-        keyAttributes.recoveryKeyEncryptedWithMasterKey;
-    final recoveryKeyNonce = keyAttributes.recoveryKeyDecryptionNonce;
-    if (encryptedRecoveryKey == null ||
-        encryptedRecoveryKey.isEmpty ||
-        recoveryKeyNonce == null ||
-        recoveryKeyNonce.isEmpty) {
-      Bus.instance.fire(TriggerLogoutEvent());
-    }
-  }
 
   @override
   void initState() {
@@ -231,23 +169,6 @@ class _HomeWidgetState extends State<HomeWidget> {
         }
       }
     });
-    _subscriptionPurchaseEvent = Bus.instance
-        .on<SubscriptionPurchasedEvent>()
-        .listen((event) {
-          setState(() {});
-        });
-    _accountConfiguredEvent = Bus.instance.on<AccountConfiguredEvent>().listen((
-      event,
-    ) {
-      // Offline fork: never leave the account-free flow.
-      _startWithoutAccount = kOfflineFork;
-      unawaited(localSettings.setLocalGalleryOnboardingPending(false));
-      setState(() {});
-      _handleMissingRecoveryKey();
-      if (!isLocalGalleryMode) {
-        flagService.flags;
-      }
-    });
     _triggerLogoutEvent = Bus.instance.on<TriggerLogoutEvent>().listen((
       event,
     ) async {
@@ -288,10 +209,6 @@ class _HomeWidgetState extends State<HomeWidget> {
                 ),
               );
             });
-            // Offline fork: no automatic changelog sheet.
-            if (!kOfflineFork) {
-              _scheduleChangeLogCheck(delay: const Duration(milliseconds: 250));
-            }
           }
         });
     _firstImportEvent = Bus.instance.on<SyncStatusUpdate>().listen((
@@ -318,49 +235,8 @@ class _HomeWidgetState extends State<HomeWidget> {
             setState(() {});
           }
         });
-    // Offline fork: no auth deep links, no update check, no public album
-    // links and no automatic changelog sheet.
-    if (!kOfflineFork) {
-      _initDeepLinks();
-      updateService.shouldShowUpdateNotification().then((value) {
-        Future.delayed(Duration.zero, () {
-          if (value) {
-            if (!mounted) return;
-            showAppUpdateSheet(
-              context,
-              latestVersionInfo: updateService.getLatestVersionInfo()!,
-            ).ignore();
-            updateService.resetUpdateAvailableShownTime();
-          }
-        });
-      });
-
-      _initDeepLinkSubscriptionForPublicAlbums();
-    }
 
     _initMediaShareSubscription();
-    if (!kOfflineFork) {
-      _scheduleChangeLogCheck(delay: const Duration(seconds: 1));
-    }
-
-    // Offline fork: no "open links in app" prompt. The fork has no deep links.
-    if (!kOfflineFork &&
-        Platform.isAndroid &&
-        !localSettings.hasConfiguredInAppLinkPermissions() &&
-        RemoteSyncService.instance.isFirstRemoteSyncDone() &&
-        endpointConfig.isProduction) {
-      PackageInfo.fromPlatform().then((packageInfo) {
-        final packageName = packageInfo.packageName;
-        if (packageName == 'io.ente.photos.independent' ||
-            packageName == 'io.ente.photos.fdroid') {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              requestPermissionToOpenLinksInApp(context, packageName);
-            }
-          });
-        }
-      });
-    }
 
     _homepageSwipeToSelectInProgressEventSubscription = Bus.instance
         .on<HomepageSwipeToSelectInProgressEvent>()
@@ -375,14 +251,6 @@ class _HomeWidgetState extends State<HomeWidget> {
             setState(() {});
           }
         });
-    if (!isLocalGalleryMode && Configuration.instance.hasConfiguredAccount()) {
-      MemoryShareService.instance.listMemoryShares().ignore();
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _handleMissingRecoveryKey();
-      }
-    });
   }
 
   Future<void> syncWidget() async {
@@ -394,183 +262,8 @@ class _HomeWidgetState extends State<HomeWidget> {
     await MemoryHomeWidgetService.instance.checkPendingMemorySync();
   }
 
-  void _scheduleChangeLogCheck({required Duration delay}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(delay, () {
-        if (mounted) {
-          showChangeLog(context);
-        }
-      });
-    });
-  }
-
-  final Map<Uri, (bool, int)> _linkedPublicAlbums = {};
   bool get _isGuestViewActive =>
       AppNavigationService.instance.isGuestViewActive;
-
-  Future<void> _handlePublicAlbumLink(Uri uri, String via) async {
-    // Offline fork: a public album link needs the network. Ignore it.
-    if (kOfflineFork) return;
-    if (!mounted) {
-      _logger.warning("Cannot handle public album link - widget not mounted");
-      return;
-    }
-    if (_isGuestViewActive) return;
-    try {
-      _logger.info("Handling public album link: via $via");
-      final int currentTime = DateTime.now().millisecondsSinceEpoch;
-      final bool isInitialStream = via.toLowerCase().contains('initial');
-      if (_linkedPublicAlbums.containsKey(uri)) {
-        final (lastInitialLink, lastTime) = _linkedPublicAlbums[uri]!;
-        // for initial stream, wait for 30 seconds to ignore duplicate links event
-        if (currentTime - lastTime < (lastInitialLink ? 30000 : 2000)) {
-          _logger.info(
-            "ignore was it has handled $lastInitialLink at epoch $lastTime",
-          );
-          return;
-        }
-      }
-      _linkedPublicAlbums[uri] = (isInitialStream, currentTime);
-
-      final Collection? collection = await CollectionsService.instance
-          .getCollectionFromPublicLink(context, uri);
-      if (!mounted || _isGuestViewActive) {
-        return;
-      }
-      if (collection == null) {
-        return;
-      }
-
-      final existingCollection = CollectionsService.instance.getCollectionByID(
-        collection.id,
-      );
-
-      if (collection.isOwner(Configuration.instance.getUserID() ?? -1) ||
-          (existingCollection != null && !existingCollection.isDeleted)) {
-        await routeToPage(
-          context,
-          CollectionPage(CollectionWithThumbnail(collection, null)),
-          useFadeTransition: true,
-        );
-        return;
-      }
-
-      final shouldShowJoinDialog =
-          uri.queryParameters['action'] == 'join' &&
-          Configuration.instance.isLoggedIn();
-
-      final dialog = createProgressDialog(context, "Loading...");
-      final publicUrl = collection.publicURLs[0];
-      if (!publicUrl.enableDownload) {
-        await showErrorDialog(
-          context,
-          context.strings.canNotOpenTitle,
-          context.strings.canNotOpenBody,
-        );
-        return;
-      }
-      if (publicUrl.passwordEnabled) {
-        await showTextInputDialog(
-          context,
-          title: context.strings.enterPassword,
-          submitButtonLabel: context.strings.ok,
-          alwaysShowSuccessState: false,
-          popnavAfterSubmission: false,
-          onSubmit: (String text) async {
-            if (text.trim() == "") {
-              return;
-            }
-            try {
-              final hashedPassword = await CryptoUtil.deriveKey(
-                utf8.encode(text),
-                CryptoUtil.base642bin(publicUrl.nonce!),
-                publicUrl.memLimit!,
-                publicUrl.opsLimit!,
-              );
-
-              if (!mounted) return;
-              unawaited(
-                CollectionsService.instance
-                    .verifyPublicCollectionPassword(
-                      context,
-                      CryptoUtil.bin2base64(hashedPassword),
-                      collection.id,
-                    )
-                    .then((result) async {
-                      if (result) {
-                        await dialog.show();
-
-                        if (!mounted) return;
-                        final List<EnteFile> sharedFiles = await _diffFetcher
-                            .getPublicFiles(
-                              context,
-                              collection.id,
-                              collection.pubMagicMetadata.asc ?? false,
-                            );
-                        await dialog.hide();
-                        if (!mounted || _isGuestViewActive) return;
-                        Navigator.of(context).pop();
-
-                        if (!mounted) return;
-                        await routeToPage(
-                          context,
-                          SharedPublicCollectionPage(
-                            CollectionWithThumbnail(collection, null),
-                            files: sharedFiles,
-                            shouldShowJoinDialog: shouldShowJoinDialog,
-                          ),
-                        );
-                      }
-                    }),
-              );
-            } catch (e, s) {
-              _logger.severe("Failed to decrypt password for album", e, s);
-              if (!mounted) return;
-              await showGenericErrorDialog(context: context, error: e);
-              return;
-            }
-          },
-        );
-      } else {
-        await dialog.show();
-
-        if (!mounted) return;
-        final List<EnteFile> sharedFiles = await _diffFetcher.getPublicFiles(
-          context,
-          collection.id,
-          collection.pubMagicMetadata.asc ?? false,
-        );
-        await dialog.hide();
-
-        if (!mounted || _isGuestViewActive) return;
-        await routeToPage(
-          context,
-          SharedPublicCollectionPage(
-            CollectionWithThumbnail(collection, null),
-            files: sharedFiles,
-            shouldShowJoinDialog: shouldShowJoinDialog,
-          ),
-        );
-        if (sharedFiles.length == 1) {
-          if (!mounted || _isGuestViewActive) return;
-          await routeToPage(
-            context,
-            DetailPage(
-              DetailPageConfiguration(
-                sharedFiles,
-                0,
-                "sharedPublicCollection",
-                galleryType: GalleryType.sharedPublicCollection,
-              ),
-            ),
-          );
-        }
-      }
-    } catch (e, s) {
-      _logger.severe("Failed to handle public album link", e, s);
-      return;
-    }
-  }
 
   Future<void> _autoLogoutAlert() async {
     final AlertDialog alert = AlertDialog(
@@ -617,22 +310,18 @@ class _HomeWidgetState extends State<HomeWidget> {
     _selectedFiles.removeListener(_selectedFilesListener);
     _hasSelectedFilesNotifier.dispose();
     _tabChangedEventSubscription.cancel();
-    _subscriptionPurchaseEvent.cancel();
     _triggerLogoutEvent.cancel();
     _loggedOutEvent.cancel();
     _permissionGrantedEvent.cancel();
     _appModeChangedEventSubscription.cancel();
     _firstImportEvent.cancel();
     _backupFoldersUpdatedEvent.cancel();
-    _accountConfiguredEvent.cancel();
     _intentDataStreamSubscription?.cancel();
     isOnSearchTabNotifier.dispose();
     _isAlbumsSearchActiveNotifier.dispose();
     _shouldAlbumsSearchConsumeBackNotifier.dispose();
     _shouldSearchTabSearchConsumeBackNotifier.dispose();
     _pageController.dispose();
-    _publicAlbumLinkSubscription?.cancel();
-    _authDeepLinkSubscription?.cancel();
     _homepageSwipeToSelectInProgressEventSubscription.cancel();
     _christmasBannerEventSubscription.cancel();
     _swipeToSelectInProgressNotifier.dispose();
@@ -665,9 +354,8 @@ class _HomeWidgetState extends State<HomeWidget> {
       return;
     }
 
+    // Offline fork: a public album link needs the network. Ignore it.
     if (_isPublicAlbumUrl(value[0].path)) {
-      final uri = Uri.parse(value[0].path);
-      unawaited(_handlePublicAlbumLink(uri, "sharedIntent.getMediaStream"));
       return;
     }
 
@@ -738,9 +426,8 @@ class _HomeWidgetState extends State<HomeWidget> {
     if (!mounted || _isGuestViewActive) {
       return;
     }
+    // Offline fork: a public album link needs the network. Ignore it.
     if (value.isNotEmpty && _isPublicAlbumUrl(value[0].path)) {
-      final uri = Uri.parse(value[0].path);
-      unawaited(_handlePublicAlbumLink(uri, "sharedIntent.getInitialMedia"));
       return;
     }
 
@@ -820,61 +507,6 @@ class _HomeWidgetState extends State<HomeWidget> {
     });
   }
 
-  Future<void> _initDeepLinkSubscriptionForPublicAlbums() async {
-    final appLinks = AppLinks();
-
-    try {
-      final initialUri = await appLinks.getInitialLink();
-      if (initialUri != null) {
-        if (_isPublicAlbumDeepLink(initialUri)) {
-          await _handlePublicAlbumLink(initialUri, "appLinks.getInitialLink");
-        } else {
-          _logger.info(
-            "Ignoring deep link: ${baseUrlForLogging(initialUri.toString())}",
-          );
-        }
-      } else {
-        _logger.info(
-          "No initial link received in public album link subscription.",
-        );
-      }
-    } catch (e) {
-      _logger.severe("Error while getting initial public album deep link: $e");
-    }
-
-    _publicAlbumLinkSubscription = appLinks.uriLinkStream.listen(
-      (Uri? uri) {
-        if (uri != null) {
-          if (_isPublicAlbumDeepLink(uri)) {
-            _handlePublicAlbumLink(uri, "appLinks.uriLinkStream");
-          } else {
-            _logger.info(
-              "Ignoring deep link: ${baseUrlForLogging(uri.toString())}",
-            );
-          }
-        } else {
-          _logger.info("No link received in public album link subscription.");
-        }
-      },
-      onError: (err) {
-        _logger.severe("Error while getting public album deep link: $err");
-      },
-    );
-  }
-
-  bool _isPublicAlbumDeepLink(Uri uri) {
-    if (!_isPublicAlbumHost(uri.host)) {
-      return false;
-    }
-    if (Platform.isIOS) {
-      return uri.scheme == "https";
-    }
-    if (Platform.isAndroid) {
-      return uri.scheme == "ente" || uri.scheme == "https";
-    }
-    return false;
-  }
-
   bool _isPublicAlbumUrl(String url) {
     final host = Uri.tryParse(url)?.host ?? "";
     return _isPublicAlbumHost(host);
@@ -893,167 +525,160 @@ class _HomeWidgetState extends State<HomeWidget> {
         Configuration.instance.hasConfiguredAccount() &&
         !isLocalGalleryMode &&
         _shouldShowPermissionWidget();
-    return UserDetailsStateWidget(
-      child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) async {
-          if (didPop) return;
-          final isStartWithoutAccountFlow =
-              _startWithoutAccount &&
-              !Configuration.instance.hasConfiguredAccount() &&
-              !localSettings.isAppModeSet;
-          // Offline fork: isAppModeSet is always true, so this branch (back
-          // to the landing page) cannot run.
-          if (isStartWithoutAccountFlow) {
-            unawaited(localSettings.setLocalGalleryOnboardingPending(false));
-            setState(() {
-              _startWithoutAccount = false;
-            });
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final isStartWithoutAccountFlow =
+            _startWithoutAccount &&
+            !Configuration.instance.hasConfiguredAccount() &&
+            !localSettings.isAppModeSet;
+        // Offline fork: isAppModeSet is always true, so this branch (back
+        // to the landing page) cannot run.
+        if (isStartWithoutAccountFlow) {
+          unawaited(localSettings.setLocalGalleryOnboardingPending(false));
+          setState(() {
+            _startWithoutAccount = false;
+          });
+          return;
+        }
+        if (_selectedTabIndex == 0) {
+          if (_selectedFiles.files.isNotEmpty) {
+            _selectedFiles.clearAll();
             return;
           }
-          if (_selectedTabIndex == 0) {
-            if (_selectedFiles.files.isNotEmpty) {
-              _selectedFiles.clearAll();
-              return;
-            }
-            if (_isDrawerOpen()) {
-              Navigator.pop(context);
-            } else if (Platform.isAndroid && action == IntentAction.main) {
-              unawaited(MoveToBackground.moveTaskToBack());
-            } else {
-              Navigator.pop(context);
-            }
+          if (_isDrawerOpen()) {
+            Navigator.pop(context);
+          } else if (Platform.isAndroid && action == IntentAction.main) {
+            unawaited(MoveToBackground.moveTaskToBack());
+          } else {
+            Navigator.pop(context);
+          }
+          return;
+        }
+        if (_selectedTabIndex == 1) {
+          if (_selectedAlbums.albums.isNotEmpty) {
+            _selectedAlbums.clearAll();
             return;
           }
-          if (_selectedTabIndex == 1) {
-            if (_selectedAlbums.albums.isNotEmpty) {
-              _selectedAlbums.clearAll();
-              return;
-            }
-            if (_shouldAlbumsSearchConsumeBackNotifier.value) {
-              _isAlbumsSearchActiveNotifier.value = false;
-              return;
-            }
-            if (_isAlbumsSearchActiveNotifier.value) {
-              _isAlbumsSearchActiveNotifier.value = false;
-            }
+          if (_shouldAlbumsSearchConsumeBackNotifier.value) {
+            _isAlbumsSearchActiveNotifier.value = false;
+            return;
           }
-          if (_selectedTabIndex == searchTabIndex) {
-            if (_shouldSearchTabSearchConsumeBackNotifier.value) {
-              Bus.instance.fire(ClearAndUnfocusSearchBar());
-              return;
-            }
+          if (_isAlbumsSearchActiveNotifier.value) {
+            _isAlbumsSearchActiveNotifier.value = false;
           }
-          Bus.instance.fire(
-            TabChangedEvent(0, TabChangedEventSource.backButton),
-          );
+        }
+        if (_selectedTabIndex == searchTabIndex) {
+          if (_shouldSearchTabSearchConsumeBackNotifier.value) {
+            Bus.instance.fire(ClearAndUnfocusSearchBar());
+            return;
+          }
+        }
+        Bus.instance.fire(TabChangedEvent(0, TabChangedEventSource.backButton));
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawerScrimColor: getEnteColorScheme(context).strokeFainter,
+        drawerEnableOpenDragGesture: false,
+        drawer: enableDrawer
+            ? ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width < 600
+                      ? double.infinity
+                      : 430,
+                ),
+                child: const Drawer(
+                  width: double.infinity,
+                  shape: RoundedRectangleBorder(),
+                  child: SettingsPage(),
+                ),
+              )
+            : null,
+        onDrawerChanged: (isOpened) {
+          if (isOpened) {
+            Bus.instance.fire(OpenedSettingsEvent());
+          }
         },
-        child: Scaffold(
-          key: _scaffoldKey,
-          drawerScrimColor: getEnteColorScheme(context).strokeFainter,
-          drawerEnableOpenDragGesture: false,
-          drawer: enableDrawer
-              ? ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width < 600
-                        ? double.infinity
-                        : 430,
-                  ),
-                  child: Drawer(
-                    width: double.infinity,
-                    shape: const RoundedRectangleBorder(),
-                    child: SettingsPage(
-                      emailNotifier: UserService.instance.emailValueNotifier,
-                    ),
-                  ),
-                )
-              : null,
-          onDrawerChanged: (isOpened) {
-            if (isOpened) {
-              Bus.instance.fire(OpenedSettingsEvent());
-            }
-          },
-          body: Stack(
-            children: [
-              Builder(
-                builder: (context) {
-                  return _getBody(context);
+        body: Stack(
+          children: [
+            Builder(
+              builder: (context) {
+                return _getBody(context);
+              },
+            ),
+            if (isChristmasPeriod())
+              ValueListenableBuilder<double>(
+                valueListenable: _christmasPullOffsetNotifier,
+                builder: (context, pullOffset, child) {
+                  return ValueListenableBuilder<bool>(
+                    valueListenable: _christmasPullReleasedNotifier,
+                    builder: (context, isReleased, child) {
+                      if (pullOffset <= 0) {
+                        return const SizedBox.shrink();
+                      }
+                      return Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: ChristmasPullOverlay(
+                          pullOffset: pullOffset,
+                          isReleased: isReleased,
+                        ),
+                      );
+                    },
+                  );
                 },
               ),
-              if (isChristmasPeriod())
-                ValueListenableBuilder<double>(
-                  valueListenable: _christmasPullOffsetNotifier,
-                  builder: (context, pullOffset, child) {
-                    return ValueListenableBuilder<bool>(
-                      valueListenable: _christmasPullReleasedNotifier,
-                      builder: (context, isReleased, child) {
-                        if (pullOffset <= 0) {
-                          return const SizedBox.shrink();
-                        }
-                        return Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: ChristmasPullOverlay(
-                            pullOffset: pullOffset,
-                            isReleased: isReleased,
-                          ),
+            if (isChristmasPeriod())
+              Positioned.fill(
+                child: FadingSnowOverlay(
+                  pullOffsetNotifier: _christmasPullOffsetNotifier,
+                ),
+              ),
+          ],
+        ),
+
+        // Keep an AppBar so the status bar color follows the current screen.
+        appBar: isOnOnlineGrantPermissionScreen
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(0),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: isOnSearchTabNotifier,
+                  builder: (context, isOnSearchTab, _) {
+                    return AnimatedBuilder(
+                      animation: IndexOfStackNotifier(),
+                      builder: (context, _) {
+                        final colorScheme = getEnteColorScheme(context);
+                        final resultsBackground = EnteTheme.isDark(context)
+                            ? colorScheme.backgroundColour
+                            : colorScheme.backgroundElevated2;
+                        final isSearchResults =
+                            isOnSearchTab && IndexOfStackNotifier().index == 1;
+                        final isOnLandingPage =
+                            !Configuration.instance.hasConfiguredAccount() &&
+                            !isLocalGalleryMode &&
+                            !_startWithoutAccount;
+                        final isOnOnlineGrantPermissionScreen =
+                            Configuration.instance.hasConfiguredAccount() &&
+                            !isLocalGalleryMode &&
+                            _shouldShowPermissionWidget();
+                        return AppBar(
+                          backgroundColor: isOnLandingPage
+                              ? colorScheme.greenBase
+                              : isSearchResults
+                              ? resultsBackground
+                              : isOnOnlineGrantPermissionScreen
+                              ? colorScheme.backgroundColour
+                              : colorScheme.backgroundColour,
                         );
                       },
                     );
                   },
                 ),
-              if (isChristmasPeriod())
-                Positioned.fill(
-                  child: FadingSnowOverlay(
-                    pullOffsetNotifier: _christmasPullOffsetNotifier,
-                  ),
-                ),
-            ],
-          ),
-
-          // Keep an AppBar so the status bar color follows the current screen.
-          appBar: isOnOnlineGrantPermissionScreen
-              ? null
-              : PreferredSize(
-                  preferredSize: const Size.fromHeight(0),
-                  child: ValueListenableBuilder<bool>(
-                    valueListenable: isOnSearchTabNotifier,
-                    builder: (context, isOnSearchTab, _) {
-                      return AnimatedBuilder(
-                        animation: IndexOfStackNotifier(),
-                        builder: (context, _) {
-                          final colorScheme = getEnteColorScheme(context);
-                          final resultsBackground = EnteTheme.isDark(context)
-                              ? colorScheme.backgroundColour
-                              : colorScheme.backgroundElevated2;
-                          final isSearchResults =
-                              isOnSearchTab &&
-                              IndexOfStackNotifier().index == 1;
-                          final isOnLandingPage =
-                              !Configuration.instance.hasConfiguredAccount() &&
-                              !isLocalGalleryMode &&
-                              !_startWithoutAccount;
-                          final isOnOnlineGrantPermissionScreen =
-                              Configuration.instance.hasConfiguredAccount() &&
-                              !isLocalGalleryMode &&
-                              _shouldShowPermissionWidget();
-                          return AppBar(
-                            backgroundColor: isOnLandingPage
-                                ? colorScheme.greenBase
-                                : isSearchResults
-                                ? resultsBackground
-                                : isOnOnlineGrantPermissionScreen
-                                ? colorScheme.backgroundColour
-                                : colorScheme.backgroundColour,
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-          resizeToAvoidBottomInset: false,
-        ),
+              ),
+        resizeToAvoidBottomInset: false,
       ),
     );
   }
@@ -1079,14 +704,9 @@ class _HomeWidgetState extends State<HomeWidget> {
       if (shouldUseLocalGalleryEntryFlow && _shouldShowPermissionWidget()) {
         return const GrantPermissionsWidget(startWithoutAccount: true);
       }
-      // Offline fork: the landing (sign-up / login) page is unreachable.
-      if (kOfflineFork && !shouldUseLocalGalleryEntryFlow) {
-        return const GrantPermissionsWidget(startWithoutAccount: true);
-      }
+      // Offline fork: there is no landing (sign-up / login) page.
       if (!shouldUseLocalGalleryEntryFlow) {
-        return LandingPageWidget(
-          onStartWithoutAccount: _startWithoutAccountFlow,
-        );
+        return const GrantPermissionsWidget(startWithoutAccount: true);
       }
     }
     _ensurePersonSync();
@@ -1161,8 +781,6 @@ class _HomeWidgetState extends State<HomeWidget> {
                                 _shouldAlbumsSearchConsumeBackNotifier,
                           ),
                         ),
-                        if (!localGalleryMode)
-                          _buildTabHeroMode(2, selectedTabIndex, _feedTab),
                         _buildTabHeroMode(
                           3,
                           selectedTabIndex,
@@ -1264,77 +882,6 @@ class _HomeWidgetState extends State<HomeWidget> {
     }
   }
 
-  Future<bool> _initDeepLinks() async {
-    final appLinks = AppLinks();
-    try {
-      final initialLink = await appLinks.getInitialLink();
-      if (initialLink != null) {
-        _logger.info("Initial link received: host ${initialLink.host}");
-        if (!mounted) return false;
-        _getCredentials(context, initialLink);
-        return true;
-      } else {
-        _logger.info("No initial link received.");
-      }
-    } on PlatformException {
-      _logger.severe("PlatformException thrown while getting initial link");
-    }
-
-    _authDeepLinkSubscription = appLinks.uriLinkStream.listen(
-      (link) {
-        _logger.info("Link received: host ${link.host}");
-        if (!mounted) return;
-        _getCredentials(context, link);
-      },
-      onError: (err) {
-        _logger.severe(err);
-      },
-    );
-    return false;
-  }
-
-  void _getCredentials(BuildContext context, Uri? link) {
-    // Offline fork: no sign-in from a deep link.
-    if (kOfflineFork) return;
-    if (Configuration.instance.hasConfiguredAccount() || link == null) {
-      return;
-    }
-    final ott = link.queryParameters["ott"];
-    if (ott == null || ott.isEmpty) {
-      _logger.info("Ignoring auth deep link without ott parameter");
-      return;
-    }
-    UserService.instance.verifyEmail(context, ott);
-  }
-
-  Future<void> showChangeLog(BuildContext context) async {
-    // Offline fork: never show the changelog sheet.
-    if (kOfflineFork) return;
-    if (_isShowingChangeLog || !mounted) {
-      return;
-    }
-    _isShowingChangeLog = true;
-    try {
-      final action = await updateService.getChangeLogAction(
-        locale: Localizations.localeOf(context),
-        isLocalGallery: isLocalGalleryMode,
-        isSignedIn: Configuration.instance.isLoggedIn(),
-      );
-      if (!mounted || action == ChangeLogAction.skip) {
-        return;
-      }
-      if (action == ChangeLogAction.consumeWithoutShowing) {
-        updateService.hideChangeLog().ignore();
-        return;
-      }
-      if (!context.mounted) return;
-      await showChangeLogSheet(context);
-      await updateService.hideChangeLog();
-    } finally {
-      _isShowingChangeLog = false;
-    }
-  }
-
   void _onDidReceiveNotificationResponse(
     NotificationResponse notificationResponse,
   ) async {
@@ -1345,48 +892,6 @@ class _HomeWidgetState extends State<HomeWidget> {
       final uri = Uri.tryParse(payload);
       if (uri != null && uri.host.toLowerCase() == "rewind") {
         await RewindEntry.openWhenReady(context);
-        return;
-      }
-      if (uri != null &&
-          (uri.host.toLowerCase() == "ritual" ||
-              uri.host.toLowerCase() == "camera")) {
-        final ritualId = uri.queryParameters["ritualId"] ?? "";
-        final albumIdRaw = uri.queryParameters["albumId"];
-        final int? albumId = albumIdRaw != null && albumIdRaw.isNotEmpty
-            ? int.tryParse(albumIdRaw)
-            : null;
-        var canOpenRitual = true;
-        if (ritualId.isNotEmpty) {
-          final ritual = findRitualById(ritualId);
-          canOpenRitual = ritual != null
-              ? await requestHiddenRitualAccess(context, ritual)
-              : await requestHiddenRitualAccessForAlbumId(context, albumId);
-          if (!mounted || !canOpenRitual) {
-            return;
-          }
-          // Ensure the camera is stacked on top of the ritual page so the user
-          // lands on the ritual details after adding photos via a notification.
-          // ignore: unawaited_futures
-          AppNavigationService.instance.pushPage(
-            RitualPage(ritualId: ritualId),
-          );
-        }
-        if (!canOpenRitual) return;
-        // ignore: unawaited_futures
-        AppNavigationService.instance.pushPage(
-          RitualCameraPage(ritualId: ritualId, albumId: albumId),
-        );
-        return;
-      }
-      if (uri != null && uri.host.toLowerCase() == "feed") {
-        if (!Configuration.instance.isLoggedIn()) {
-          return;
-        }
-        final target = FeedNavigationTarget.fromUri(uri);
-        // ignore: unawaited_futures
-        AppNavigationService.instance.pushPage(
-          FeedScreen(initialTarget: target),
-        );
         return;
       }
       if (payload.toLowerCase().contains("onthisday")) {

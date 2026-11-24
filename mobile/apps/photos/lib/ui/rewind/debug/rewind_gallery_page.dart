@@ -54,10 +54,7 @@ final rewindColourChapters = [
 ];
 
 Future<RewindStory> _sampleStory(rust.RewindReport report) async =>
-    RewindStory.compose(
-      rewindChapters(report, rewindSampleRituals),
-      await RewindMedia.sampled(),
-    );
+    RewindStory.compose(rewindChapters(report), await RewindMedia.sampled());
 
 RewindChapter _colourChapter(rust.ColourOfTheYear colour) =>
     RewindChapter([ColourPage.pageKey], (media) async {
@@ -161,18 +158,6 @@ class _RewindGalleryPageState extends State<RewindGalleryPage> {
             ritualStreakSetupPage,
             const RitualStreakPage(rewindSampleRituals),
           ]),
-        ),
-        ListTile(
-          title: const Text("Ritual streak: your rituals"),
-          subtitle: const Text("From the rituals on this device"),
-          trailing: const Icon(Icons.chevron_right_outlined),
-          onTap: () => openStory(
-            RewindMedia.sampled().then(
-              (media) => RewindStory.compose([
-                ritualStreakChapter(RewindRituals.current()),
-              ], media),
-            ),
-          ),
         ),
         ListTile(
           title: const Text("Badge"),

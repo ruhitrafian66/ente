@@ -9,7 +9,6 @@ import "package:photo_manager/photo_manager.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/sync/local_sync_service.dart";
 import "package:photos/ui/home/loading_photos_widget.dart";
-import "package:photos/ui/settings/backup/backup_folder_selection_page.dart";
 import "package:photos/utils/dialog_util.dart";
 
 final _logger = Logger("BackupFlowHelper");
@@ -27,7 +26,9 @@ Future<void> handleFullPermissionBackupFlow(BuildContext context) async {
       state == PermissionState.authorized ||
       (state == null && permissionService.hasGrantedFullPermission());
   if (hasFullPermission) {
-    unawaited(_navigateToFolderSelection(context, isFirstBackup: false));
+    // Offline fork: there is no backup folder selection. Full access is all
+    // that the local gallery needs.
+    return;
   } else if (Platform.isAndroid) {
     await PhotoManager.openSetting();
   } else {
@@ -36,24 +37,6 @@ Future<void> handleFullPermissionBackupFlow(BuildContext context) async {
         (state == null && permissionService.hasGrantedLimitedPermissions());
     // ignore: unawaited_futures
     _showLimitedPermissionSheet(context, hasGrantedLimit: hasLimitedPermission);
-  }
-}
-
-Future<void> handleLimitedOrFolderBackupFlow(
-  BuildContext context, {
-  bool isFirstBackup = true,
-}) async {
-  if (_shouldRunFirstImportFlow()) {
-    await _handleFirstImportFlow(context);
-    return;
-  }
-
-  if (permissionService.hasGrantedLimitedPermissions()) {
-    unawaited(PhotoManager.presentLimited());
-  } else {
-    unawaited(
-      _navigateToFolderSelection(context, isFirstBackup: isFirstBackup),
-    );
   }
 }
 
@@ -66,11 +49,13 @@ Future<bool?> handleFolderSelectionBackupFlow(
     return _handleFirstImportFlow(context);
   }
 
-  return _navigateToFolderSelection(
-    context,
-    isFirstBackup: isFirstBackup,
-    fromOnlyNewPhotosToggle: fromOnlyNewPhotosToggle,
-  );
+  // Offline fork: there is no backup folder selection. Only make sure that
+  // the app has photo access.
+  final state = await _requestAndStoreGrantedPermissions();
+  if (state != null && !_hasMinimalPermission(state) && context.mounted) {
+    await _showPermissionDeniedDialog(context);
+  }
+  return null;
 }
 
 bool _shouldRunFirstImportFlow() =>
@@ -110,18 +95,6 @@ Future<PermissionState?> _requestAndStoreGrantedPermissions() async {
 
 bool _hasMinimalPermission(PermissionState state) =>
     state == PermissionState.authorized || state == PermissionState.limited;
-
-Future<bool?> _navigateToFolderSelection(
-  BuildContext context, {
-  required bool isFirstBackup,
-  bool fromOnlyNewPhotosToggle = false,
-}) => routeToPage<bool>(
-  context,
-  BackupFolderSelectionPage(
-    isFirstBackup: isFirstBackup,
-    fromOnlyNewPhotosToggle: fromOnlyNewPhotosToggle,
-  ),
-);
 
 Future<void> _showPermissionDeniedDialog(BuildContext context) =>
     showChoiceDialog(

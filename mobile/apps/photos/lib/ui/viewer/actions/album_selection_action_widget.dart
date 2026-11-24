@@ -1,5 +1,3 @@
-import "dart:io";
-
 import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
@@ -20,7 +18,6 @@ import "package:photos/ui/components/bottom_action_bar/selection_action_sheet.da
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/components/models/button_type.dart";
 import "package:photos/ui/notification/toast.dart";
-import "package:photos/ui/sharing/add_people_sheet.dart";
 import "package:photos/ui/viewer/album_slideshow/album_slideshow.dart";
 import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/file_sort_util.dart";
@@ -94,18 +91,6 @@ class _AlbumSelectionActionWidgetState
         isHomeSection && receivesAllSelectedAlbums;
     final showMixedEnteActions =
         isHomeSection && !ownsAllSelectedAlbums && !receivesAllSelectedAlbums;
-
-    if (showOwnerActions) {
-      items.add(
-        SelectionSheetAction(
-          labelText: context.strings.share,
-          hugeIcon: Platform.isIOS
-              ? HugeIcons.strokeRoundedShare03
-              : HugeIcons.strokeRoundedShare08,
-          onTap: _shareCollection,
-        ),
-      );
-    }
 
     items.add(
       SelectionSheetAction(
@@ -255,11 +240,6 @@ class _AlbumSelectionActionWidgetState
       backgroundColor: widget.backgroundColor,
       backgroundScrollController: widget.backgroundScrollController,
     );
-  }
-
-  Future<void> _shareCollection() async {
-    await showAddPeopleSheet(context, widget.selectedAlbums.albums.toList());
-    widget.selectedAlbums.clearAll();
   }
 
   Future<void> _startAlbumSlideshow() async {

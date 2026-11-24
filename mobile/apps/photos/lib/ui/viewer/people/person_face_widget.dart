@@ -10,7 +10,6 @@ import "package:photos/core/event_bus.dart";
 import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
-import "package:photos/events/contacts_changed_event.dart";
 import "package:photos/events/people_changed_event.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/ml/face/face_with_embedding.dart";
@@ -19,11 +18,9 @@ import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
-import "package:photos/services/photos_contacts_service.dart";
 import "package:photos/services/search_service.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/utils/avatar_util.dart";
-import "package:photos/utils/contact_string_util.dart";
 import "package:photos/utils/face/face_thumbnail_cache.dart";
 import "package:photos/utils/face_crop_util.dart";
 
@@ -74,11 +71,8 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
   bool _showingFallback = false;
   bool _faceCropFailed = false;
   bool _fallbackEverUsed = false;
-  bool _personHasContactLink = false;
-  int? _linkedContactUserId;
   int _loadGeneration = 0;
   int _faceCropRetryRevision = 0;
-  StreamSubscription<ContactsChangedEvent>? _contactsChangedSubscription;
   StreamSubscription<PeopleChangedEvent>? _peopleChangedSubscription;
 
   bool get isPerson => widget.personId != null;
@@ -89,9 +83,6 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
   @override
   void initState() {
     super.initState();
-    _contactsChangedSubscription = Bus.instance
-        .on<ContactsChangedEvent>()
-        .listen(_onContactsChanged);
     _peopleChangedSubscription = Bus.instance.on<PeopleChangedEvent>().listen((
       event,
     ) {
@@ -110,8 +101,6 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
     if (oldWidget.personId != widget.personId ||
         oldWidget.clusterID != widget.clusterID ||
         oldWidget.useFullFile != widget.useFullFile) {
-      _personHasContactLink = false;
-      _linkedContactUserId = null;
       _personIdentity = null;
       faceCropFuture = _startFaceCropLoad();
     } else if (widget.retryKey != null &&
@@ -123,7 +112,6 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
 
   @override
   void dispose() {
-    _contactsChangedSubscription?.cancel();
     _peopleChangedSubscription?.cancel();
     if (_faceCropFileId != null) {
       checkStopTryingToGenerateFaceThumbnails(
@@ -138,22 +126,6 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
       }
     }
     super.dispose();
-  }
-
-  void _onContactsChanged(ContactsChangedEvent event) {
-    if (!isPerson || !mounted) {
-      return;
-    }
-    if (!_personHasContactLink && _linkedContactUserId == null) {
-      return;
-    }
-    if (event.contactUserIds == null ||
-        _linkedContactUserId == null ||
-        event.matchesContactUserId(_linkedContactUserId)) {
-      setState(() {
-        faceCropFuture = _startFaceCropLoad();
-      });
-    }
   }
 
   @override
@@ -323,37 +295,19 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
         if (!_isCurrentLoad(generation)) {
           return null;
         }
-        _personHasContactLink = _hasContactLink(personEntity);
-        final contactPhotoBytes = await _getLinkedContactPhotoBytes(
-          personEntity,
-          generation: generation,
-        );
-        if (!_isCurrentLoad(generation)) {
-          return null;
-        }
         final personData = personEntity.data;
-        // Offline fork: no Ente contacts without an account.
-        final contact = kOfflineFork
-            ? null
-            : PhotosContactsService.instance.getCachedContact(
-                contactUserId: personData.userID,
-                email: personData.email,
-              );
+        // Offline fork: there are no linked contacts. The person data is the
+        // only source of the name.
         _personIdentity = AvatarIdentity.account(
-          label: trimToNull(contact?.name) ?? personData.name,
-          email: trimToNull(contact?.email) ?? personData.email,
+          label: personData.name,
+          email: personData.email,
           userID: personData.userID,
           personID: personEntity.remoteID,
           currentUserID: Configuration.instance.getUserID(),
           currentUserEmail: Configuration.instance.getEmail(),
         );
-        if (contactPhotoBytes != null) {
-          return contactPhotoBytes;
-        }
         fixedFaceID = personEntity.data.avatarFaceID;
       } else {
-        _personHasContactLink = false;
-        _linkedContactUserId = null;
         _personIdentity = null;
       }
       final tryInMemoryCachedCrop = checkInMemoryCachedCropForPersonOrClusterID(
@@ -577,37 +531,6 @@ class _PersonFaceWidgetState extends State<PersonFaceWidget>
   }
 
   bool _isCurrentLoad(int generation) => _loadGeneration == generation;
-
-  bool _hasContactLink(PersonEntity personEntity) {
-    final userId = personEntity.data.userID;
-    final email = personEntity.data.email?.trim();
-    return (userId != null && userId > 0) ||
-        (email != null && email.isNotEmpty);
-  }
-
-  Future<Uint8List?> _getLinkedContactPhotoBytes(
-    PersonEntity personEntity, {
-    required int generation,
-  }) async {
-    if (!_personHasContactLink) {
-      _linkedContactUserId = null;
-      return null;
-    }
-    final contact = await PhotosContactsService.instance.getContact(
-      contactUserId: personEntity.data.userID,
-      email: personEntity.data.email,
-    );
-    if (!_isCurrentLoad(generation)) {
-      return null;
-    }
-    _linkedContactUserId = contact?.contactUserId ?? personEntity.data.userID;
-    if (contact == null) {
-      return null;
-    }
-    return PhotosContactsService.instance.getProfilePictureBytesByUserId(
-      contact.contactUserId,
-    );
-  }
 }
 
 class _EmptyPersonThumbnail extends StatelessWidget {

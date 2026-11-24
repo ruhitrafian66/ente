@@ -17,7 +17,6 @@ import "package:photos/ui/rewind/pages/people_race_page.dart";
 import "package:photos/ui/rewind/pages/photo_booth_page.dart";
 import "package:photos/ui/rewind/pages/photos_count_page.dart";
 import "package:photos/ui/rewind/pages/places_quiz_page.dart";
-import "package:photos/ui/rewind/pages/ritual_streak_page.dart";
 import "package:photos/ui/rewind/pages/scrapbook_page.dart";
 import "package:photos/ui/rewind/pages/setup_page.dart";
 import "package:photos/ui/rewind/pages/setup_pages.dart";
@@ -27,7 +26,6 @@ import "package:photos/ui/rewind/pages/weekly_habit_page.dart";
 import "package:photos/ui/rewind/shell/rewind_page.dart";
 import "package:photos/ui/rewind/story/rewind_face.dart";
 import "package:photos/ui/rewind/story/rewind_media.dart";
-import "package:photos/ui/rewind/story/rewind_rituals.dart";
 import "package:photos/ui/rewind/widgets/rewind_photo_frames.dart";
 
 class RewindChapter {
@@ -46,10 +44,7 @@ class RewindChapter {
   final Future<List<RewindPage>> Function(RewindMedia media) compose;
 }
 
-List<RewindChapter> rewindChapters(
-  rust.RewindReport report,
-  RewindRituals? rituals,
-) => [
+List<RewindChapter> rewindChapters(rust.RewindReport report) => [
   RewindChapter([const CoverPage().key], (_) async => const [CoverPage()]),
   _warp(report),
   _totals(report.totals),
@@ -61,7 +56,6 @@ List<RewindChapter> rewindChapters(
   _favourites(report.favourites),
   _weeklyHabit(report.weeklyHabit),
   _crowdFavourite(report.crowdFavourite),
-  ritualStreakChapter(rituals),
   _mosaic(report),
   _badge(report.badge),
   _scrapbook(report),
@@ -318,13 +312,6 @@ RewindChapter _crowdFavourite(rust.CrowdFavourite? crowd) {
     return null;
   });
 }
-
-RewindChapter ritualStreakChapter(RewindRituals? rituals) => RewindChapter(
-  [ritualStreakSetupPage.key, RitualStreakPage.pageKey],
-  (_) async => [
-    if (rituals != null) ...[ritualStreakSetupPage, RitualStreakPage(rituals)],
-  ],
-);
 
 RewindChapter _badge(rust.Badge? badge) {
   return RewindChapter.revealed(

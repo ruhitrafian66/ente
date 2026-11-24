@@ -11,7 +11,6 @@ import "package:photos/models/search/search_result.dart";
 import "package:photos/models/search/search_types.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/components/thumbnail_list_item.dart";
-import "package:photos/ui/viewer/search/result/contact_result_page.dart";
 import "package:photos/ui/viewer/search/result/search_result_page.dart";
 import "package:photos/ui/viewer/search/result/search_thumbnail_widget.dart";
 
@@ -46,36 +45,22 @@ class SearchableItemWidget extends StatelessWidget {
         if (onResultTap != null) {
           onResultTap!();
         } else {
-          if (searchResult.type() == ResultType.shared) {
-            routeToPage(
-              context,
-              ContactResultPage(searchResult, tagPrefix: additionalPrefix),
-            );
-          } else {
-            routeToPage(
-              context,
-              SearchResultPage(searchResult, tagPrefix: additionalPrefix),
-              useFadeTransition:
-                  searchResult.type() == ResultType.location ||
-                  searchResult.type() == ResultType.locationSuggestion,
-            );
-          }
+          routeToPage(
+            context,
+            SearchResultPage(searchResult, tagPrefix: additionalPrefix),
+            useFadeTransition:
+                searchResult.type() == ResultType.location ||
+                searchResult.type() == ResultType.locationSuggestion,
+          );
         }
       },
-      leading: searchResult.type() == ResultType.shared
-          ? ContactSearchThumbnailWidget(
-              heroTagPrefix,
-              searchResult: searchResult as GenericSearchResult,
-              size: ThumbnailListItem.defaultLeadingSize,
-              borderRadius: ThumbnailListItem.defaultLeadingRadius,
-            )
-          : SearchThumbnailWidget(
-              searchResult.previewThumbnail(),
-              heroTagPrefix,
-              searchResult: searchResult,
-              size: ThumbnailListItem.defaultLeadingSize,
-              borderRadius: ThumbnailListItem.defaultLeadingRadius,
-            ),
+      leading: SearchThumbnailWidget(
+        searchResult.previewThumbnail(),
+        heroTagPrefix,
+        searchResult: searchResult,
+        size: ThumbnailListItem.defaultLeadingSize,
+        borderRadius: ThumbnailListItem.defaultLeadingRadius,
+      ),
       title: isCluster
           ? const SizedBox.shrink()
           : Text(

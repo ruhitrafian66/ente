@@ -2,12 +2,10 @@ import 'dart:io';
 
 import 'package:ente_components/ente_components.dart';
 import 'package:ente_pure_utils/ente_pure_utils.dart';
-import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
-import "package:photos/ui/settings/pending_sync/pending_sync_info_screen.dart";
 
 class PathStorageItem {
   final String path;
@@ -110,15 +108,6 @@ class _PathStorageViewerState extends State<PathStorageViewer> {
         if (widget.item.allowCacheClear && widget.enableDoubleTapClear) {
           await deleteDirectoryContents(widget.item.path);
           _safeRefresh();
-        }
-      },
-      onLongPress: () async {
-        if (widget.item.title == context.strings.pendingSync) {
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => const PendingSyncInfoScreen(),
-            ),
-          );
         }
       },
     );

@@ -14,7 +14,6 @@ import 'package:photos/ui/common/bottom_shadow.dart';
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/components/dialog_widget.dart";
 import "package:photos/ui/components/models/button_type.dart";
-import 'package:photos/ui/settings/backup/backup_folder_selection_page.dart';
 import "package:photos/utils/email_util.dart";
 
 class LoadingPhotosWidget extends StatefulWidget {
@@ -84,39 +83,16 @@ class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
     });
   }
 
+  // Offline fork: there is no backup folder selection. The onboarding flow
+  // lets HomeWidget refresh; the pushed flow closes this screen.
   Future<void> _goToFolderSelection() async {
     if (widget.isOnboardingFlow) {
-      // ignore: unawaited_futures
-      routeToPage(
-        context,
-        const BackupFolderSelectionPage(
-          isOnboarding: true,
-          isFirstBackup: true,
-        ),
-      );
       return;
     }
-
-    final selectionResult = await routeToPage<bool>(
-      context,
-      const BackupFolderSelectionPage(
-        isOnboarding: false,
-        isFirstBackup: false,
-      ),
-    );
-
-    if (!mounted) {
-      return;
-    }
-
     if (widget.onFolderSelectionComplete != null) {
-      replacePage(
-        context,
-        widget.onFolderSelectionComplete!(),
-        result: selectionResult,
-      );
+      replacePage(context, widget.onFolderSelectionComplete!());
     } else {
-      Navigator.of(context).pop(selectionResult);
+      Navigator.of(context).pop();
     }
   }
 

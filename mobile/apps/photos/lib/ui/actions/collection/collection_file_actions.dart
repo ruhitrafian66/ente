@@ -25,7 +25,6 @@ import 'package:photos/ui/components/action_sheet_widget.dart';
 import 'package:photos/ui/components/buttons/button_widget.dart';
 import 'package:photos/ui/components/models/button_type.dart';
 import 'package:photos/ui/notification/toast.dart';
-import "package:photos/ui/payment/subscription.dart";
 import "package:photos/ui/settings/free_space_options.dart";
 import 'package:photos/utils/dialog_util.dart';
 import "package:photos/utils/share_util.dart";
@@ -360,7 +359,7 @@ extension CollectionFileActions on CollectionActions {
   }
 }
 
-enum _StorageFullAction { upgrade, freeUpSpace }
+enum _StorageFullAction { freeUpSpace }
 
 Future<void> showStorageFullSheet(BuildContext context) async {
   final action = await showBottomSheetComponent<_StorageFullAction>(
@@ -375,15 +374,8 @@ Future<void> showStorageFullSheet(BuildContext context) async {
       ),
       actions: [
         ButtonComponent(
-          label: sheetContext.strings.upgrade,
-          variant: ButtonComponentVariant.primary,
-          size: ButtonComponentSize.large,
-          onTap: () =>
-              Navigator.of(sheetContext).pop(_StorageFullAction.upgrade),
-        ),
-        ButtonComponent(
           label: sheetContext.strings.freeUpSpace,
-          variant: ButtonComponentVariant.secondary,
+          variant: ButtonComponentVariant.primary,
           size: ButtonComponentSize.large,
           onTap: () =>
               Navigator.of(sheetContext).pop(_StorageFullAction.freeUpSpace),
@@ -395,8 +387,6 @@ Future<void> showStorageFullSheet(BuildContext context) async {
     return;
   }
   switch (action) {
-    case _StorageFullAction.upgrade:
-      await routeToPage(context, getSubscriptionPage());
     case _StorageFullAction.freeUpSpace:
       await routeToPage(context, const FreeUpSpaceOptionsScreen());
     case null:

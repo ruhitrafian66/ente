@@ -13,7 +13,6 @@ import 'package:photos/models/file/trash_file.dart';
 import 'package:photos/models/files_split.dart';
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/service_locator.dart';
-import 'package:photos/settings/local_settings.dart';
 import 'package:photos/utils/delete_file_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -82,147 +81,10 @@ void main() {
   });
 
   group('showDeleteSheet', () {
-    testWidgets('mixed delete sheet with saved default starts collapsed', (
-      tester,
-    ) async {
-      await localSettings.setDeletePreference(DeletePreference.DeleteFromBoth);
-      final file = _file(generatedID: 22, uploadedID: 32, localID: 'local-22');
-      final selectedFiles = SelectedFiles()..selectAll({file});
 
-      await _pumpDeleteSheet(
-        tester,
-        selectedFiles: selectedFiles,
-        split: FilesSplit(
-          pendingUploads: const [],
-          ownedByCurrentUser: [file],
-          ownedByOtherUsers: const [],
-        ),
-      );
 
-      expect(find.byType(ButtonComponent), findsOneWidget);
-      expect(find.text('Delete from both'), findsOneWidget);
-      expect(find.text('More options'), findsOneWidget);
-      expect(find.text('Set as my default choice'), findsNothing);
-    });
 
-    testWidgets('cancel keeps the selection', (tester) async {
-      final file = _file(generatedID: 4, uploadedID: 14);
-      final selectedFiles = SelectedFiles()..selectAll({file});
 
-      await _pumpDeleteSheet(
-        tester,
-        selectedFiles: selectedFiles,
-        split: FilesSplit(
-          pendingUploads: const [],
-          ownedByCurrentUser: [file],
-          ownedByOtherUsers: const [],
-        ),
-      );
-
-      await tester.tap(find.byTooltip('Close'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(BottomSheetComponent), findsNothing);
-      expect(selectedFiles.files, contains(file));
-    });
-
-    testWidgets(
-      'remote delete action uses the legacy remote delete path and clears selection',
-      (tester) async {
-        final file = _file(generatedID: 7, uploadedID: 17);
-        final selectedFiles = SelectedFiles()..selectAll({file});
-        var remoteDeleteCalls = 0;
-        List<EnteFile>? remoteDeleteFiles;
-
-        await _pumpDeleteSheet(
-          tester,
-          selectedFiles: selectedFiles,
-          split: FilesSplit(
-            pendingUploads: const [],
-            ownedByCurrentUser: [file],
-            ownedByOtherUsers: const [],
-          ),
-          deleteFromRemoteOnlyOverride: (context, files) async {
-            remoteDeleteCalls++;
-            remoteDeleteFiles = List.of(files);
-          },
-        );
-
-        await tester.tap(find.text('Delete from Ente'));
-        await tester.pumpAndSettle();
-
-        expect(remoteDeleteCalls, 1);
-        expect(remoteDeleteFiles, [file]);
-        expect(find.byType(BottomSheetComponent), findsNothing);
-        expect(selectedFiles.files, isEmpty);
-
-        await _settleToast(tester);
-      },
-    );
-
-    testWidgets(
-      'device delete action uses the legacy device delete path and clears selection',
-      (tester) async {
-        final file = _file(generatedID: 8, localID: 'local-8');
-        final selectedFiles = SelectedFiles()..selectAll({file});
-        var deviceDeleteCalls = 0;
-        List<EnteFile>? deviceDeleteFiles;
-
-        await _pumpDeleteSheet(
-          tester,
-          selectedFiles: selectedFiles,
-          split: FilesSplit(
-            pendingUploads: [file],
-            ownedByCurrentUser: const [],
-            ownedByOtherUsers: const [],
-          ),
-          deleteOnDeviceOnlyOverride: (context, files) async {
-            deviceDeleteCalls++;
-            deviceDeleteFiles = List.of(files);
-          },
-        );
-
-        await tester.tap(find.text('Delete from device'));
-        await tester.pumpAndSettle();
-
-        expect(deviceDeleteCalls, 1);
-        expect(deviceDeleteFiles, [file]);
-        expect(find.byType(BottomSheetComponent), findsNothing);
-        expect(selectedFiles.files, isEmpty);
-      },
-    );
-
-    testWidgets(
-      'delete from both uses the legacy everywhere delete path and clears selection',
-      (tester) async {
-        final file = _file(generatedID: 9, uploadedID: 19, localID: 'local-9');
-        final selectedFiles = SelectedFiles()..selectAll({file});
-        var everywhereDeleteCalls = 0;
-        List<EnteFile>? everywhereDeleteFiles;
-
-        await _pumpDeleteSheet(
-          tester,
-          selectedFiles: selectedFiles,
-          split: FilesSplit(
-            pendingUploads: const [],
-            ownedByCurrentUser: [file],
-            ownedByOtherUsers: const [],
-          ),
-          deleteFromEverywhereOverride: (context, files) async {
-            everywhereDeleteCalls++;
-            everywhereDeleteFiles = List.of(files);
-          },
-        );
-
-        await tester.tap(find.text('Delete from both'));
-        await tester.pumpAndSettle();
-
-        expect(everywhereDeleteCalls, 1);
-        expect(everywhereDeleteFiles, [file]);
-        expect(find.byType(BottomSheetComponent), findsNothing);
-        expect(selectedFiles.files, isEmpty);
-      },
-    );
 
     testWidgets('only other-user files keep the legacy no-sheet behavior', (
       tester,

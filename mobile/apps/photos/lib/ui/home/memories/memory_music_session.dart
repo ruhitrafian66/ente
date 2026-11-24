@@ -5,10 +5,7 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/memories/just_audio_memory_music_player.dart";
 import "package:photos/services/memories/memory_music_controller.dart";
-import "package:photos/services/memories/memory_music_selector.dart";
-import "package:photos/services/memories/memory_music_service.dart";
 
 class MemoryMusicSession extends StatefulWidget {
   final List<String> memoryIDs;
@@ -24,11 +21,9 @@ class MemoryMusicSession extends StatefulWidget {
   State<MemoryMusicSession> createState() => _MemoryMusicSessionState();
 }
 
-class _MemoryMusicSessionState extends State<MemoryMusicSession>
-    with WidgetsBindingObserver {
+class _MemoryMusicSessionState extends State<MemoryMusicSession> {
   static final _logger = Logger("MemoryMusicSession");
 
-  MemoryMusicController? _controller;
   late bool _isMusicMuted;
   late bool _isVideoMuted;
 
@@ -37,38 +32,9 @@ class _MemoryMusicSessionState extends State<MemoryMusicSession>
     super.initState();
     _isMusicMuted = localSettings.isMemoriesMusicMuted();
     _isVideoMuted = localSettings.isMemoriesVideoMuted();
-    WidgetsBinding.instance.addObserver(this);
-    unawaited(_initialize());
-  }
-
-  Future<void> _initialize() async {
-    final tracks = await MemoryMusicService.instance.prepare();
-    if (!mounted || tracks.isEmpty) return;
-    final assignments = assignMemoryMusicTracks(
-      memoryIDs: widget.memoryIDs,
-      tracks: tracks,
-    );
-    final controller = MemoryMusicController(
-      assignments: assignments,
-      initiallyMuted: _isMusicMuted,
-      persistMuted: localSettings.setMemoriesMusicMuted,
-      player: JustAudioMemoryMusicPlayer(),
-      tracks: tracks,
-    );
-    final lifecycleState = WidgetsBinding.instance.lifecycleState;
-    if (lifecycleState != null && lifecycleState != AppLifecycleState.resumed) {
-      unawaited(controller.setAppActive(false));
-    }
-    setState(() => _controller = controller);
   }
 
   Future<void> _toggleMusicMuted() async {
-    final controller = _controller;
-    if (controller != null) {
-      await controller.toggleMuted();
-      return;
-    }
-
     final isMuted = !_isMusicMuted;
     setState(() => _isMusicMuted = isMuted);
     try {
@@ -97,24 +63,11 @@ class _MemoryMusicSessionState extends State<MemoryMusicSession>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final controller = _controller;
-    if (controller != null) {
-      unawaited(controller.setAppActive(state == AppLifecycleState.resumed));
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return MemoryAudioScope(
-      controller: _controller,
+      // Offline fork: there is no memory music source, so there is no
+      // controller. The scope still holds the mute state of memory videos.
+      controller: null,
       isMusicMuted: _isMusicMuted,
       isVideoMuted: _isVideoMuted,
       toggleMusicMuted: _toggleMusicMuted,

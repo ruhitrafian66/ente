@@ -1,5 +1,4 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/settings/local_settings.dart";
 import "package:photos/ui/viewer/gallery/component/group/type.dart";
 import "package:shared_preferences/shared_preferences.dart";
@@ -51,24 +50,6 @@ void main() {
     },
   );
 
-  test(
-    "retains the old implicit default while new installs keep three",
-    () async {
-      SharedPreferences.setMockInitialValues({Configuration.userIDKey: 1});
-      var preferences = await SharedPreferences.getInstance();
-      var settings = LocalSettings(preferences);
-      await settings.migrateGalleryLayoutPreferences();
-      expect(settings.getPhotoGridSize(), 4);
-
-      SharedPreferences.setMockInitialValues({});
-      preferences = await SharedPreferences.getInstance();
-      settings = LocalSettings(preferences);
-      await settings.migrateGalleryLayoutPreferences();
-      await preferences.setInt(Configuration.userIDKey, 1);
-      await settings.migrateGalleryLayoutPreferences();
-      expect(settings.getPhotoGridSize(), 3);
-    },
-  );
 
   test("gallery layout persists justified", () async {
     SharedPreferences.setMockInitialValues({});

@@ -1,4 +1,3 @@
-import 'package:photos/models/api/memory_share/memory_share.dart';
 import 'package:photos/models/collection/collection.dart';
 import 'package:photos/models/file/file.dart';
 
@@ -18,16 +17,5 @@ class SharedCollections {
 
   static SharedCollections empty() {
     return SharedCollections([], [], []);
-  }
-}
-
-class SharedCollectionsAndMemoryLinks {
-  final SharedCollections collections;
-  final List<MemoryShare> memoryLinks;
-
-  SharedCollectionsAndMemoryLinks(this.collections, this.memoryLinks);
-
-  static SharedCollectionsAndMemoryLinks empty() {
-    return SharedCollectionsAndMemoryLinks(SharedCollections.empty(), []);
   }
 }

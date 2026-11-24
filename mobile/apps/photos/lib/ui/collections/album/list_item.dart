@@ -11,14 +11,12 @@ import "package:photos/models/selected_albums.dart";
 import "package:photos/services/collections_service.dart";
 import "package:photos/ui/components/collection_share_badge.dart";
 import "package:photos/ui/components/thumbnail_list_item.dart";
-import "package:photos/ui/sharing/album_share_info_widget.dart";
-import "package:photos/ui/sharing/user_avatar_widget.dart";
 import "package:photos/ui/viewer/file/no_thumbnail_widget.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
 
 class AlbumListItemWidget extends StatelessWidget {
-  static final double _trailingWidth =
-      getAvatarSize(AvatarType.medium) + getOverlapPadding(AvatarType.medium);
+  static const double _trailingHeight = 24.0;
+  static const double _trailingWidth = _trailingHeight + 18.0;
 
   final Collection collection;
   final String? tag;
@@ -129,7 +127,7 @@ class AlbumListItemWidget extends StatelessWidget {
         padding: const EdgeInsets.only(right: 8),
         child: SizedBox(
           width: _trailingWidth,
-          height: getAvatarSize(AvatarType.medium),
+          height: _trailingHeight,
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             switchInCurve: Curves.easeOut,
@@ -140,11 +138,7 @@ class AlbumListItemWidget extends StatelessWidget {
                 children: [...previousChildren, ?currentChild],
               );
             },
-            child: _buildTrailingIndicator(
-              context,
-              isSelected: isSelected,
-              isOwner: isOwner,
-            ),
+            child: _buildTrailingIndicator(context, isSelected: isSelected),
           ),
         ),
       ),
@@ -236,40 +230,9 @@ class AlbumListItemWidget extends StatelessWidget {
   Widget _buildTrailingIndicator(
     BuildContext context, {
     required bool isSelected,
-    required bool isOwner,
   }) {
-    final double avatarSize = getAvatarSize(AvatarType.medium);
-    final double slotOverlap = getOverlapPadding(AvatarType.medium);
-
     if (isSelected) {
       return const CollectionSelectedBadge(key: ValueKey("selected"));
-    }
-    if (!isOwner) {
-      return UserAvatarWidget(
-        key: const ValueKey("owner"),
-        collection.owner,
-        type: AvatarType.medium,
-      );
-    }
-    if (collection.hasSharees) {
-      final sharees = collection.sharees;
-      final int total = sharees.length;
-      final int limit = total > 2 ? 1 : 2;
-      final int displayCount = total.clamp(1, limit).toInt();
-      final bool hasMore = total > limit;
-      final double contentWidth =
-          avatarSize + (displayCount - 1 + (hasMore ? 1 : 0)) * slotOverlap;
-      return SizedBox(
-        key: const ValueKey("sharees"),
-        width: contentWidth,
-        height: avatarSize,
-        child: AlbumSharesIcons(
-          sharees: sharees,
-          type: AvatarType.medium,
-          limitCountTo: limit,
-          padding: EdgeInsets.zero,
-        ),
-      );
     }
     return const SizedBox.shrink(key: ValueKey("unselected"));
   }
@@ -310,7 +273,6 @@ class AlbumListItemCover extends StatelessWidget {
             return ThumbnailWidget(
               thumbnail,
               shouldShowFavoriteIcon: false,
-              shouldShowOwnerAvatar: false,
               shouldShowSyncStatus: false,
               key: Key("album_list:${collection.id}:${thumbnail.tag}"),
             );

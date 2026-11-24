@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
-import "package:photos/events/account_configured_event.dart";
 import 'package:photos/events/signed_in_event.dart';
 import 'package:photos/events/user_details_changed_event.dart';
 import 'package:photos/events/user_logged_out_event.dart';
@@ -26,19 +25,8 @@ import "package:photos/services/collections_service.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import 'package:photos/src/rust/third_party/ente_frb_lib/accounts.dart'
     as accounts;
-import 'package:photos/ui/account/login_page.dart';
-import 'package:photos/ui/account/ott_verification_page.dart';
-import "package:photos/ui/account/passkey_page.dart";
-import 'package:photos/ui/account/password_entry_page.dart';
-import 'package:photos/ui/account/password_reentry_page.dart';
-import "package:photos/ui/account/recovery_page.dart";
-import 'package:photos/ui/account/two_factor_authentication_page.dart';
-import 'package:photos/ui/account/two_factor_recovery_page.dart';
-import 'package:photos/ui/account/two_factor_setup_page.dart';
-import "package:photos/ui/common/progress_dialog.dart";
 import "package:photos/ui/components/alert_bottom_sheet.dart";
 import 'package:photos/ui/notification/toast.dart';
-import "package:photos/ui/tabs/home_widget.dart";
 import 'package:photos/utils/dialog_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import "package:uuid/uuid.dart";
@@ -90,77 +78,6 @@ class UserService {
       emailValueNotifier.value = Configuration.instance.getEmail();
     });
     _preferences = await SharedPreferences.getInstance();
-  }
-
-  Future<void> sendOtt(
-    BuildContext context,
-    String email, {
-    bool isChangeEmail = false,
-    bool isCreateAccountScreen = false,
-    bool isResetPasswordScreen = false,
-    bool isForgotPassword = false,
-    String? purpose,
-    bool isResend = false,
-    VoidCallback? onChangeEmail,
-  }) async {
-    final dialog = createProgressDialog(context, context.strings.pleaseWait);
-    await dialog.show();
-    try {
-      await _withAccountsClient(
-        (client) => client.sendOtp(
-          email: email,
-          purpose: isChangeEmail ? "change" : purpose ?? "",
-          mobile: Platform.isIOS || Platform.isAndroid,
-        ),
-      );
-      await dialog.hide();
-      if (!context.mounted || isResend) return;
-      unawaited(
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (BuildContext context) {
-              return OTTVerificationPage(
-                email,
-                isChangeEmail: isChangeEmail,
-                isCreateAccountScreen: isCreateAccountScreen,
-                isResetPasswordScreen: isResetPasswordScreen,
-                isForgotPassword: isForgotPassword,
-                purpose: purpose,
-                onChangeEmail: onChangeEmail,
-              );
-            },
-          ),
-        ),
-      );
-    } catch (e, s) {
-      await dialog.hide();
-      if (!context.mounted) return;
-      final message = switch (e) {
-        const AccountsError.alreadyRegistered() =>
-          context.strings.emailAlreadyRegistered,
-        const AccountsError.notRegistered() =>
-          context.strings.emailNotRegistered,
-        const AccountsError.signupIncomplete() =>
-          context.strings.accountSetupIncompleteCreateAccount,
-        const AccountsError.emailAlreadyInUse() =>
-          context.strings.thisEmailIsAlreadyInUse,
-        _ => null,
-      };
-      if (message == null) {
-        _logger.warning("Failed to send OTT", e, s);
-        unawaited(showGenericErrorBottomSheet(context: context, error: e));
-      } else {
-        _logger.info(e);
-        unawaited(
-          showAlertBottomSheet(
-            context,
-            title: context.strings.oops,
-            message: message,
-            assetPath: 'assets/warning-grey.png',
-          ),
-        );
-      }
-    }
   }
 
   Future<void> sendFeedback(
@@ -343,142 +260,6 @@ class UserService {
     return response?.toMap();
   }
 
-  Future<void> onPassKeyVerified(
-    BuildContext context,
-    Map response, {
-    Uint8List? keyEncryptionKey,
-  }) async {
-    final ProgressDialog dialog = createProgressDialog(
-      context,
-      context.strings.pleaseWait,
-    );
-    await dialog.show();
-    try {
-      final userPassword = Configuration.instance.getVolatilePassword();
-      await _saveConfiguration(response);
-      if (userPassword == null) {
-        await dialog.hide();
-        if (!context.mounted) return;
-        // ignore: unawaited_futures
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (BuildContext context) {
-              return const PasswordReentryPage();
-            },
-          ),
-          (route) => route.isFirst,
-        );
-      } else {
-        if (Configuration.instance.getEncryptedToken() != null) {
-          await unlockAccount(
-            userPassword,
-            Configuration.instance.getKeyAttributes()!,
-            keyEncryptionKey: keyEncryptionKey,
-          );
-          unawaited(installSourceService.autoAttributePendingSource());
-        } else {
-          throw Exception("unexpected response during passkey verification");
-        }
-        await dialog.hide();
-        await flagService.tryRefreshFlags();
-        if (context.mounted) {
-          Navigator.of(context).popUntil((route) => route.isFirst);
-        }
-        Bus.instance.fire(AccountConfiguredEvent());
-      }
-    } catch (e) {
-      _logger.warning(e);
-      await dialog.hide();
-      if (!context.mounted) return;
-      await showGenericErrorBottomSheet(context: context, error: e);
-    }
-  }
-
-  Future<void> verifyEmail(
-    BuildContext context,
-    String ott, {
-    bool isResettingPasswordScreen = false,
-    bool isForgotPassword = false,
-  }) async {
-    final dialog = createProgressDialog(context, context.strings.pleaseWait);
-    await dialog.show();
-    try {
-      final response = await _withAccountsClient(
-        (client) => client.verifyEmail(
-          email: _config.getEmail()!,
-          code: ott,
-          source: !_config.isLoggedIn() ? _getRefSource() : null,
-        ),
-      );
-      await dialog.hide();
-      Widget page;
-      final String passkeySessionID = response.passkeySessionId ?? "";
-      String twoFASessionID = response.twoFactorSessionId ?? "";
-      if (twoFASessionID.isEmpty) {
-        twoFASessionID = response.twoFactorSessionIdV2 ?? "";
-      }
-      if (passkeySessionID.isNotEmpty) {
-        final accountsUrl = response.accountsUrl!;
-        page = PasskeyPage(
-          passkeySessionID,
-          totp2FASessionID: twoFASessionID,
-          accountsUrl: accountsUrl,
-        );
-      } else if (twoFASessionID.isNotEmpty) {
-        await _setTwoFactor(true);
-        page = TwoFactorAuthenticationPage(twoFASessionID);
-      } else {
-        await _saveConfiguration(response.toMap());
-        if (Configuration.instance.getEncryptedToken() != null) {
-          if (isResettingPasswordScreen) {
-            page = RecoveryPage(isForgotPassword: isForgotPassword);
-          } else {
-            page = const PasswordReentryPage();
-          }
-        } else {
-          page = const PasswordEntryPage(mode: PasswordEntryMode.set);
-        }
-      }
-      if (!context.mounted) return;
-      await Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (BuildContext context) {
-            return page;
-          },
-        ),
-        (route) => route.isFirst,
-      );
-    } catch (e) {
-      await dialog.hide();
-      _logger.severe(e);
-      if (!context.mounted) return;
-      if (e == const AccountsError.emailCodeExpired()) {
-        await showAlertBottomSheet(
-          context,
-          title: context.strings.oops,
-          message: context.strings.yourVerificationCodeHasExpired,
-          assetPath: 'assets/warning-grey.png',
-        );
-        if (!context.mounted) return;
-        Navigator.of(context).pop();
-      } else if (e == const AccountsError.incorrectEmailCode()) {
-        await showAlertBottomSheet(
-          context,
-          title: context.strings.incorrectCode,
-          message: context.strings.sorryTheCodeYouveEnteredIsIncorrect,
-          assetPath: 'assets/warning-grey.png',
-        );
-      } else {
-        await showAlertBottomSheet(
-          context,
-          title: context.strings.oops,
-          message: context.strings.verificationFailedPleaseTryAgain,
-          assetPath: 'assets/warning-grey.png',
-        );
-      }
-    }
-  }
-
   Future<void> setEmail(String email) async {
     await _config.setEmail(email);
     emailValueNotifier.value = email;
@@ -486,10 +267,6 @@ class UserService {
 
   Future<void> setRefSource(String refSource) async {
     await _preferences.setString(kReferralSource, refSource);
-  }
-
-  String _getRefSource() {
-    return _preferences.getString(kReferralSource) ?? "";
   }
 
   Future<void> changeEmail(
@@ -607,78 +384,6 @@ class UserService {
     ),
   );
 
-  Future<void> verifyEmailViaPassword(
-    BuildContext context,
-    SrpAttributes srpAttributes,
-    String userPassword,
-    ProgressDialog dialog,
-  ) async {
-    final result = await _withAccountsClient(
-      (client) => client.loginWithPassword(
-        attributes: srpAttributes,
-        password: userPassword,
-      ),
-    );
-    final keyEncryptionKey = result.keyEncryptionKey;
-    final response = result.response;
-    Widget page;
-    String twoFASessionID = response.twoFactorSessionId ?? "";
-    if (twoFASessionID.isEmpty) {
-      twoFASessionID = response.twoFactorSessionIdV2 ?? "";
-    }
-    final String passkeySessionID = response.passkeySessionId ?? "";
-
-    Configuration.instance.setVolatilePassword(userPassword);
-    if (passkeySessionID.isNotEmpty) {
-      final accountsUrl = response.accountsUrl!;
-      page = PasskeyPage(
-        passkeySessionID,
-        totp2FASessionID: twoFASessionID,
-        accountsUrl: accountsUrl,
-        keyEncryptionKey: keyEncryptionKey,
-      );
-    } else if (twoFASessionID.isNotEmpty) {
-      await _setTwoFactor(true);
-      page = TwoFactorAuthenticationPage(
-        twoFASessionID,
-        keyEncryptionKey: keyEncryptionKey,
-      );
-    } else {
-      await _saveConfiguration(response.toMap());
-      if (Configuration.instance.getEncryptedToken() != null) {
-        await unlockAccount(
-          userPassword,
-          Configuration.instance.getKeyAttributes()!,
-          keyEncryptionKey: keyEncryptionKey,
-        );
-        unawaited(installSourceService.autoAttributePendingSource());
-        await flagService.tryRefreshFlags();
-        Configuration.instance.resetVolatilePassword();
-        page = const HomeWidget();
-      } else {
-        throw Exception("unexpected response during email verification");
-      }
-    }
-    await dialog.hide();
-    if (page is HomeWidget) {
-      if (context.mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
-      Bus.instance.fire(AccountConfiguredEvent());
-    } else {
-      if (!context.mounted) return;
-      // ignore: unawaited_futures
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (BuildContext context) {
-            return page;
-          },
-        ),
-        (route) => route.isFirst,
-      );
-    }
-  }
-
   Future<void> changePassword(
     String password, {
     required bool logoutOtherDevices,
@@ -741,67 +446,6 @@ class UserService {
     }
   }
 
-  Future<void> verifyTwoFactor(
-    BuildContext context,
-    String sessionID,
-    String code, {
-    Uint8List? keyEncryptionKey,
-  }) async {
-    final dialog = createProgressDialog(
-      context,
-      context.strings.authenticating,
-    );
-    await dialog.show();
-    try {
-      final response = await _withAccountsClient(
-        (client) => client.verifyTotp(sessionId: sessionID, code: code),
-      );
-      await _saveConfiguration(response.toMap());
-      await dialog.hide();
-      if (context.mounted) {
-        showShortToast(context, context.strings.authenticationSuccessful);
-        await Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (BuildContext context) {
-              return PasswordReentryPage(keyEncryptionKey: keyEncryptionKey);
-            },
-          ),
-          (route) => route.isFirst,
-        );
-      }
-    } catch (e) {
-      await dialog.hide();
-      _logger.severe(e);
-      if (!context.mounted) return;
-      if (e == const AccountsError.sessionExpired()) {
-        showToast(context, context.strings.sessionExpired);
-        if (!context.mounted) return;
-        await Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (BuildContext context) {
-              return const LoginPage();
-            },
-          ),
-          (route) => route.isFirst,
-        );
-      } else if (e == const AccountsError.incorrectTotp()) {
-        await showAlertBottomSheet(
-          context,
-          title: context.strings.incorrectCode,
-          message: context.strings.authenticationFailedPleaseTryAgain,
-          assetPath: 'assets/warning-grey.png',
-        );
-      } else {
-        await showAlertBottomSheet(
-          context,
-          title: context.strings.oops,
-          message: context.strings.authenticationFailedPleaseTryAgain,
-          assetPath: 'assets/warning-grey.png',
-        );
-      }
-    }
-  }
-
   Future<T> _withAccountsClient<T>(
     Future<T> Function(AccountsClient client) request,
   ) async {
@@ -832,174 +476,6 @@ class UserService {
       _accountsClientOrigin = origin;
     }
     return _accountsClient!;
-  }
-
-  Future<void> recoverTwoFactor(
-    BuildContext context,
-    String sessionID,
-    TwoFactorType type,
-  ) async {
-    final dialog = createProgressDialog(context, context.strings.pleaseWait);
-    await dialog.show();
-    try {
-      _logger.info("recovering two factor");
-      final client = _getAccountsClient();
-      final response = await client.getTwoFactorRecovery(
-        sessionId: sessionID,
-        twoFactorType: type,
-      );
-      await dialog.hide();
-      if (!context.mounted) return;
-      // ignore: unawaited_futures
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (BuildContext context) {
-            return TwoFactorRecoveryPage(client, type, sessionID, response);
-          },
-        ),
-        (route) => route.isFirst,
-      );
-    } catch (e) {
-      await dialog.hide();
-      _logger.severe('error while recovery 2fa', e);
-      if (!context.mounted) return;
-      if (e == const AccountsError.sessionExpired()) {
-        showToast(context, context.strings.sessionExpired);
-        // ignore: unawaited_futures
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (BuildContext context) {
-              return const LoginPage();
-            },
-          ),
-          (route) => route.isFirst,
-        );
-      } else if (e == const AccountsError.twoFactorRecoveryNotConfigured()) {
-        // ignore: unawaited_futures
-        showAlertBottomSheet(
-          context,
-          title: context.strings.contactSupport,
-          message: context.strings.pleaseContactSupportAndWeWillBeHappyToHelp,
-          assetPath: 'assets/warning-grey.png',
-        );
-      } else {
-        // ignore: unawaited_futures
-        showAlertBottomSheet(
-          context,
-          title: context.strings.oops,
-          message: context.strings.somethingWentWrongPleaseTryAgain,
-          assetPath: 'assets/warning-grey.png',
-        );
-      }
-    } finally {
-      await dialog.hide();
-    }
-  }
-
-  Future<void> removeTwoFactor(
-    BuildContext context,
-    AccountsClient client,
-    TwoFactorType type,
-    String sessionID,
-    String recoveryKey,
-    TwoFactorRecoveryResponse recoveryResponse,
-  ) async {
-    final dialog = createProgressDialog(context, context.strings.pleaseWait);
-    await dialog.show();
-    try {
-      if (client != _getAccountsClient()) {
-        throw const AccountsError.sessionExpired();
-      }
-      final response = await client.recoverTwoFactor(
-        twoFactorType: type,
-        sessionId: sessionID,
-        recoveryResponse: recoveryResponse,
-        recoveryKey: recoveryKey,
-      );
-      if (client != _getAccountsClient()) {
-        throw const AccountsError.sessionExpired();
-      }
-      await _saveConfiguration(response.toMap());
-      await dialog.hide();
-      if (context.mounted) {
-        showShortToast(
-          context,
-          context.strings.twofactorAuthenticationSuccessfullyReset,
-        );
-        // ignore: unawaited_futures
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (BuildContext context) {
-              return const PasswordReentryPage();
-            },
-          ),
-          (route) => route.isFirst,
-        );
-      }
-    } catch (e) {
-      await dialog.hide();
-      _logger.severe("error during recovery", e);
-      if (!context.mounted) return;
-      if (e == const AccountsError.incorrectRecoveryKey() ||
-          e == const AccountsError.malformedRecoveryKey()) {
-        await showAlertBottomSheet(
-          context,
-          title: context.strings.incorrectRecoveryKey,
-          message: e == const AccountsError.malformedRecoveryKey()
-              ? context.strings.invalidRecoveryKey
-              : context.strings.theRecoveryKeyYouEnteredIsIncorrect,
-          assetPath: 'assets/warning-grey.png',
-        );
-      } else if (e == const AccountsError.sessionExpired()) {
-        showToast(context, context.strings.sessionExpired);
-        // ignore: unawaited_futures
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (BuildContext context) {
-              return const LoginPage();
-            },
-          ),
-          (route) => route.isFirst,
-        );
-      } else {
-        // ignore: unawaited_futures
-        showAlertBottomSheet(
-          context,
-          title: context.strings.oops,
-          message: context.strings.somethingWentWrongPleaseTryAgain,
-          assetPath: 'assets/warning-grey.png',
-        );
-      }
-    } finally {
-      await dialog.hide();
-    }
-  }
-
-  Future<void> setupTwoFactor(BuildContext context, Completer completer) async {
-    final dialog = createProgressDialog(context, context.strings.pleaseWait);
-    await dialog.show();
-    try {
-      final responseData = await _withAccountsClient(
-        (client) => client.setupTwoFactor(token: _config.getToken()!),
-      );
-      await dialog.hide();
-      if (!context.mounted) return;
-      unawaited(
-        routeToPage(
-          context,
-          TwoFactorSetupPage(
-            responseData.secretCode,
-            responseData.qrCode,
-            completer,
-          ),
-        ),
-      );
-    } catch (e) {
-      await dialog.hide();
-      _logger.severe("Failed to setup tfa", e);
-      completer.complete();
-      rethrow;
-    }
   }
 
   Future<bool> enableTwoFactor(
@@ -1116,25 +592,6 @@ class UserService {
       _logger.severe("Failed to get payment token", e);
       return null;
     }
-  }
-
-  Future<void> _saveConfiguration(Map responseData) async {
-    await Configuration.instance.setUserID(responseData["id"]);
-    if (responseData["encryptedToken"] != null) {
-      await Configuration.instance.setEncryptedToken(
-        responseData["encryptedToken"],
-      );
-      await Configuration.instance.setKeyAttributes(
-        KeyAttributes.fromMap(responseData["keyAttributes"]),
-      );
-    } else {
-      await Configuration.instance.setToken(responseData["token"]);
-    }
-    final isSignUp = responseData["encryptedToken"] == null;
-    unawaited(installSourceService.autoAttributeSource(isSignUp: isSignUp));
-
-    // Initialize shared feed cutoff at login; feed path keeps the same fallback.
-    localSettings.getOrCreateSharedPhotoFeedCutoffTime();
   }
 
   Future<void> _setTwoFactor(bool enabled) async {

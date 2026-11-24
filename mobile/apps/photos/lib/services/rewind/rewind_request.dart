@@ -1,38 +1,24 @@
-import "package:collection/collection.dart";
 import "package:flutter_rust_bridge/flutter_rust_bridge.dart" show Int64List;
 import "package:package_info_plus/package_info_plus.dart";
-import "package:photos/core/configuration.dart";
-import "package:photos/db/files_db.dart";
-import "package:photos/db/social_db.dart";
-import "package:photos/models/collection/collection.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
-import "package:photos/models/metadata/common_keys.dart";
 import "package:photos/models/ml/face/person.dart";
-import "package:photos/models/social/reaction.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
-import "package:photos/services/favorites_service.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/memories/memory_sources.dart";
 import "package:photos/services/rewind/rewind_edition.dart";
 import "package:photos/src/rust/api/rewind_api.dart" as rust;
-import "package:photos/utils/contact_string_util.dart";
 
 bool get rewindUsesMl =>
     hasGrantedMLConsent && localSettings.isMLLocalIndexingEnabled;
 
 const _screenshotName = "screenshot";
-const _reactionPageSize = 1000;
 
 Future<rust.RewindRequest> buildRewindRequest(DateTime now) async {
   final packageInfo = await PackageInfo.fromPlatform();
   final persons = isLocalGalleryMode || !rewindUsesMl
       ? const <PersonEntity>[]
       : await PersonService.instance.getPersons();
-  final email = isLocalGalleryMode
-      ? null
-      : normalizeContactLinkEmail(Configuration.instance.getEmail());
   return rust.RewindRequest(
     year: RewindEdition.year,
     now: now.microsecondsSinceEpoch,
@@ -40,7 +26,9 @@ Future<rust.RewindRequest> buildRewindRequest(DateTime now) async {
     seasonStart: RewindEdition.availableFrom.microsecondsSinceEpoch,
     installedAt: packageInfo.installTime?.microsecondsSinceEpoch ?? 0,
     localGalleryMode: isLocalGalleryMode,
-    files: isLocalGalleryMode ? await _localFiles() : await _ownedFiles(),
+    // Offline fork: only device files exist. The account path (albums,
+    // likes from the social database) is removed.
+    files: await _localFiles(),
     people: [
       for (final person in persons)
         rust.RewindPerson(
@@ -49,14 +37,8 @@ Future<rust.RewindRequest> buildRewindRequest(DateTime now) async {
           isHiddenFromMemories: person.data.hideFromMemories,
         ),
     ],
-    mePersonId: email == null
-        ? null
-        : persons
-              .firstWhereOrNull(
-                (person) =>
-                    normalizeContactLinkEmail(person.data.email) == email,
-              )
-              ?.remoteID,
+    // Offline fork: there is no account email, so no person is "me".
+    mePersonId: null,
   );
 }
 
@@ -78,62 +60,6 @@ Future<List<rust.RewindFile>> _localFiles() async {
         likeCount: 0,
       ),
   ];
-}
-
-Future<List<rust.RewindFile>> _ownedFiles() async {
-  final userID = Configuration.instance.getUserID();
-  if (userID == null) return const [];
-  final rows = await FilesDB.instance.getAllFilesFromDB(
-    const {},
-    dedupeByUploadId: false,
-  );
-  final files = <int, EnteFile>{};
-  final collectionIDs = <int, Set<int>>{};
-  for (final row in rows) {
-    final id = row.uploadedFileID;
-    if (id == null ||
-        id == -1 ||
-        row.ownerID != userID ||
-        row.creationTime == null) {
-      continue;
-    }
-    files.putIfAbsent(id, () => row);
-    final collectionID = row.collectionID;
-    if (collectionID != null) {
-      collectionIDs.putIfAbsent(id, () => {}).add(collectionID);
-    }
-  }
-  final albums = await _Albums.load(userID);
-  final likeCounts = await _likeCounts(userID);
-  return [
-    for (final MapEntry(key: id, value: file) in files.entries)
-      _ownedFile(
-        id,
-        file,
-        collectionIDs[id] ?? const {},
-        albums,
-        likeCounts[id] ?? 0,
-      ),
-  ];
-}
-
-rust.RewindFile _ownedFile(
-  int id,
-  EnteFile file,
-  Set<int> collectionIDs,
-  _Albums albums,
-  int likeCount,
-) {
-  return _rewindFile(
-    id,
-    file,
-    visibility: albums.visibility(file, collectionIDs),
-    isFavourite: collectionIDs.contains(albums.favourites),
-    isJunk: collectionIDs.any(albums.junk.contains),
-    isScreenshot: collectionIDs.any(albums.screenshots.contains),
-    sharedAlbumIds: collectionIDs.where(albums.shared.contains).toList(),
-    likeCount: likeCount,
-  );
 }
 
 rust.RewindFile _rewindFile(
@@ -179,93 +105,3 @@ rust.RewindLocation? _location(EnteFile file) {
 
 bool _isScreenshotName(String? name) =>
     name?.toLowerCase().contains(_screenshotName) ?? false;
-
-Future<Map<int, int>> _likeCounts(int ownerID) async {
-  final likers = <int, Set<String>>{};
-  var offset = 0;
-  List<Reaction> page;
-  do {
-    page = await SocialDB.instance.getReactionsOnFiles(
-      excludeUserID: ownerID,
-      limit: _reactionPageSize,
-      offset: offset,
-    );
-    for (final reaction in page) {
-      final fileID = reaction.fileID;
-      if (fileID == null) continue;
-      likers
-          .putIfAbsent(fileID, () => {})
-          .add(
-            reaction.isAnonymous
-                ? "anonymous:${reaction.anonUserID}"
-                : "user:${reaction.userID}",
-          );
-    }
-    offset += page.length;
-  } while (page.length == _reactionPageSize);
-  return {
-    for (final MapEntry(key: fileID, value: people) in likers.entries)
-      fileID: people.length,
-  };
-}
-
-class _Albums {
-  _Albums({
-    required this.hidden,
-    required this.archived,
-    required this.junk,
-    required this.screenshots,
-    required this.shared,
-    required this.favourites,
-  });
-
-  final Set<int> hidden;
-  final Set<int> archived;
-  final Set<int> junk;
-  final Set<int> screenshots;
-  final Set<int> shared;
-  final int? favourites;
-
-  static Future<_Albums> load(int userID) async {
-    final collections = CollectionsService.instance;
-    final hidden = collections.getHiddenCollectionIds();
-    final archivedOrHidden = collections.archivedOrHiddenCollectionIds();
-    return _Albums(
-      hidden: hidden,
-      archived: archivedOrHidden.difference(hidden),
-      junk: (await getCollectionIDsToExclude()).difference(archivedOrHidden),
-      screenshots: {
-        for (final collection in collections.getCollectionsForUI())
-          if (_isScreenshotName(collection.displayName)) collection.id,
-      },
-      shared: {
-        for (final collection in collections.getActiveCollections())
-          if (_isSharedAlbum(collection, userID)) collection.id,
-      },
-      favourites:
-          (await FavoritesService.instance.getFavoritesCollection())?.id,
-    );
-  }
-
-  static bool _isSharedAlbum(Collection collection, int userID) =>
-      (collection.type == CollectionType.album ||
-          collection.type == CollectionType.folder) &&
-      !collection.isQuickLinkCollection() &&
-      !collection.isHidden() &&
-      (collection.hasSharees ||
-          collection.hasLink ||
-          !collection.isOwner(userID));
-
-  rust.RewindVisibility visibility(EnteFile file, Set<int> collectionIDs) {
-    final fileVisibility = file.magicMetadata.visibility;
-    if (fileVisibility == hiddenVisibility ||
-        collectionIDs.any(hidden.contains)) {
-      return rust.RewindVisibility.hidden;
-    }
-    if (fileVisibility == archiveVisibility ||
-        collectionIDs.any(archived.contains)) {
-      return rust.RewindVisibility.archived;
-    }
-    return rust.RewindVisibility.visible;
-  }
-}

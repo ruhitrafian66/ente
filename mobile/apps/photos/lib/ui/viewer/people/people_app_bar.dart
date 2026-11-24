@@ -9,7 +9,6 @@ import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
 import "package:photos/events/people_changed_event.dart";
-import 'package:photos/events/subscription_purchased_event.dart';
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/ml/face/person.dart";
@@ -20,12 +19,10 @@ import "package:photos/services/machine_learning/face_ml/person/person_service.d
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/notification/toast.dart";
-import 'package:photos/ui/sharing/share_person_sheet.dart';
 import "package:photos/ui/viewer/gallery/gallery_app_bar_actions.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_config.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart";
 import "package:photos/ui/viewer/gallery/hooks/pick_person_avatar.dart";
-import 'package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart';
 import "package:photos/ui/viewer/people/merge_persons_offline.dart";
 import "package:photos/ui/viewer/people/person_cluster_suggestion.dart";
 import "package:photos/ui/viewer/people/person_face_widget.dart";
@@ -119,11 +116,9 @@ enum PeoplePopupAction {
 
 class _AppBarWidgetState extends State<PeopleAppBar> {
   final _logger = Logger("_AppBarWidgetState");
-  late StreamSubscription _userAuthEventSubscription;
   late Function() _selectedFilesListener;
   String? _appBarTitle;
   late CollectionActions collectionActions;
-  final GlobalKey shareButtonKey = GlobalKey();
   bool isQuickLink = false;
   late GalleryType galleryType;
   late PersonEntity person;
@@ -158,11 +153,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     };
 
     widget.selectedFiles.addListener(_selectedFilesListener);
-    _userAuthEventSubscription = Bus.instance
-        .on<SubscriptionPurchasedEvent>()
-        .listen((event) {
-          setState(() {});
-        });
 
     _peopleChangedEventSubscription = Bus.instance
         .on<PeopleChangedEvent>()
@@ -209,7 +199,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
 
   @override
   void dispose() {
-    _userAuthEventSubscription.cancel();
     widget.selectedFiles.removeListener(_selectedFilesListener);
     _peopleChangedEventSubscription.cancel();
     super.dispose();
@@ -217,18 +206,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
 
   @override
   Widget build(BuildContext context) {
-    final currentUserID = Configuration.instance.getUserID();
-    final shareableFiles =
-        widget.selectedFiles.files.isEmpty &&
-            Configuration.instance.hasConfiguredAccount() &&
-            !person.data.isIgnored &&
-            person.data.name.trim().isNotEmpty
-        ? GalleryFilesState.maybeOf(context)?.galleryFilesOrNull?.where(
-            (file) =>
-                file.uploadedFileID != null && file.ownerID == currentUserID,
-          )
-        : null;
-    final hasShareableFiles = shareableFiles?.isNotEmpty ?? false;
     return GalleryAppBarWidget.sliverConfig(
       widget.type,
       _appBarTitle,
@@ -250,7 +227,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
             context,
             onCover: onCover,
             foregroundColor: foregroundColor,
-            shareableFiles: hasShareableFiles ? shareableFiles : null,
           ),
     ).buildSliver(context);
   }
@@ -275,7 +251,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     BuildContext context, {
     required bool onCover,
     Color? foregroundColor,
-    required Iterable<EnteFile>? shareableFiles,
   }) {
     final bool isIgnored = person.data.isIgnored;
     final bool isPinned = person.data.isPinned;
@@ -286,33 +261,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     if (widget.selectedFiles.files.isNotEmpty ||
         (!kOfflineFork && !Configuration.instance.hasConfiguredAccount())) {
       return actions;
-    }
-
-    if (!isIgnored &&
-        person.data.name.trim().isNotEmpty &&
-        shareableFiles != null) {
-      actions.add(
-        IconButtonComponent(
-          key: shareButtonKey,
-          icon: HugeIcon(
-            icon: HugeIcons.strokeRoundedShare08,
-            color: foregroundColor,
-          ),
-          variant: onCover
-              ? IconButtonComponentVariant.unfilled
-              : IconButtonComponentVariant.primary,
-          size: onCover ? kMinInteractiveDimension : 36,
-          iconSize: onCover ? IconSizes.medium : IconSizes.small,
-          tooltip: context.strings.share,
-          shouldSurfaceExecutionStates: false,
-          onTap: () => showSharePersonSheet(
-            context,
-            person: person,
-            files: shareableFiles.toList(),
-            shareButtonKey: shareButtonKey,
-          ),
-        ),
-      );
     }
 
     final List<EntePopupMenuOption<PeoplePopupAction>> items = [];

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
-import 'package:ente_pure_utils/ente_pure_utils.dart';
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -20,14 +19,11 @@ import "package:photos/service_locator.dart";
 import "package:photos/services/sync/large_backup_session_tracker.dart";
 import 'package:photos/services/sync/sync_service.dart';
 import "package:photos/theme/ente_theme.dart";
-import 'package:photos/ui/account/verify_recovery_page.dart';
 import 'package:photos/ui/components/home_header_widget.dart';
 import 'package:photos/ui/home/christmas/christmas_lights_banner.dart';
 import 'package:photos/ui/home/christmas/christmas_utils.dart';
 import 'package:photos/ui/home/header_error_widget.dart';
 import "package:photos/ui/home/large_backup_screen.dart";
-import "package:photos/ui/settings/backup/backup_settings_screen.dart";
-import "package:photos/ui/settings/backup/backup_status_screen.dart";
 import "package:photos/ui/settings/ml/ml_consent_sheet.dart";
 
 const double kContainerHeight = 36;
@@ -45,7 +41,6 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
   late StreamSubscription<SyncStatusUpdate> _subscription;
   late StreamSubscription<NotificationEvent> _notificationSubscription;
   late StreamSubscription<ChristmasBannerEvent> _christmasBannerSubscription;
-  bool _isPausedDueToNetwork = false;
   bool _showStatus = false;
   bool _showErrorBanner = false;
   bool _showMlBanner =
@@ -60,7 +55,6 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
   void initState() {
     _subscription = Bus.instance.on<SyncStatusUpdate>().listen((event) {
       _logger.info("Received event " + event.status.toString());
-      _isPausedDueToNetwork = event.status == SyncStatus.paused;
       if (event.status == SyncStatus.error) {
         setState(() {
           _syncError = event.error;
@@ -122,18 +116,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
         if (isChristmasPeriod()) const ChristmasLightsBanner(),
         HomeHeaderWidget(
           centerWidget: _showStatus && !_showErrorBanner
-              ? GestureDetector(
-                  onTap: () {
-                    routeToPage(
-                      context,
-                      _isPausedDueToNetwork
-                          ? const BackupSettingsScreen()
-                          : const BackupStatusScreen(),
-                      forceCustomPageRoute: true,
-                    ).ignore();
-                  },
-                  child: const SyncStatusWidget(),
-                )
+              ? const SyncStatusWidget()
               : SvgPicture.asset(
                   "assets/ente-branding.svg",
                   height: 15,
@@ -151,7 +134,6 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
         if (_showErrorBanner) HeaderErrorWidget(error: _syncError),
         if (_shouldShowLargeBackupBanner) _largeBackupBanner(context),
         if (_showMlBanner && !_showErrorBanner) const _MachineLearningBanner(),
-        if (_showVerificationBanner()) const _RecoveryKeyBanner(),
       ],
     );
   }
@@ -176,16 +158,6 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
       ),
     );
   }
-
-  bool _showVerificationBanner() {
-    if (_showErrorBanner ||
-        _showErrorBanner ||
-        flagService.recoveryKeyVerified) {
-      return false;
-    }
-    final DateTime installTime = localSettings.getInstallDateTime();
-    return DateTime.now().difference(installTime).inDays >= 3;
-  }
 }
 
 class _MachineLearningBanner extends StatelessWidget {
@@ -207,29 +179,6 @@ class _MachineLearningBanner extends StatelessWidget {
               TabChangedEvent(searchTabIndex, TabChangedEventSource.mlConsent),
             );
           }
-        },
-      ),
-    );
-  }
-}
-
-class _RecoveryKeyBanner extends StatelessWidget {
-  const _RecoveryKeyBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return _bannerPadding(
-      BannerComponent(
-        leadingIcon: HugeIcons.strokeRoundedAlertCircle,
-        title: context.strings.confirmYourRecoveryKey,
-        state: BannerComponentState.warning,
-        trailingWidget: const Icon(Icons.arrow_forward),
-        onTap: () async {
-          await routeToPage(
-            context,
-            const VerifyRecoveryPage(),
-            forceCustomPageRoute: true,
-          );
         },
       ),
     );

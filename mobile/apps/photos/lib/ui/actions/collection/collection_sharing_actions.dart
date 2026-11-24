@@ -1,91 +1,26 @@
-import "dart:async";
-
 import 'package:ente_components/ente_components.dart';
-import 'package:ente_pure_utils/ente_pure_utils.dart' hide isValidEmail;
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
-import "package:photos/core/errors.dart";
-import "package:photos/core/network/api_response.dart";
 import 'package:photos/db/files_db.dart';
-import 'package:photos/gateways/collections/models/create_request.dart';
 import 'package:photos/models/button_result.dart';
 import 'package:photos/models/collection/collection.dart';
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/files_split.dart';
-import "package:photos/models/metadata/collection_magic.dart";
-import "package:photos/models/metadata/common_keys.dart";
-import 'package:photos/services/account/user_service.dart';
 import 'package:photos/services/collections_service.dart';
-import 'package:photos/services/hidden_service.dart';
 import 'package:photos/ui/components/action_sheet_widget.dart';
 import 'package:photos/ui/components/buttons/button_widget.dart';
 import 'package:photos/ui/components/models/button_type.dart';
 import 'package:photos/ui/notification/toast.dart';
-import 'package:photos/ui/payment/subscription.dart';
-import 'package:photos/ui/sharing/widgets/sharing_role.dart';
 import 'package:photos/utils/dialog_util.dart';
-import 'package:photos/utils/email_util.dart';
-import 'package:photos/utils/share_util.dart';
 import "package:styled_text/styled_text.dart";
-
-enum AddEmailToCollectionFailure {
-  invalidEmail,
-  currentUser,
-  noAccount,
-  sharingNotPermitted,
-  other,
-}
-
-class AddEmailToCollectionResult {
-  const AddEmailToCollectionResult.success()
-    : failure = null,
-      error = null,
-      email = "";
-
-  const AddEmailToCollectionResult.failure({
-    required this.failure,
-    required this.email,
-    this.error,
-  });
-
-  final AddEmailToCollectionFailure? failure;
-  final Object? error;
-  final String email;
-
-  bool get succeeded => failure == null;
-}
 
 class CollectionActions {
   final Logger logger = Logger((CollectionActions).toString());
   final CollectionsService collectionsService;
 
   CollectionActions(this.collectionsService);
-
-  Future<bool> enableUrl(
-    BuildContext context,
-    Collection collection, {
-    bool enableCollect = false,
-  }) async {
-    try {
-      await CollectionsService.instance.createShareUrl(
-        collection,
-        enableCollect: enableCollect,
-      );
-      return true;
-    } catch (e) {
-      if (e is SharingNotPermittedForFreeAccountsError) {
-        if (!context.mounted) return false;
-        await _showUnSupportedAlert(context);
-      } else {
-        logger.severe("Failed to update shareUrl collection", e);
-        if (!context.mounted) return false;
-        await showGenericErrorDialog(context: context, error: e);
-      }
-      return false;
-    }
-  }
 
   Future<bool> disableUrl(BuildContext context, Collection collection) async {
     final actionResult = await showActionSheet(
@@ -130,245 +65,6 @@ class CollectionActions {
       return actionResult.action == ButtonAction.first;
     } else {
       return false;
-    }
-  }
-
-  Future<Collection?> createSharedCollectionLink(
-    BuildContext context,
-    List<EnteFile> files,
-  ) async {
-    late final Collection newCollection;
-    try {
-      logger.info("creating album for sharing files");
-      final EnteFile fileWithMinCreationTime = files.reduce(
-        (a, b) => (a.creationTime ?? 0) < (b.creationTime ?? 0) ? a : b,
-      );
-      final EnteFile fileWithMaxCreationTime = files.reduce(
-        (a, b) => (a.creationTime ?? 0) > (b.creationTime ?? 0) ? a : b,
-      );
-      final String dummyName = getNameForDateRange(
-        fileWithMinCreationTime.creationTime!,
-        fileWithMaxCreationTime.creationTime!,
-      );
-      final CreateRequest req = await collectionsService
-          .buildCollectionCreateRequest(
-            dummyName,
-            visibility: visibleVisibility,
-            subType: subTypeSharedFilesCollection,
-          );
-      final collection = await collectionsService.createAndCacheCollection(req);
-      newCollection = collection;
-      logger.info("adding files to share to new album");
-      await collectionsService.addOrCopyToCollection(collection.id, files);
-      logger.info("creating public link for the newly created album");
-      try {
-        await CollectionsService.instance.createShareUrl(collection);
-      } catch (e) {
-        if (e is SharingNotPermittedForFreeAccountsError) {
-          if (newCollection.isQuickLinkCollection() &&
-              !newCollection.hasSharees) {
-            await trashCollectionKeepingPhotos(newCollection);
-          }
-          rethrow;
-        }
-      }
-      return collection;
-    } catch (e, s) {
-      if (e is SharingNotPermittedForFreeAccountsError) {
-        if (!context.mounted) return null;
-        await _showUnSupportedAlert(context);
-      } else {
-        logger.severe("Failing to create link for selected files", e, s);
-        if (!context.mounted) return null;
-        await showGenericErrorDialog(context: context, error: e);
-      }
-    }
-    return null;
-  }
-
-  Future<AddEmailToCollectionResult> addEmailsToCollections(
-    List<Collection> collections,
-    Set<String> emails,
-    CollectionParticipantRole role,
-  ) async {
-    final ownEmail = Configuration.instance.getEmail()?.trim().toLowerCase();
-    for (final email in emails) {
-      if (!isValidEmail(email)) {
-        return AddEmailToCollectionResult.failure(
-          failure: AddEmailToCollectionFailure.invalidEmail,
-          email: email,
-        );
-      }
-      if (email == ownEmail) {
-        return AddEmailToCollectionResult.failure(
-          failure: AddEmailToCollectionFailure.currentUser,
-          email: email,
-        );
-      }
-    }
-
-    try {
-      final keys = await UserService.instance.getPublicKeys(emails);
-      final publicKeys = <String, String>{};
-      for (final entry in keys.entries) {
-        final publicKey = entry.value;
-        if (publicKey == null || publicKey.isEmpty) {
-          return AddEmailToCollectionResult.failure(
-            failure: AddEmailToCollectionFailure.noAccount,
-            email: entry.key,
-          );
-        }
-        publicKeys[entry.key] = publicKey;
-      }
-      for (final collection in collections) {
-        final collectionPublicKeys = {
-          for (final entry in publicKeys.entries)
-            if (collectionNeedsShare(collection, entry.key))
-              entry.key: entry.value,
-        };
-        if (collectionPublicKeys.isEmpty) continue;
-        final sharees = await collectionsService.shareBatch(
-          collection.id,
-          collectionPublicKeys,
-          role,
-        );
-        collection.updateSharees(sharees);
-      }
-      return const AddEmailToCollectionResult.success();
-    } catch (e) {
-      if (e is UnexpectedApiResponseException &&
-          e.response?.statusCode == 404) {
-        AddEmailToCollectionResult? firstFailure;
-        for (final collection in collections) {
-          for (final email in emails) {
-            if (!collectionNeedsShare(collection, email)) continue;
-            final result = await addEmailToCollection(collection, email, role);
-            if (!result.succeeded) firstFailure ??= result;
-          }
-        }
-        return firstFailure ?? const AddEmailToCollectionResult.success();
-      }
-      logger.severe("Failed to share collections", e);
-      return AddEmailToCollectionResult.failure(
-        failure: e is SharingNotPermittedForFreeAccountsError
-            ? AddEmailToCollectionFailure.sharingNotPermitted
-            : AddEmailToCollectionFailure.other,
-        email: emails.first,
-        error: e,
-      );
-    }
-  }
-
-  Future<AddEmailToCollectionResult> addEmailToCollection(
-    Collection collection,
-    String email,
-    CollectionParticipantRole role,
-  ) async {
-    if (!isValidEmail(email)) {
-      return AddEmailToCollectionResult.failure(
-        failure: AddEmailToCollectionFailure.invalidEmail,
-        email: email,
-      );
-    } else if (email.trim() == Configuration.instance.getEmail()) {
-      return AddEmailToCollectionResult.failure(
-        failure: AddEmailToCollectionFailure.currentUser,
-        email: email,
-      );
-    }
-    String? publicKey;
-    try {
-      publicKey = await UserService.instance.getPublicKey(email);
-    } catch (e) {
-      logger.severe("Failed to get public key", e);
-      return AddEmailToCollectionResult.failure(
-        failure: AddEmailToCollectionFailure.other,
-        email: email,
-        error: e,
-      );
-    }
-    if (publicKey == null || publicKey == '') {
-      return AddEmailToCollectionResult.failure(
-        failure: AddEmailToCollectionFailure.noAccount,
-        email: email,
-      );
-    }
-    try {
-      final newSharees = await collectionsService.share(
-        collection.id,
-        email,
-        publicKey,
-        role,
-      );
-      collection.updateSharees(newSharees);
-      return const AddEmailToCollectionResult.success();
-    } catch (e) {
-      if (e is SharingNotPermittedForFreeAccountsError) {
-        return AddEmailToCollectionResult.failure(
-          failure: AddEmailToCollectionFailure.sharingNotPermitted,
-          email: email,
-          error: e,
-        );
-      }
-      logger.severe("failed to share collection", e);
-      return AddEmailToCollectionResult.failure(
-        failure: AddEmailToCollectionFailure.other,
-        email: email,
-        error: e,
-      );
-    }
-  }
-
-  Future<void> showAddEmailToCollectionFailure(
-    BuildContext context,
-    AddEmailToCollectionResult result,
-  ) async {
-    switch (result.failure) {
-      case AddEmailToCollectionFailure.invalidEmail:
-        await showErrorDialog(
-          context,
-          context.strings.invalidEmailAddress,
-          context.strings.enterValidEmail,
-        );
-      case AddEmailToCollectionFailure.currentUser:
-        await showErrorDialog(
-          context,
-          context.strings.oops,
-          context.strings.youCannotShareWithYourself,
-        );
-      case AddEmailToCollectionFailure.noAccount:
-        await showBottomSheetComponent<void>(
-          context: context,
-          builder: (sheetContext) => BottomSheetComponent(
-            title: context.strings.inviteToEnte,
-            message: context.strings.emailNoEnteAccountPhotos(
-              email: result.email,
-            ),
-            illustration: Image.asset("assets/warning-grey.png"),
-            closeTooltip: context.strings.close,
-            actions: [
-              ButtonComponent(
-                label: context.strings.sendInvite,
-                variant: ButtonComponentVariant.neutral,
-                leading: Icon(Icons.adaptive.share),
-                shouldSurfaceExecutionStates: false,
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  unawaited(
-                    shareText(
-                      context.strings.shareTextRecommendUsingEnteForPhotos,
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      case AddEmailToCollectionFailure.sharingNotPermitted:
-        await _showUnSupportedAlert(context);
-      case AddEmailToCollectionFailure.other:
-        await showGenericErrorDialog(context: context, error: result.error);
-      case null:
-        return;
     }
   }
 
@@ -752,52 +448,5 @@ class CollectionActions {
       return false;
     }
     return true;
-  }
-
-  Future<void> _showUnSupportedAlert(BuildContext context) async {
-    final AlertDialog alert = AlertDialog(
-      title: Text(context.strings.sorry),
-      content: Text(context.strings.subscribeToEnableSharing),
-      actions: [
-        ButtonWidget(
-          buttonType: ButtonType.primary,
-          isInAlert: true,
-          shouldStickToDarkTheme: false,
-          buttonAction: ButtonAction.first,
-          shouldSurfaceExecutionStates: true,
-          labelText: context.strings.subscribe,
-          onTap: () async {
-            Navigator.of(context)
-                .push(
-                  MaterialPageRoute(
-                    builder: (BuildContext context) {
-                      return getSubscriptionPage();
-                    },
-                  ),
-                )
-                .ignore();
-          },
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: ButtonWidget(
-            buttonType: ButtonType.secondary,
-            buttonAction: ButtonAction.cancel,
-            isInAlert: true,
-            shouldStickToDarkTheme: false,
-            labelText: context.strings.ok,
-          ),
-        ),
-      ],
-    );
-
-    return showDialog(
-      useRootNavigator: false,
-      context: context,
-      builder: (BuildContext context) {
-        return alert;
-      },
-      barrierDismissible: true,
-    );
   }
 }

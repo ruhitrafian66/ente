@@ -15,12 +15,10 @@ import "package:photos/states/all_sections_examples_state.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/components/banners/ml_progress_banner.dart";
 import "package:photos/ui/rewind/entry/rewind_search_ticket.dart";
-import "package:photos/ui/rituals/rituals_banner.dart";
 import "package:photos/ui/viewer/search/result/no_result_widget.dart";
 import "package:photos/ui/viewer/search/search_suggestions.dart";
 import "package:photos/ui/viewer/search/search_widget.dart";
 import "package:photos/ui/viewer/search/tab_empty_state.dart";
-import "package:photos/ui/viewer/search_tab/contacts_section.dart";
 import "package:photos/ui/viewer/search_tab/file_type_section.dart";
 import "package:photos/ui/viewer/search_tab/locations_section.dart";
 import "package:photos/ui/viewer/search_tab/magic_section.dart";
@@ -239,10 +237,8 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
         if (snapshot.hasData && snapshot.data!.sectionResults.isNotEmpty) {
           final sectionResults = snapshot.data!.sectionResults;
           final hasAnySearchableFiles = snapshot.data!.hasAnySearchableFiles;
-          final shouldRenderContacts = !isLocalGalleryMode;
           if (!hasAnySearchableFiles &&
-              sectionResults.every((element) => element.isEmpty) &&
-              !shouldRenderContacts) {
+              sectionResults.every((element) => element.isEmpty)) {
             return const Padding(
               padding: EdgeInsets.only(bottom: 72),
               child: SearchTabEmptyState(),
@@ -294,13 +290,6 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
               examplesFor(SectionType.location),
               resultLimit: widget.previewLimits.locationResults,
             ),
-            if (!isLocalGalleryMode)
-              _RitualsDiscoverySection(
-                resultLimit: widget.previewLimits.ritualResults,
-              ),
-            ContactsSectionLoader(
-              resultLimit: widget.previewLimits.contactResults,
-            ),
             FileTypeSection(hasAnySearchableFiles: hasAnySearchableFiles),
           ];
           return ListView.builder(
@@ -346,23 +335,6 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
           );
         }
       },
-    );
-  }
-}
-
-class _RitualsDiscoverySection extends StatelessWidget {
-  final int resultLimit;
-
-  const _RitualsDiscoverySection({required this.resultLimit});
-
-  @override
-  Widget build(BuildContext context) {
-    if (!flagService.ritualsFlag) {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: RitualsBanner(resultLimit: resultLimit),
     );
   }
 }

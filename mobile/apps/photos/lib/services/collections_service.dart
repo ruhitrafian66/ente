@@ -18,7 +18,6 @@ import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/collections_db.dart';
 import 'package:photos/db/device_files_db.dart';
 import 'package:photos/db/files_db.dart';
-import 'package:photos/db/social_db.dart';
 import 'package:photos/db/trash_db.dart';
 import 'package:photos/events/collection_updated_event.dart';
 import 'package:photos/events/contact_relationships_invalidated_event.dart';
@@ -41,7 +40,6 @@ import "package:photos/models/metadata/collection_magic.dart";
 import "package:photos/service_locator.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
 import "package:photos/services/favorites_service.dart";
-import 'package:photos/services/memory_share_service.dart';
 import 'package:photos/services/sync/local_sync_service.dart';
 import 'package:photos/services/sync/remote_sync_service.dart';
 import "package:photos/settings/local_settings.dart";
@@ -63,7 +61,6 @@ class CollectionsService {
   static const _collectionsSyncTimeKey = "collections_sync_time_x";
 
   static const int kMaximumWriteAttempts = 5;
-  static const int _maxSocialCleanupRetries = 3;
   static const int _collectionKeyLength = 32;
   static const int _shareBatchSize = 10;
 
@@ -162,7 +159,6 @@ class CollectionsService {
     for (final collection in fetchedCollections) {
       if (collection.isDeleted) {
         await _filesDB.deleteCollection(collection.id);
-        await _cleanupSocialData(collection.id);
         await setCollectionSyncTime(collection.id, null);
         if (_collectionIDToCollections.containsKey(collection.id)) {
           shouldFireDeleteEvent = true;
@@ -701,20 +697,6 @@ class CollectionsService {
     );
   }
 
-  Future<SharedCollectionsAndMemoryLinks>
-  getSharedCollectionsAndMemoryLinks() async {
-    final collections = await getSharedCollections();
-    try {
-      final memoryLinks = await MemoryShareService.instance.listMemoryShares();
-      return SharedCollectionsAndMemoryLinks(collections, memoryLinks);
-    } catch (e, s) {
-      _logger.severe("failed to load memory links", e, s);
-      final localMemoryLinks = await MemoryShareService.instance
-          .getLocalMemoryShares();
-      return SharedCollectionsAndMemoryLinks(collections, localMemoryLinks);
-    }
-  }
-
   Future<List<Collection>> getCollectionForOnEnteSection() async {
     final bool hasFavorites = FavoritesService.instance.hasFavorites();
     final int? userID = _config.getUserID();
@@ -1124,7 +1106,6 @@ class CollectionsService {
         final deletedCollection = collection.copyWith(isDeleted: true);
         _collectionIDToCollections[collection.id] = deletedCollection;
         unawaited(_db.insert([deletedCollection]));
-        await _cleanupSocialData(collection.id);
       } else {
         await _handleCollectionDeletion(collection);
       }
@@ -1141,7 +1122,6 @@ class CollectionsService {
 
   Future<void> _handleCollectionDeletion(Collection collection) async {
     await _filesDB.deleteCollection(collection.id);
-    await _cleanupSocialData(collection.id);
     final deletedCollection = collection.copyWith(isDeleted: true);
     unawaited(_db.insert([deletedCollection]));
     _collectionIDToCollections[collection.id] = deletedCollection;
@@ -1156,29 +1136,6 @@ class CollectionsService {
     sync().ignore();
     // not required once remote & local world are separate
     LocalSyncService.instance.syncAll().ignore();
-  }
-
-  Future<void> _cleanupSocialData(int collectionID, {int attempt = 0}) async {
-    try {
-      await SocialDB.instance.deleteCollectionData(collectionID);
-    } catch (e, s) {
-      if (attempt < _maxSocialCleanupRetries) {
-        final backoff = Duration(
-          milliseconds: 100 * pow(2, attempt + 1).toInt(),
-        );
-        _logger.info(
-          'Failed to cleanup social data for $collectionID (${e.runtimeType}), '
-          'retrying (attempt ${attempt + 1}/$_maxSocialCleanupRetries) in ${backoff.inMilliseconds}ms',
-        );
-        await Future.delayed(backoff);
-        return _cleanupSocialData(collectionID, attempt: attempt + 1);
-      }
-      _logger.severe(
-        'Failed to cleanup social data for $collectionID after $_maxSocialCleanupRetries retries',
-        e,
-        s,
-      );
-    }
   }
 
   Uint8List getCollectionKey(int collectionID) {

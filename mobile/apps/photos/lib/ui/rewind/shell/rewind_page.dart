@@ -4,11 +4,7 @@ import "package:photos/ui/rewind/theme/rewind_colors.dart";
 import "package:photos/ui/rewind/theme/rewind_motion.dart";
 
 class RewindChrome {
-  const RewindChrome({
-    required this.foreground,
-    this.wordmark,
-    this.muteButton = true,
-  });
+  const RewindChrome({required this.foreground, this.wordmark});
 
   static const light = RewindChrome(
     foreground: RewindColors.cream,
@@ -21,7 +17,6 @@ class RewindChrome {
 
   final Color foreground;
   final Color? wordmark;
-  final bool muteButton;
 
   bool get onLightPage => foreground.computeLuminance() < 0.5;
 }

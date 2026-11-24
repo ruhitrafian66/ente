@@ -13,8 +13,6 @@ import "package:photos/models/file/file_type.dart";
 import "package:photos/models/memories/memory_music_track.dart";
 import "package:photos/module/download/file.dart";
 import "package:photos/module/download/thumbnail.dart";
-import "package:photos/services/memories/memory_music_service.dart";
-import "package:photos/services/remote_assets_service.dart";
 import "package:photos/utils/device_info.dart";
 import "package:photos/utils/image_util.dart";
 import "package:uuid/uuid.dart";
@@ -67,7 +65,7 @@ class MemoryVideoExporter {
   final Future<File?> Function(EnteFile file) _resolveFileFromServer;
   final Future<Uint8List?> Function(EnteFile file) _resolveThumbnail;
   final Future<Uint8List?> Function(EnteFile file) _resolveThumbnailFromServer;
-  final Future<File> Function(MemoryMusicTrack track) _resolveMusic;
+  final Future<File> Function(MemoryMusicTrack track)? _resolveMusic;
   final SlideshowExport _export;
   final Future<void> Function() _cancelExport;
   final String Function() _outputDirectory;
@@ -89,19 +87,12 @@ class MemoryVideoExporter {
        _resolveThumbnail = resolveThumbnail ?? getThumbnail,
        _resolveThumbnailFromServer =
            resolveThumbnailFromServer ?? getThumbnailFromServer,
-       _resolveMusic = resolveMusic ?? _cachedMusicFile,
+       _resolveMusic = resolveMusic,
        _export = export ?? NativeVideoEditor.exportSlideshow,
        _cancelExport = cancelExport ?? NativeVideoEditor.cancelProcessing,
        _outputDirectory =
            outputDirectory ?? Configuration.instance.getTempDirectory,
        _random = random ?? Random();
-
-  static Future<File> _cachedMusicFile(MemoryMusicTrack track) {
-    return RemoteAssetsService.instance.getAsset(
-      track.url,
-      cacheFileName: memoryMusicCacheFileName(track.url),
-    );
-  }
 
   Future<File> export({
     required List<EnteFile> files,
@@ -218,8 +209,10 @@ class MemoryVideoExporter {
       );
     }
     SlideshowMusic? music;
-    if (musicTrack != null) {
-      final musicFile = await _resolveMusic(musicTrack);
+    // Offline fork: there is no music source unless a resolver is injected.
+    final resolveMusic = _resolveMusic;
+    if (musicTrack != null && resolveMusic != null) {
+      final musicFile = await resolveMusic(musicTrack);
       music = SlideshowMusic(
         path: musicFile.path,
         fadeIn: musicFadeIn,

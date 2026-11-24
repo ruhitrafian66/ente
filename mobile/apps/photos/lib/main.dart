@@ -42,7 +42,6 @@ import 'package:photos/module/upload/service/file_uploader.dart';
 import 'package:photos/module/upload/service/local_file_update_service.dart';
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/account/purchase_update_listener.dart";
 import "package:photos/services/account/user_service.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
 import 'package:photos/services/collections_service.dart';
@@ -52,16 +51,11 @@ import "package:photos/services/machine_learning/face_ml/person/person_service.d
 import "package:photos/services/machine_learning/ml_run_control.dart";
 import 'package:photos/services/machine_learning/ml_service.dart';
 import 'package:photos/services/machine_learning/semantic_search/semantic_search_service.dart';
-import "package:photos/services/memories/memory_music_service.dart";
 import 'package:photos/services/memory_lane/memory_lane_service.dart';
-import 'package:photos/services/memory_share_service.dart';
 import "package:photos/services/notification_service.dart";
-import "package:photos/services/photos_contacts_service.dart";
 import "package:photos/services/process_activity.dart";
-import 'package:photos/services/push_service.dart';
 import "package:photos/services/rewind/rewind_2025_leftovers.dart";
 import 'package:photos/services/search_service.dart';
-import 'package:photos/services/social_notification_coordinator.dart';
 import 'package:photos/services/sync/local_sync_service.dart';
 import 'package:photos/services/sync/remote_sync_service.dart';
 import "package:photos/services/sync/sync_service.dart";
@@ -84,7 +78,6 @@ const kFGSyncFrequency = Duration(minutes: 5);
 const kFGHomeWidgetSyncFrequency = Duration(minutes: 15);
 const kBGTaskTimeout = Duration(seconds: 28);
 const kBGProcessingTaskTimeout = Duration(minutes: 4);
-const kBGPushTimeout = Duration(seconds: 28);
 // ML self-stops before the platform hard-kills the BG engine (the task
 // timeouts above on iOS, the ~10-minute WorkManager system stop on Android),
 // leaving margin to drain in-flight work and release the process lock cleanly.
@@ -98,7 +91,6 @@ const kBGProcessingTaskMLSelfStopAndroid = Duration(minutes: 8);
 bool isProcessBg = true;
 bool isIOSBackgroundRefresh = false;
 bool _stopHearBeat = false;
-bool _isSyncInitialized = false;
 bool _isRustInitialized = false;
 Future<void>? _rustInitFuture;
 late final photos_rust_log.LogSinkGuard _photosRustLogSinkGuard;
@@ -111,7 +103,6 @@ Future<void> wallpaperMain() => runWallpaperApp();
 void main() async {
   debugRepaintRainbowEnabled = false;
   WidgetsFlutterBinding.ensureInitialized();
-  await configureStoreKit();
   ente_ui.AppThemeConfig.initialize(ente_ui.EnteApp.photos);
   await initIsIPad();
   if (isIPad) {
@@ -205,17 +196,6 @@ Future<void> _runInForeground(
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(SemanticSearchService.instance.init());
       unawaited(MemoryLaneService.instance.init());
-      // Offline fork: no memory-music download and no install-source
-      // attribution, both need the network.
-      if (!kOfflineFork) {
-        unawaited(MemoryMusicService.instance.prepare());
-        unawaited(
-          Future.delayed(
-            const Duration(seconds: 5),
-            installSourceService.autoAttributePendingSource,
-          ),
-        );
-      }
     });
     unawaited(_scheduleFGSync('appStart in FG'));
   });
@@ -352,7 +332,6 @@ Future<void> _runMinimally(
     // Initialize early so thermal/battery listeners can warm up while the
     // rest of background services are being initialized.
     final controller = computeController;
-    await MemoryShareService.instance.init();
 
     _logger.info("(for debugging) CollectionsService init $tlog");
     await CollectionsService.instance.init(prefs);
@@ -363,18 +342,11 @@ Future<void> _runMinimally(
     await LocalSyncService.instance.init(prefs);
     RemoteSyncService.instance.init(prefs);
     await SyncService.instance.init(prefs);
-    _isSyncInitialized = true;
 
     await UserService.instance.init();
-    SocialNotificationCoordinator.instance.init(prefs);
     await NotificationService.instance.initializeForBackground();
 
     if (shouldStop?.call() ?? false) return;
-    // Offline fork: no update check.
-    if (!kOfflineFork) {
-      _logger.info("[BG TASK] update notification");
-      updateService.showUpdateNotification().ignore();
-    }
     _logger.info("[BG TASK] sync starting");
     await _sync('bgTaskActiveProcess');
     _logger.info("[BG TASK] sync completed");
@@ -384,29 +356,6 @@ Future<void> _runMinimally(
     final locale = await getLocale();
     await initializeDateFormatting(locale?.languageCode ?? "en");
     _logger.info("[BG TASK] home widget sync");
-    if (!isLocalGalleryMode && hasGrantedMLConsent) {
-      try {
-        final userID = Configuration.instance.getUserID();
-        if (localSettings.isMLLocalIndexingEnabled ||
-            (await smartAlbumsService.getSmartConfigs()).values.any(
-              (config) =>
-                  config.personIDs.isNotEmpty &&
-                  userID != null &&
-                  (CollectionsService.instance
-                          .getCollectionByID(config.collectionId)
-                          ?.canAutoAdd(userID) ??
-                      false),
-            )) {
-          PersonService.init(entityService, MLDataDB.instance, prefs);
-          _logger.info(
-            "[BG TASK] person service initialized for background sync",
-          );
-          await PersonService.instance.sync();
-        }
-      } catch (e, s) {
-        _logger.warning("[BG TASK] person sync failed", e, s);
-      }
-    }
     if (shouldStop?.call() ?? false) return;
     await _homeWidgetSync(true);
 
@@ -536,8 +485,6 @@ Future<void> _init(
     );
     AccountDeletionSettings.instance.init(host: Configuration.instance);
 
-    await MemoryShareService.instance.init();
-
     _logger.info("UserService init $tlog");
     await UserService.instance.init();
     _logger.info("UserService init done $tlog");
@@ -545,7 +492,6 @@ Future<void> _init(
     _logger.info("CollectionsService init $tlog");
     await CollectionsService.instance.init(preferences);
     _logger.info("CollectionsService init done $tlog");
-    SocialNotificationCoordinator.instance.init(preferences);
 
     SearchService.instance.init();
 
@@ -580,42 +526,24 @@ Future<void> _init(
     PersonService.init(entityService, MLDataDB.instance, preferences);
     _logger.info("SyncService init $tlog");
     await SyncService.instance.init(preferences);
-    _isSyncInitialized = true;
     _logger.info("SyncService init done $tlog");
-    if (!isBackground && flagService.librarySharing) {
-      unawaited(librarySharingService.init());
-    }
-
     if (!isBackground && flagService.internalUser) {
       _logger.info("GalleryDownloadQueueService init $tlog");
       await galleryDownloadQueueService.init();
       _logger.info("GalleryDownloadQueueService init done $tlog");
     }
 
-    _logger.info("RitualsService init $tlog");
-    await ritualsService.init();
-    _logger.info("RitualsService init done $tlog");
-
     if (!isBackground) {
       await _scheduleFGHomeWidgetSync();
     }
 
-    // Offline fork: no push notifications (no Firebase, no network).
-    if (!kOfflineFork) {
-      PushService.instance
-          .init(onBackgroundPush: _handleBackgroundPush)
-          .ignore();
-    }
-    _logger.info("PushService/HomeWidget done $tlog");
+    _logger.info("HomeWidget done $tlog");
     unawaited(MLService.instance.init());
     try {
       await PersonService.instance.refreshPersonCache();
     } catch (e, s) {
       PersonService.instance.clearCache();
       _logger.severe("Person cache warm-up failed", e, s);
-    }
-    if (!isBackground) {
-      unawaited(_warmContactsCacheInBackground());
     }
     unawaited(removeRewind2025Leftovers(preferences));
     if (!isBackground) rewindService.scheduleRefresh();
@@ -626,14 +554,6 @@ Future<void> _init(
   } catch (e, s) {
     _logger.severe("Error in init ", e, s);
     rethrow;
-  }
-}
-
-Future<void> _warmContactsCacheInBackground() async {
-  try {
-    await PhotosContactsService.instance.ensureReady();
-  } catch (e, s) {
-    _logger.warning("Deferred contacts warm-up failed", e, s);
   }
 }
 
@@ -792,45 +712,6 @@ Future<void> _scheduleFGSync(String caller) async {
   Future.delayed(kFGSyncFrequency, () async {
     unawaited(_scheduleFGSync('fgSyncCron'));
   });
-}
-
-Future<void> _handleBackgroundPush(Object message) async {
-  final bool isRunningInFG = await isForegroundEngineActive();
-  final bool isInForeground = AppLifecycleService.instance.isForeground;
-  if (isRunningInFG) {
-    _logger.info(
-      "Background push received when app is alive and runningInFG: $isRunningInFG inForeground: $isInForeground",
-    );
-    if (PushService.shouldSync(message)) {
-      _logger.info("Foreground is active, skipping background sync from push");
-    }
-  } else if (!isProcessBg) {
-    // This engine already ran SuperLogging.main: re-entering runWithLogs here
-    // would attach a duplicate log listener and clobber the log prefix.
-    _logger.info("Background push received in backgrounded main engine");
-    if (PushService.shouldSync(message)) {
-      await _sync('firebaseBgSyncMainEngine');
-    }
-  } else {
-    runWithLogs(() async {
-      _logger.info("Background push received, no active foreground");
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(
-        kLastBGTaskHeartBeatTime,
-        DateTime.now().microsecondsSinceEpoch,
-      );
-
-      if (!_isSyncInitialized) {
-        await _init(true, via: 'firebasePush');
-      } else {
-        _logger.info("Skipping background init; sync already initialized");
-      }
-      if (PushService.shouldSync(message)) {
-        await _sync('firebaseBgSyncNoActiveProcess');
-      }
-    }, prefix: "[fbg]").ignore();
-  }
 }
 
 Future<void> _logFGHeartBeatInfo(SharedPreferences prefs) async {

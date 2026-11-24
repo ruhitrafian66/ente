@@ -1,6 +1,5 @@
 import "dart:async";
 
-import "package:ente_pure_utils/ente_pure_utils.dart";
 import 'package:flutter/material.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
@@ -9,7 +8,6 @@ import 'package:photos/db/device_files_db.dart';
 import 'package:photos/db/files_db.dart';
 import 'package:photos/events/files_updated_event.dart';
 import 'package:photos/events/force_reload_home_gallery_event.dart';
-import "package:photos/events/hide_shared_items_from_home_gallery_event.dart";
 import 'package:photos/events/local_photos_updated_event.dart';
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file_load_result.dart';
@@ -46,14 +44,10 @@ class HomeGalleryWidget extends StatefulWidget {
 
 class _HomeGalleryWidgetState extends State<HomeGalleryWidget> {
   static const _maxFastAddFiles = 50;
-  late final StreamSubscription<HideSharedItemsFromHomeGalleryEvent>
-  _hideSharedFilesFromHomeSubscription;
-  bool _shouldHideSharedItems = localSettings.hideSharedItemsFromHomeGallery;
-
-  // Delay the gallery rebuild so the settings toggle stays smooth.
-  final _hideSharedItemsToggleDebouncer = Debouncer(
-    const Duration(milliseconds: 500),
-  );
+  // Offline fork: the "hide shared items" setting screen is removed, so the
+  // value cannot change while the app runs.
+  final bool _shouldHideSharedItems =
+      localSettings.hideSharedItemsFromHomeGallery;
 
   DBFilterOptions get _filterOptions => DBFilterOptions(
     hideIgnoredForUpload: true,
@@ -103,29 +97,6 @@ class _HomeGalleryWidgetState extends State<HomeGalleryWidget> {
       }
     }
     return applyDBFilters(candidates, filterOptions);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _hideSharedFilesFromHomeSubscription = Bus.instance
-        .on<HideSharedItemsFromHomeGalleryEvent>()
-        .listen((event) {
-          localSettings.setHideSharedItemsFromHomeGallery(event.shouldHide);
-          _hideSharedItemsToggleDebouncer.run(() async {
-            _shouldHideSharedItems = event.shouldHide;
-            Bus.instance.fire(
-              ForceReloadHomeGalleryEvent("hideSharedItemsChanged"),
-            );
-          });
-        });
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-    _hideSharedFilesFromHomeSubscription.cancel();
-    _hideSharedItemsToggleDebouncer.cancelDebounceTimer();
   }
 
   @override

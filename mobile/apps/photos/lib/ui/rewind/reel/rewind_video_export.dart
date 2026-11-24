@@ -9,14 +9,11 @@ import "package:flutter/rendering.dart";
 import "package:flutter/services.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/configuration.dart";
-import "package:photos/models/memories/memory_music_track.dart";
 import "package:photos/models/user_details.dart";
 import "package:photos/module/upload/service/file_uploader.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/account/user_service.dart";
 import "package:photos/services/collections_service.dart";
-import "package:photos/services/memories/memory_music_service.dart";
-import "package:photos/services/remote_assets_service.dart";
 import "package:photos/services/rewind/rewind_edition.dart";
 import "package:photos/services/video_preview_service.dart";
 import "package:photos/services/wake_lock_service.dart";
@@ -50,14 +47,12 @@ Future<void> shareRewindVideo(
   BuildContext context, {
   required List<RewindPage> pages,
   Future<bool> Function(List<RewindPage> pages)? loadMedia,
-  MemoryMusicTrack? track,
   Rect? origin,
 }) async {
   final video = await _exportRewindVideo(
     context,
     pages: pages,
     loadMedia: loadMedia,
-    track: track,
   );
   if (!context.mounted) return;
   await _shareVideoFile(context, video, origin);
@@ -67,7 +62,6 @@ Future<void> shareRewindClip(
   BuildContext context, {
   required RewindPage page,
   Future<bool> Function(List<RewindPage> pages)? loadMedia,
-  MemoryMusicTrack? track,
   Rect? origin,
 }) async {
   final video = await _export(
@@ -77,7 +71,6 @@ Future<void> shareRewindClip(
       reelOf: RewindReel.clipOf,
       filePrefix: "ente-rewind-${page.key}-",
       loadMedia: loadMedia,
-      track: track,
     ),
     cacheKey: page,
   );
@@ -103,13 +96,11 @@ Future<bool> saveRewindVideo(
   BuildContext context, {
   required List<RewindPage> pages,
   Future<bool> Function(List<RewindPage> pages)? loadMedia,
-  MemoryMusicTrack? track,
 }) async {
   final video = await _exportRewindVideo(
     context,
     pages: pages,
     loadMedia: loadMedia,
-    track: track,
   );
   if (video == null || !context.mounted) return false;
   final fits = await _fitsInFreeStorage(video);
@@ -199,10 +190,9 @@ Future<File?> _exportRewindVideo(
   BuildContext context, {
   required List<RewindPage> pages,
   Future<bool> Function(List<RewindPage> pages)? loadMedia,
-  MemoryMusicTrack? track,
 }) => _export(
   context,
-  RewindVideoExportPage(pages: pages, loadMedia: loadMedia, track: track),
+  RewindVideoExportPage(pages: pages, loadMedia: loadMedia),
   cacheKey: pages,
 );
 
@@ -238,7 +228,6 @@ class RewindVideoExportPage extends StatefulWidget {
     this.filePrefix = "ente-rewind-",
     this.format = RewindVideoFormat.fullHd,
     this.loadMedia,
-    this.track,
     super.key,
   });
 
@@ -247,7 +236,6 @@ class RewindVideoExportPage extends StatefulWidget {
   final String filePrefix;
   final RewindVideoFormat format;
   final Future<bool> Function(List<RewindPage> pages)? loadMedia;
-  final MemoryMusicTrack? track;
 
   Route<Object?> route() => PageRouteBuilder<Object?>(
     transitionDuration: const Duration(milliseconds: 260),
@@ -270,7 +258,6 @@ class _Cancelled implements Exception {
 class _RewindVideoExportPageState extends State<RewindVideoExportPage>
     with WidgetsBindingObserver {
   static final _logger = Logger("RewindVideoExport");
-  static const _musicTimeout = Duration(seconds: 10);
   static const _wrapHold = Duration(milliseconds: 900);
   static const _longestCountedFrame = Duration(milliseconds: 500);
   static const _background = Color(0xFF1A2A8F);
@@ -282,7 +269,6 @@ class _RewindVideoExportPageState extends State<RewindVideoExportPage>
     "Rewinding the tape",
     "Picking your best angles",
     "Teaching Ducky to edit",
-    "Adding the soundtrack",
     "Polishing every frame",
     "Rolling the credits",
   ];
@@ -353,7 +339,6 @@ class _RewindVideoExportPageState extends State<RewindVideoExportPage>
     RewindVideoSink? sink;
     try {
       await previews.pauseForExport();
-      final music = await _unlessCancelled(_music());
       final reel = await _unlessCancelled(_loadReel());
       final directory = Configuration.instance.getTempDirectory();
       await _deleteOldVideos(directory);
@@ -367,7 +352,6 @@ class _RewindVideoExportPageState extends State<RewindVideoExportPage>
         format: widget.format,
         frameRate: RewindReel.frameRate,
         duration: duration,
-        music: music,
       );
       try {
         return await _encode(reel, sink);
@@ -385,7 +369,6 @@ class _RewindVideoExportPageState extends State<RewindVideoExportPage>
           format: widget.format,
           frameRate: RewindReel.frameRate,
           duration: duration,
-          music: music,
         );
         return await _encode(reel, sink);
       }
@@ -429,29 +412,6 @@ class _RewindVideoExportPageState extends State<RewindVideoExportPage>
     } on FileSystemException catch (error, stackTrace) {
       _logger.warning("Could not clear old Rewind videos", error, stackTrace);
     }
-  }
-
-  Future<File?> _music() async {
-    try {
-      final track = widget.track ?? await _firstTrack();
-      if (track == null) return null;
-      return await RemoteAssetsService.instance
-          .getAsset(
-            track.url,
-            cacheFileName: memoryMusicCacheFileName(track.url),
-          )
-          .timeout(_musicTimeout);
-    } catch (error, stackTrace) {
-      _logger.warning("Exporting without music", error, stackTrace);
-      return null;
-    }
-  }
-
-  Future<MemoryMusicTrack?> _firstTrack() async {
-    final tracks = await MemoryMusicService.instance.prepare().timeout(
-      _musicTimeout,
-    );
-    return tracks.firstOrNull;
   }
 
   Future<RewindReel> _loadReel() async {

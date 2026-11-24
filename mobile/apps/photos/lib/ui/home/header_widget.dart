@@ -2,12 +2,9 @@ import "dart:async";
 
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/app_mode_changed_event.dart";
-import "package:photos/offline_fork.dart";
 import 'package:photos/service_locator.dart';
-import "package:photos/ui/components/banners/get_started_banner.dart";
 import "package:photos/ui/home/memories/memories_strip.dart";
 import 'package:photos/ui/home/status_bar_widget.dart';
 
@@ -41,17 +38,10 @@ class _HeaderWidgetState extends State<HeaderWidget> {
   @override
   Widget build(BuildContext context) {
     _logger.info("Building header widget");
-    // Offline fork: never show the "get started" (sign-up) banner.
-    final bool showGetStartedBanner =
-        !kOfflineFork &&
-        isLocalGalleryMode &&
-        !localSettings.localGalleryModeEnabledThisSession &&
-        !Configuration.instance.hasConfiguredAccount();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const StatusBarWidget(),
-        if (showGetStartedBanner) const GetStartedBanner(),
         MemoriesStripWidget(key: ValueKey(isLocalGalleryMode)),
       ],
     );

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
@@ -8,7 +6,6 @@ import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
 import "package:photos/events/people_changed_event.dart";
-import 'package:photos/events/subscription_purchased_event.dart';
 import "package:photos/models/file/file.dart";
 import 'package:photos/models/gallery_type.dart';
 import 'package:photos/models/selected_files.dart';
@@ -19,11 +16,9 @@ import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedba
 import "package:photos/services/machine_learning/ml_result.dart";
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
 import 'package:photos/ui/components/buttons/button_widget.dart';
-import 'package:photos/ui/sharing/share_person_sheet.dart';
 import "package:photos/ui/viewer/gallery/gallery_app_bar_actions.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_config.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart";
-import 'package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart';
 import "package:photos/ui/viewer/people/cluster_page.dart";
 import "package:photos/ui/viewer/people/person_face_widget.dart";
 import "package:photos/utils/dialog_util.dart";
@@ -96,11 +91,9 @@ enum ClusterPopupAction { setCover, breakupCluster, ignore, memoryLane }
 
 class _AppBarWidgetState extends State<ClusterAppBar> {
   final _logger = Logger("_AppBarWidgetState");
-  late StreamSubscription _userAuthEventSubscription;
   late Function() _selectedFilesListener;
   String? _appBarTitle;
   late CollectionActions collectionActions;
-  final GlobalKey shareButtonKey = GlobalKey();
   bool isQuickLink = false;
   late GalleryType galleryType;
 
@@ -112,18 +105,12 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
     };
     collectionActions = CollectionActions(CollectionsService.instance);
     widget.selectedFiles.addListener(_selectedFilesListener);
-    _userAuthEventSubscription = Bus.instance
-        .on<SubscriptionPurchasedEvent>()
-        .listen((event) {
-          setState(() {});
-        });
     _appBarTitle = widget.title;
     galleryType = widget.type;
   }
 
   @override
   void dispose() {
-    _userAuthEventSubscription.cancel();
     widget.selectedFiles.removeListener(_selectedFilesListener);
     super.dispose();
   }
@@ -138,17 +125,6 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
 
   @override
   Widget build(BuildContext context) {
-    final currentUserID = Configuration.instance.getUserID();
-    final shareableFiles =
-        widget.selectedFiles.files.isEmpty &&
-            !isLocalGalleryMode &&
-            Configuration.instance.hasConfiguredAccount()
-        ? GalleryFilesState.maybeOf(context)?.galleryFilesOrNull?.where(
-            (file) =>
-                file.uploadedFileID != null && file.ownerID == currentUserID,
-          )
-        : null;
-    final hasShareableFiles = shareableFiles?.isNotEmpty ?? false;
     return GalleryAppBarWidget.sliverConfig(
       widget.type,
       _appBarTitle,
@@ -170,7 +146,6 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
             context,
             onCover: onCover,
             foregroundColor: foregroundColor,
-            shareableFiles: hasShareableFiles ? shareableFiles : null,
           ),
     ).buildSliver(context);
   }
@@ -179,38 +154,11 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
     BuildContext context, {
     required bool onCover,
     Color? foregroundColor,
-    required Iterable<EnteFile>? shareableFiles,
   }) {
     final hasAccount = Configuration.instance.hasConfiguredAccount();
     final List<Widget> actions = <Widget>[];
     if (widget.selectedFiles.files.isNotEmpty) {
       return actions;
-    }
-
-    if (!isLocalGalleryMode && hasAccount) {
-      if (shareableFiles != null) {
-        actions.add(
-          IconButtonComponent(
-            key: shareButtonKey,
-            icon: HugeIcon(
-              icon: HugeIcons.strokeRoundedShare08,
-              color: foregroundColor,
-            ),
-            variant: onCover
-                ? IconButtonComponentVariant.unfilled
-                : IconButtonComponentVariant.primary,
-            size: onCover ? kMinInteractiveDimension : 36,
-            iconSize: onCover ? IconSizes.medium : IconSizes.small,
-            tooltip: context.strings.share,
-            shouldSurfaceExecutionStates: false,
-            onTap: () => showSharePersonSheet(
-              context,
-              files: shareableFiles.toList(),
-              shareButtonKey: shareButtonKey,
-            ),
-          ),
-        );
-      }
     }
 
     final List<EntePopupMenuOption<ClusterPopupAction>> items = [

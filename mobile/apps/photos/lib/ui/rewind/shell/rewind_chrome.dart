@@ -2,7 +2,6 @@ import "dart:async";
 import "dart:math";
 
 import "package:flutter/material.dart";
-import "package:photos/ui/rewind/shell/rewind_music.dart";
 import "package:photos/ui/rewind/shell/rewind_page.dart";
 import "package:photos/ui/rewind/theme/rewind_colors.dart";
 import "package:photos/ui/rewind/theme/rewind_motion.dart";
@@ -42,7 +41,6 @@ class RewindChromeOverlay extends StatelessWidget {
     required this.chrome,
     required this.page,
     required this.pageCount,
-    required this.music,
     required this.onClose,
     required this.shareKey,
     required this.videoKey,
@@ -55,7 +53,6 @@ class RewindChromeOverlay extends StatelessWidget {
   final RewindChrome chrome;
   final int page;
   final int pageCount;
-  final RewindMusic music;
   final VoidCallback onClose;
   final GlobalKey shareKey;
   final GlobalKey videoKey;
@@ -90,19 +87,6 @@ class RewindChromeOverlay extends StatelessWidget {
             ),
           ),
         ),
-        if (chrome.muteButton)
-          Positioned(
-            left: RewindChromeLayout.sideInset,
-            bottom: layout.bottom,
-            child: ListenableBuilder(
-              listenable: music,
-              builder: (context, _) => RewindRoundButton(
-                glyph: music.muted ? RewindGlyph.muted : RewindGlyph.sound,
-                label: music.muted ? "Play music" : "Mute music",
-                onTap: music.toggleMuted,
-              ),
-            ),
-          ),
         Positioned.fromRect(
           rect: layout.wordmark,
           child: IgnorePointer(

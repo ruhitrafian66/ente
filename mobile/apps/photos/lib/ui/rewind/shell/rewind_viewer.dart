@@ -10,7 +10,6 @@ import "package:photos/service_locator.dart";
 import "package:photos/services/wake_lock_service.dart";
 import "package:photos/ui/rewind/reel/rewind_video_export.dart";
 import "package:photos/ui/rewind/shell/rewind_chrome.dart";
-import "package:photos/ui/rewind/shell/rewind_music.dart";
 import "package:photos/ui/rewind/shell/rewind_page.dart";
 import "package:photos/ui/rewind/shell/rewind_page_scope.dart";
 import "package:photos/ui/rewind/shell/rewind_page_stack.dart";
@@ -55,7 +54,6 @@ class RewindViewer extends StatefulWidget {
 }
 
 class _RewindViewerState extends State<RewindViewer>
-    with WidgetsBindingObserver
     implements RewindNavigator {
   static final _logger = Logger("RewindViewer");
   static const _tapZoneTop = 70 / 844;
@@ -66,7 +64,6 @@ class _RewindViewerState extends State<RewindViewer>
   late final _starts = RewindPageStack.startsOf(widget.pages);
   late final _steps = _starts.last + widget.pages.last.stops;
   late final int _initialStep;
-  final _music = RewindMusic();
   final _shareCards = <String, RewindShareCard>{};
   final _shareButton = GlobalKey();
   final _videoButton = GlobalKey();
@@ -90,8 +87,6 @@ class _RewindViewerState extends State<RewindViewer>
         : _starts[index] +
               widget.initialStop.clamp(0, widget.pages[index].stops - 1);
     _settle(_initialStep);
-    WidgetsBinding.instance.addObserver(this);
-    unawaited(_music.start());
     if (_openViewers++ == 0) {
       wakeLockService.updateWakeLock(
         enable: true,
@@ -108,19 +103,12 @@ class _RewindViewerState extends State<RewindViewer>
         wakeLockFor: WakeLockFor.rewindViewer,
       );
     }
-    WidgetsBinding.instance.removeObserver(this);
-    _music.dispose();
     _videoSaved.dispose();
     _controller?.dispose();
     for (final page in widget.pages) {
       page.release();
     }
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _music.appActive = state == AppLifecycleState.resumed;
   }
 
   @override
@@ -211,7 +199,6 @@ class _RewindViewerState extends State<RewindViewer>
         chrome: page.chrome,
         page: index,
         pageCount: widget.pages.length,
-        music: _music,
         shareKey: _shareButton,
         videoKey: _videoButton,
         onClose: () => Navigator.of(context).maybePop(),
@@ -350,7 +337,6 @@ class _RewindViewerState extends State<RewindViewer>
         context,
         pages: widget.pages,
         loadMedia: widget.loadVideoMedia,
-        track: _music.track,
         origin: origin,
       );
     } catch (error, stackTrace) {
@@ -374,7 +360,6 @@ class _RewindViewerState extends State<RewindViewer>
         context,
         pages: widget.pages,
         loadMedia: widget.loadVideoMedia,
-        track: _music.track,
       );
       if (saved && mounted) _videoSaved.value = true;
     } catch (error, stackTrace) {
@@ -395,7 +380,6 @@ class _RewindViewerState extends State<RewindViewer>
         context,
         page: page,
         loadMedia: widget.loadVideoMedia,
-        track: _music.track,
         origin: origin,
       );
     } catch (error, stackTrace) {

@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:collection/collection.dart';
-import "package:photos/gateways/billing/models/subscription.dart";
-import "package:photos/gateways/storage_bonus/models/bonus.dart";
 
 enum FamilyMemberStatus {
   self("SELF"),
@@ -33,10 +31,12 @@ class UserDetails {
   final int fileCount;
   final int storageBonus;
   final int sharedCollectionsCount;
-  final Subscription subscription;
+
+  /// Offline fork: the billing models are gone. Only the plan storage of the
+  /// former `subscription` object is kept.
+  final int planStorage;
   final FamilyData? familyData;
   final ProfileData? profileData;
-  final BonusData? bonusData;
 
   const UserDetails(
     this.email,
@@ -44,18 +44,13 @@ class UserDetails {
     this.fileCount,
     this.storageBonus,
     this.sharedCollectionsCount,
-    this.subscription,
+    this.planStorage,
     this.familyData,
     this.profileData,
-    this.bonusData,
   );
 
   bool isPartOfFamily() {
     return familyData?.members?.isNotEmpty ?? false;
-  }
-
-  bool hasPaidAddon() {
-    return bonusData?.getAddOnBonuses().isNotEmpty ?? false;
   }
 
   FamilyMember? currentFamilyMember() {
@@ -99,7 +94,7 @@ class UserDetails {
   }
 
   int getTotalStorage() {
-    return (isPartOfFamily() ? familyData!.storage : subscription.storage) +
+    return (isPartOfFamily() ? familyData!.storage : planStorage) +
         storageBonus;
   }
 
@@ -111,11 +106,6 @@ class UserDetails {
     return null;
   }
 
-  int getPlanPlusAddonStorage() {
-    return (isPartOfFamily() ? familyData!.storage : subscription.storage) +
-        bonusData!.totalAddOnBonus();
-  }
-
   factory UserDetails.fromMap(Map<String, dynamic> map) {
     final profileData = map['profileData'];
     return UserDetails(
@@ -124,10 +114,9 @@ class UserDetails {
       (map['fileCount'] ?? 0) as int,
       (map['storageBonus'] ?? 0) as int,
       (map['sharedCollectionsCount'] ?? 0) as int,
-      Subscription.fromMap(map['subscription']),
+      ((map['subscription'] as Map?)?['storage'] ?? 0) as int,
       map['familyData'] != null ? FamilyData.fromMap(map['familyData']) : null,
       profileData == null ? null : ProfileData.fromJson(profileData),
-      BonusData.fromJson(map['bonusData']),
     );
   }
 
@@ -138,10 +127,9 @@ class UserDetails {
       'fileCount': fileCount,
       'storageBonus': storageBonus,
       'sharedCollectionsCount': sharedCollectionsCount,
-      'subscription': subscription.toMap(),
+      'subscription': {'storage': planStorage},
       'familyData': familyData?.toMap(),
       'profileData': profileData?.toJson(),
-      'bonusData': bonusData?.toJson(),
     };
   }
 

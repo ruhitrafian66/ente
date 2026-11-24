@@ -1,4 +1,3 @@
-import "dart:async";
 import "dart:convert";
 import "dart:io";
 
@@ -12,9 +11,7 @@ import "package:photos/core/cache/image_cache.dart";
 import "package:photos/core/cache/thumbnail_in_memory_cache.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/core/constants.dart";
-import "package:photos/core/event_bus.dart";
 import "package:photos/ente_theme_data.dart";
-import "package:photos/events/details_sheet_event.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/memories/memory.dart";
@@ -24,7 +21,6 @@ import "package:photos/services/memories/memory_music_controller.dart";
 import "package:photos/services/memories/memory_music_player.dart";
 import "package:photos/ui/home/memories/full_screen_memory.dart";
 import "package:photos/ui/home/memories/memory_music_session.dart";
-import "package:photos/ui/notification/update/change_log_page.dart";
 import "package:photos/ui/viewer/file/file_widget.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
@@ -151,92 +147,7 @@ void main() {
   FileWidget media(WidgetTester tester) =>
       tester.widget<FileWidget>(find.byType(FileWidget));
 
-  testWidgets("What's New pauses memories and resumes from the same point", (
-    tester,
-  ) async {
-    await openMemory(tester);
-    await tester.pump(const Duration(seconds: 1));
-    expect(progress(tester), greaterThan(0));
-    expect(player.playing, isTrue);
 
-    unawaited(
-      showChangeLogSheet(tester.element(find.byType(FullScreenMemory))),
-    );
-    await tester.pump();
-    final pausedProgress = progress(tester);
-    final pausedZoom = zoom(tester);
-    expect(media(tester).isActive, isFalse);
-    expect(player.playing, isFalse);
-
-    await tester.pump(const Duration(seconds: 6));
-    expect(progress(tester), pausedProgress);
-    expect(zoom(tester), pausedZoom);
-
-    Navigator.of(tester.element(find.byType(ChangeLogPage))).pop();
-    await tester.pump();
-    expect(progress(tester), pausedProgress);
-    expect(media(tester).isActive, isTrue);
-    expect(player.playing, isTrue);
-    expect(player.loads, 1);
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(progress(tester), greaterThan(pausedProgress));
-    expect(zoom(tester), isNot(pausedZoom));
-
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 20));
-  });
-
-  testWidgets("ready media respects the popup and existing viewer pause", (
-    tester,
-  ) async {
-    final loadCompleted = Completer<void>();
-    player.loadCompleted = loadCompleted.future;
-    await openMemory(tester);
-    unawaited(
-      showChangeLogSheet(tester.element(find.byType(FullScreenMemory))),
-    );
-    await tester.pump();
-
-    media(tester).onFinalFileLoad!(memoryDuration: 5);
-    loadCompleted.complete();
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 6));
-    expect(progress(tester), 0);
-    expect(media(tester).isActive, isFalse);
-    expect(player.playing, isFalse);
-
-    Bus.instance.fire(
-      DetailsSheetEvent(
-        localID: file.localID,
-        uploadedFileID: file.uploadedFileID,
-        opened: true,
-      ),
-    );
-    await tester.pump();
-    Navigator.of(tester.element(find.byType(ChangeLogPage))).pop();
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    expect(progress(tester), 0);
-    expect(media(tester).isActive, isFalse);
-    expect(player.playing, isFalse);
-
-    Bus.instance.fire(
-      DetailsSheetEvent(
-        localID: file.localID,
-        uploadedFileID: file.uploadedFileID,
-        opened: false,
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-    expect(media(tester).isActive, isTrue);
-    expect(player.playing, isTrue);
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(progress(tester), greaterThan(0));
-
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 20));
-  });
 }
 
 class _MemoryMusicPlayer implements MemoryMusicPlayer {

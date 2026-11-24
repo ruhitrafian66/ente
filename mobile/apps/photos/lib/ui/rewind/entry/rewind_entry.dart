@@ -39,9 +39,8 @@ class RewindEntry {
   Future<void> dismiss() => rewindService.progress.markDismissed();
 
   Future<void> open(BuildContext context) async {
-    await rewindService.revalidate();
     final story = rewindService.story.value;
-    if (story == null || !context.mounted) return;
+    if (story == null) return;
     final progress = rewindService.progress;
     final resume = !progress.completed;
     unawaited(rewindService.markOpened());

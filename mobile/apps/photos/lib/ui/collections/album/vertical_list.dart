@@ -6,7 +6,6 @@ import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import "package:flutter/services.dart";
 import 'package:logging/logging.dart';
-import 'package:photos/core/configuration.dart';
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/create_new_album_event.dart";
 import "package:photos/events/tab_changed_event.dart";
@@ -23,7 +22,6 @@ import "package:photos/ui/collections/album/new_list_item.dart";
 import 'package:photos/ui/collections/collection_action_sheet.dart';
 import "package:photos/ui/collections/shared_media_backup_sheet.dart";
 import 'package:photos/ui/notification/toast.dart';
-import "package:photos/ui/sharing/share_collection_page.dart";
 import 'package:photos/ui/viewer/gallery/collection_page.dart';
 import "package:photos/ui/viewer/gallery/empty_state.dart";
 import 'package:photos/utils/dialog_util.dart';
@@ -465,7 +463,8 @@ class _AlbumVerticalListWidgetState extends State<AlbumVerticalListWidget> {
       case CollectionActionType.restoreFiles:
         return _restoreFilesToCollection(context, collection.id);
       case CollectionActionType.shareCollection:
-        return _showShareCollectionPage(context, collection);
+        // Offline fork: album sharing does not exist.
+        return false;
       case CollectionActionType.moveToHiddenCollection:
         return _moveFilesToCollection(context, collection.id);
     }
@@ -484,22 +483,6 @@ class _AlbumVerticalListWidgetState extends State<AlbumVerticalListWidget> {
       ),
       useFadeTransition: true,
     );
-  }
-
-  Future<bool> _showShareCollectionPage(
-    BuildContext context,
-    Collection collection,
-  ) {
-    if (Configuration.instance.getUserID() == collection.owner.id) {
-      unawaited(routeToPage(context, ShareCollectionPage(collection)));
-    } else {
-      showGenericErrorDialog(
-        context: context,
-        error: Exception("Can not share collection owned by others"),
-      ).ignore();
-      _logger.severe("Cannot share collections owned by others");
-    }
-    return Future.value(true);
   }
 
   Future<bool> _addToCollection(

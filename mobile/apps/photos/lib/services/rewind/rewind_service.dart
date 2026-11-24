@@ -23,7 +23,6 @@ import "package:photos/services/rewind/rewind_request.dart";
 import "package:photos/services/sync/local_sync_service.dart";
 import "package:photos/services/sync/remote_sync_service.dart";
 import "package:photos/src/rust/api/rewind_api.dart" as rust;
-import "package:photos/ui/rewind/story/rewind_rituals.dart";
 import "package:photos/ui/rewind/story/rewind_story.dart";
 import "package:shared_preferences/shared_preferences.dart";
 import "package:synchronized/synchronized.dart";
@@ -37,7 +36,6 @@ class RewindService {
         .on<FilesUpdatedEvent>()
         .where((event) => _visibilityChanges.contains(event.type))
         .listen((_) => _rebuildStory());
-    ritualsService.stateNotifier.addListener(_onRitualsChanged);
   }
 
   final RewindProgress _progress;
@@ -241,17 +239,6 @@ class RewindService {
     });
   }
 
-  Future<void> revalidate() async {
-    if (_story.value?.rituals == RewindRituals.current()) return;
-    await _rebuildStory();
-  }
-
-  void _onRitualsChanged() {
-    final story = _story.value;
-    if (story == null || story.rituals == RewindRituals.current()) return;
-    unawaited(_rebuildStory());
-  }
-
   Future<void> _buildStory({bool sharpenFaces = true}) async {
     final state = _state.value;
     final status = state?.status;
@@ -259,17 +246,12 @@ class RewindService {
       _setStory(null, null);
       return;
     }
-    if (state.computedAt == _storyComputedAt &&
-        _story.value?.rituals == RewindRituals.current()) {
+    if (state.computedAt == _storyComputedAt) {
       return;
     }
     try {
       final timer = Stopwatch()..start();
-      var story = await RewindStory.prepare(status.report);
-      while (identical(_state.value, state) &&
-          story.rituals != RewindRituals.current()) {
-        story = await RewindStory.prepare(status.report);
-      }
+      final story = await RewindStory.prepare(status.report);
       if (!identical(_state.value, state)) return;
       _logger.info(
         "Built the Rewind story in ${timer.elapsedMilliseconds} ms, "

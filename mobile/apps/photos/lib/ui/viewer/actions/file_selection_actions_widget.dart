@@ -4,10 +4,8 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import "package:local_auth/local_auth.dart";
 import "package:logging/logging.dart";
-import "package:modal_bottom_sheet/modal_bottom_sheet.dart";
 import "package:photo_manager/photo_manager.dart";
 import 'package:photos/core/configuration.dart';
 import "package:photos/core/constants.dart";
@@ -34,8 +32,6 @@ import 'package:photos/services/collections_service.dart';
 import 'package:photos/services/hidden_service.dart';
 import 'package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart';
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
-import "package:photos/theme/colors.dart";
-import "package:photos/theme/ente_theme.dart";
 import 'package:photos/ui/actions/collection/collection_file_actions.dart';
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
 import 'package:photos/ui/collections/collection_action_sheet.dart';
@@ -49,7 +45,6 @@ import "package:photos/ui/tools/collage/collage_creator_page.dart";
 import "package:photos/ui/viewer/actions/suggest_delete_sheet.dart";
 import "package:photos/ui/viewer/date/edit_date_sheet.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
-import "package:photos/ui/viewer/location/update_location_data_widget.dart";
 import "package:photos/ui/viewer/people/add_files_to_person_page.dart";
 import 'package:photos/utils/delete_file_util.dart';
 import "package:photos/utils/dialog_util.dart";
@@ -91,10 +86,8 @@ class _FileSelectionActionsWidgetState
   late CollectionActions collectionActions;
   late bool isCollectionOwner;
   // Reuse the link while the selection is unchanged.
-  Collection? _cachedCollectionForSharedLink;
   bool _isUpdatingPersonCover = false;
   final GlobalKey shareButtonKey = GlobalKey();
-  final GlobalKey sendLinkButtonKey = GlobalKey();
   final StreamController<double> _progressController =
       StreamController<double>();
 
@@ -125,9 +118,6 @@ class _FileSelectionActionsWidgetState
   }
 
   void _selectFileChangeListener() {
-    if (_cachedCollectionForSharedLink != null) {
-      _cachedCollectionForSharedLink = null;
-    }
     split = FilesSplit.split(widget.selectedFiles.files, currentUserID);
     if (mounted) {
       setState(() => {});
@@ -231,30 +221,6 @@ class _FileSelectionActionsWidgetState
             onTap: _shareSelectedFiles,
           ),
         );
-      }
-
-      if (widget.type.showCreateLink()) {
-        if (_cachedCollectionForSharedLink != null && anyUploadedFiles) {
-          items.add(
-            SelectionSheetAction(
-              hugeIcon: HugeIcons.strokeRoundedCopy01,
-              labelText: context.strings.copyLink,
-              gridOrder: 1,
-              onTap: anyUploadedFiles ? _sendLink : null,
-            ),
-          );
-        } else {
-          items.add(
-            SelectionSheetAction(
-              hugeIcon: HugeIcons.strokeRoundedLink02,
-              labelText: context.strings.sendLink,
-              gridOrder: 1,
-              onTap: anyUploadedFiles ? _onSendLinkTapped : null,
-              shouldShow: ownedFilesCount > 0,
-              key: sendLinkButtonKey,
-            ),
-          );
-        }
       }
 
       final showUploadIcon =
@@ -558,19 +524,6 @@ class _FileSelectionActionsWidgetState
         );
       }
 
-      if (widget.type.showEditLocation()) {
-        items.add(
-          SelectionSheetAction(
-            shouldShow: widget.selectedFiles.files.any(
-              (element) => (element.ownerID == currentUserID),
-            ),
-            labelText: context.strings.editLocation,
-            hugeIcon: HugeIcons.strokeRoundedLocation01,
-            onTap: _editLocation,
-          ),
-        );
-      }
-
       items.add(
         SelectionSheetAction(
           hugeIcon: HugeIcons.strokeRoundedIncognito,
@@ -584,38 +537,6 @@ class _FileSelectionActionsWidgetState
       actions: items,
       selectionControls: widget.selectionControls,
       backgroundColor: widget.backgroundColor,
-    );
-  }
-
-  Future<void> _editLocation() async {
-    await showBarModalBottomSheet(
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(5)),
-      ),
-      backgroundColor: getEnteColorScheme(context).backgroundElevated,
-      barrierColor: backdropFaintDark,
-      topControl: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Container(
-            width: double.infinity,
-            height: 36,
-            color: Colors.transparent,
-          ),
-          Container(
-            height: 5,
-            width: 40,
-            decoration: const BoxDecoration(
-              color: backgroundElevated2Light,
-              borderRadius: BorderRadius.all(Radius.circular(5)),
-            ),
-          ),
-        ],
-      ),
-      context: context,
-      builder: (context) {
-        return UpdateLocationDataWidget(widget.selectedFiles.files.toList());
-      },
     );
   }
 
@@ -935,43 +856,6 @@ class _FileSelectionActionsWidgetState
     }
   }
 
-  Future<void> _onSendLinkTapped() async {
-    if (split.ownedByCurrentUser.isEmpty) {
-      showShortToast(
-        context,
-        context.strings.canOnlyCreateLinkForFilesOwnedByYou,
-      );
-      return;
-    }
-    final dialog = createProgressDialog(
-      context,
-      context.strings.creatingLink,
-      isDismissible: true,
-    );
-    await dialog.show();
-    if (!mounted) {
-      await dialog.hide();
-      return;
-    }
-    _cachedCollectionForSharedLink ??= await collectionActions
-        .createSharedCollectionLink(context, split.ownedByCurrentUser);
-
-    if (!mounted) {
-      await dialog.hide();
-      return;
-    }
-    if (_cachedCollectionForSharedLink == null) {
-      await dialog.hide();
-      return;
-    }
-    await dialog.hide();
-    if (!mounted) return;
-    await _sendLink();
-    if (!mounted) return;
-    widget.selectedFiles.clearAll();
-    setState(() => {});
-  }
-
   Future<void> _setPersonCover() async {
     if (_isUpdatingPersonCover || widget.selectedFiles.files.isEmpty) return;
     _isUpdatingPersonCover = true;
@@ -1096,20 +980,6 @@ class _FileSelectionActionsWidgetState
     widget.selectedFiles.clearAll();
     if (mounted) {
       setState(() => {});
-    }
-  }
-
-  Future<void> _sendLink() async {
-    if (_cachedCollectionForSharedLink != null) {
-      final String url = CollectionsService.instance.getPublicUrl(
-        _cachedCollectionForSharedLink!,
-      );
-      unawaited(Clipboard.setData(ClipboardData(text: url)));
-      await shareLinkWithDescription(
-        url,
-        context: context,
-        key: sendLinkButtonKey,
-      );
     }
   }
 

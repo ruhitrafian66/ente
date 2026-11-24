@@ -20,7 +20,6 @@ import "package:photos/models/ml/face/person.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/memory_lane/memory_lane_cache_service.dart";
 import "package:photos/services/memory_lane/memory_lane_service.dart";
-import "package:photos/services/memory_share_service.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/home/memories/memory_music_session.dart";
 import "package:photos/ui/home/memories/memory_progress_indicator.dart";
@@ -30,7 +29,6 @@ import "package:photos/ui/viewer/people/memory_lane_caption.dart";
 import "package:photos/ui/viewer/people/memory_lane_scrubber.dart";
 import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/face/face_thumbnail_cache.dart";
-import "package:photos/utils/share_util.dart";
 
 Future<void> openMemoryLanePage(
   BuildContext context, {
@@ -84,7 +82,6 @@ class _MemoryLanePageV2State extends State<MemoryLanePageV2> {
   bool _useFastTransition = false;
   late final Future<void> _memoryLaneLoaded;
   Key _currentEntryKey = UniqueKey();
-  MemoryLanePersonTimeline? _timeline;
   final List<MemoryLaneEntry> _entries = [];
   _Chunkinator<MemoryLaneEntry, Uint8List?>? _chunkinator;
   final Map<(Future<Uint8List?>, Size, bool), Future<(Uint8List, int)?>>
@@ -180,7 +177,6 @@ class _MemoryLanePageV2State extends State<MemoryLanePageV2> {
         isCluster: widget.isCluster,
       );
       if (!mounted) return;
-      _timeline = timeline;
       if (timeline == null ||
           !timeline.isEligible ||
           timeline.entries.isEmpty) {
@@ -568,26 +564,6 @@ class _MemoryLanePageV2State extends State<MemoryLanePageV2> {
                         ),
                       ),
                     ),
-                    actions: [
-                      if (!isLocalGalleryMode)
-                        // TODO: Replace with an Ente component when it supports this pressed overlay.
-                        SizedBox.square(
-                          dimension: 48,
-                          child: IconButton(
-                            tooltip: context.strings.shareLink,
-                            style: IconButton.styleFrom(
-                              overlayColor: Colors.white.withValues(
-                                alpha: 0.08,
-                              ),
-                            ),
-                            icon: const HugeIcon(
-                              icon: HugeIcons.strokeRoundedShare08,
-                              color: Colors.white,
-                            ),
-                            onPressed: _onShareTap,
-                          ),
-                        ),
-                    ],
                   ),
                 ),
               ),
@@ -829,50 +805,6 @@ class _MemoryLanePageV2State extends State<MemoryLanePageV2> {
         unawaited(_play(i));
       }
     }
-  }
-
-  Future<void> _onShareTap() async {
-    final timeline = _timeline;
-    final person = widget.person;
-    if (isLocalGalleryMode ||
-        timeline == null ||
-        !timeline.isEligible ||
-        timeline.entries.isEmpty) {
-      return;
-    }
-    final l10n = context.strings;
-    final name = person?.data.name.trim() ?? "";
-    var title = l10n.facesTimelineAppBarTitle;
-    if (name.isNotEmpty) {
-      title = l10n.memoryLaneCardTitle(
-        name: name,
-        nameEndsWithS: name.toLowerCase().endsWith("s").toString(),
-      );
-    }
-    final dialog = createProgressDialog(context, l10n.creatingLink);
-    await _runWithViewerPaused(() async {
-      try {
-        await dialog.show();
-        final shareLinkData = await MemoryShareService.instance
-            .getOrCreateMemoryLaneLink(
-              entries: timeline.entries,
-              title: title,
-              personId: person?.remoteID,
-              personName: person?.data.name,
-              birthDate: person?.data.birthDate,
-            );
-        await dialog.hide();
-        if (!mounted) return;
-        await shareText(
-          formatMemoryShareText(title, shareLinkData.$1),
-          context: context,
-        );
-      } catch (e) {
-        await dialog.hide();
-        if (!mounted) return;
-        await showGenericErrorBottomSheet(context: context, error: e);
-      }
-    });
   }
 
   Future<void> _onDateTap(EnteFile file) async {

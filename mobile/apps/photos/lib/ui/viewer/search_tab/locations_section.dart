@@ -2,7 +2,6 @@ import "dart:async";
 
 import "package:ente_components/ente_components.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
-import "package:ente_strings/ente_strings.dart";
 import "package:figma_squircle/figma_squircle.dart";
 import "package:flutter/material.dart";
 import "package:photos/events/event.dart";
@@ -13,9 +12,7 @@ import "package:photos/theme/colors.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/viewer/file/no_thumbnail_widget.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
-import "package:photos/ui/viewer/search/result/go_to_map_widget.dart";
 import "package:photos/ui/viewer/search/result/search_result_page.dart";
-import "package:photos/ui/viewer/search/search_map_navigation.dart";
 import "package:photos/ui/viewer/search/search_section_cta.dart";
 import "package:photos/ui/viewer/search_tab/search_tab_horizontal_scroll.dart";
 import "package:photos/ui/viewer/search_tab/section_header.dart";
@@ -104,7 +101,6 @@ class _LocationsSectionState extends State<LocationsSection> {
             ),
             const SizedBox(width: 8),
             const SearchSectionEmptyCTAIcon(SectionType.location),
-            const GoToMap(),
           ],
         ),
       );
@@ -125,7 +121,6 @@ class _LocationsSectionState extends State<LocationsSection> {
             SearchTabHorizontalRow(
               spacing: 10,
               children: [
-                const GoToMapTile(),
                 for (final locationSearchResult in visibleResults)
                   LocationRecommendation(locationSearchResult),
               ],
@@ -238,49 +233,6 @@ class LocationRecommendation extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class GoToMapTile extends StatelessWidget {
-  const GoToMapTile({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = getEnteTextTheme(context);
-    final mapTileAsset = EnteTheme.isDark(context)
-        ? "assets/search_map_tile_dark.png"
-        : "assets/search_map_tile_light.png";
-    return GestureDetector(
-      onTap: () => openSearchMap(context),
-      child: SizedBox(
-        width: LocationRecommendation.width,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipSmoothRect(
-              radius: SmoothBorderRadius(
-                cornerRadius: LocationRecommendation.outerCornerRadius,
-                cornerSmoothing: LocationRecommendation.cornerSmoothing,
-              ),
-              child: Image.asset(
-                mapTileAsset,
-                width: LocationRecommendation.sideOfThumbnail,
-                height: LocationRecommendation.sideOfThumbnail,
-                fit: BoxFit.cover,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.strings.yourMap,
-              style: TextStyles.body.copyWith(color: textTheme.body.color),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
         ),
       ),
     );

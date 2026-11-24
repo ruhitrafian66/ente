@@ -13,7 +13,7 @@ import "package:photos/ui/viewer/gallery/state/boundary_reporter_mixin.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
 
-enum MemoryShareSheetAction { shareMemory, shareVideo, shareItems }
+enum MemoryShareSheetAction { shareVideo, shareItems }
 
 class MemoryShareSheetResult {
   final MemoryShareSheetAction action;
@@ -29,14 +29,12 @@ Future<MemoryShareSheetResult?> showMemoryShareSelectionSheet(
   BuildContext context, {
   required List<Memory> memories,
   required int initialIndex,
-  required bool canShareMemoryLink,
 }) {
   return showBottomSheetComponent<MemoryShareSheetResult>(
     context: context,
     builder: (_) => _MemoryShareSelectionSheet(
       memories: memories,
       initialIndex: initialIndex,
-      canShareMemoryLink: canShareMemoryLink,
     ),
   );
 }
@@ -44,12 +42,10 @@ Future<MemoryShareSheetResult?> showMemoryShareSelectionSheet(
 class _MemoryShareSelectionSheet extends StatefulWidget {
   final List<Memory> memories;
   final int initialIndex;
-  final bool canShareMemoryLink;
 
   const _MemoryShareSelectionSheet({
     required this.memories,
     required this.initialIndex,
-    required this.canShareMemoryLink,
   });
 
   @override
@@ -212,24 +208,10 @@ class _MemoryShareSelectionSheetState
                   ),
                   const SizedBox(height: Spacing.md),
                 ],
-                if (widget.canShareMemoryLink) ...[
-                  _buildAction(
-                    l10n.shareMemory,
-                    MemoryShareSheetAction.shareMemory,
-                    variant: canShareVideo
-                        ? ButtonComponentVariant.secondary
-                        : ButtonComponentVariant.primary,
-                    leading: const HugeIcon(
-                      icon: HugeIcons.strokeRoundedLink02,
-                      size: IconSizes.small,
-                    ),
-                  ),
-                  const SizedBox(height: Spacing.md),
-                ],
                 _buildAction(
                   l10n.shareItemCount(count: _selectedFiles.files.length),
                   MemoryShareSheetAction.shareItems,
-                  variant: canShareVideo || widget.canShareMemoryLink
+                  variant: canShareVideo
                       ? ButtonComponentVariant.secondary
                       : ButtonComponentVariant.primary,
                 ),

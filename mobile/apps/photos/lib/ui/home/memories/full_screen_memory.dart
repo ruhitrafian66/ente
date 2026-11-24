@@ -8,10 +8,8 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_components/theme/text_styles.dart" as component;
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
-import "package:flutter/foundation.dart" show ValueListenable;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/details_sheet_event.dart";
 import "package:photos/events/file_caption_updated_event.dart";
@@ -28,7 +26,6 @@ import "package:photos/module/download/file.dart";
 import "package:photos/module/download/thumbnail.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/memories/smart_memories_service.dart";
-import "package:photos/services/memory_share_service.dart";
 import "package:photos/ui/actions/file/file_actions.dart";
 import "package:photos/ui/collections/collection_action_sheet.dart";
 import "package:photos/ui/home/memories/custom_listener.dart";
@@ -38,7 +35,6 @@ import "package:photos/ui/home/memories/memory_share_sheet.dart";
 import "package:photos/ui/home/memories/memory_video_export_sheet.dart";
 import "package:photos/ui/home/memories/memory_video_prefetcher.dart";
 import "package:photos/ui/home/memories/memory_viewer_constants.dart";
-import "package:photos/ui/social/widgets/file_social_overlay.dart";
 import "package:photos/ui/viewer/file/file_widget.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
 import "package:photos/ui/viewer/file_details/favorite_widget.dart";
@@ -371,7 +367,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
   bool get _isMediaPlaybackActive =>
       widget.isActive && _isRouteCurrent && !_isViewerActionPaused;
   bool _isMediaInteractionLocked = false;
-  final _socialControlsVisible = ValueNotifier<bool>(false);
   FullScreenMemoryData? _memoryData;
   ValueNotifier<int>? _itemIndexNotifier;
 
@@ -463,7 +458,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
     hasPointerOnScreenNotifier.removeListener(_hasPointerListener);
     _detailSheetEventSubscription.cancel();
     _captionUpdatedSubscription.cancel();
-    _socialControlsVisible.dispose();
     super.dispose();
   }
 
@@ -614,7 +608,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
       _onPageChange(inheritedData, currentIndex + 1);
     } else if (widget.onNextMemory != null) {
       _resetAnimation();
-      _setSocialControlsVisible(false);
       widget.onNextMemory!();
     } else {
       isAtFirstOrLastFile = true;
@@ -636,7 +629,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
       _onPageChange(inheritedData, currentIndex - 1);
     } else if (widget.onPreviousMemory != null) {
       _resetAnimation();
-      _setSocialControlsVisible(false);
       widget.onPreviousMemory!();
     } else {
       isAtFirstOrLastFile = true;
@@ -665,12 +657,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
     );
     inheritedData.indexNotifier.value = index;
     _resetAnimation();
-  }
-
-  void _setSocialControlsVisible(bool visible) {
-    if (_socialControlsVisible.value != visible) {
-      _socialControlsVisible.value = visible;
-    }
   }
 
   Future<T?> _runWithViewerPaused<T>(Future<T> Function() action) async {
@@ -848,9 +834,7 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
                 );
               },
             ),
-            _MemoryViewerScrimsAndCaption(
-              socialControlsVisible: _socialControlsVisible,
-            ),
+            const _MemoryViewerScrimsAndCaption(),
             ?widget.overlay,
             if (memoryAudio != null)
               Positioned(
@@ -877,29 +861,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
                   },
                 ),
               ),
-            ValueListenableBuilder<int>(
-              valueListenable: inheritedData.indexNotifier,
-              builder: (context, index, _) {
-                final safeIndex = _clampedMemoryIndex(
-                  index,
-                  inheritedData.memories.length,
-                );
-                if (safeIndex == null) return const SizedBox.shrink();
-                final padding = MediaQuery.paddingOf(context);
-                return Positioned(
-                  right: padding.right + kMemoryOverlayHorizontalInset,
-                  bottom: padding.bottom + kMemoryOverlayBottomInset,
-                  child: FileSocialOverlay(
-                    file: inheritedData.memories[safeIndex].file,
-                    currentUserID: Configuration.instance.getUserID(),
-                    openingCollectionID: null,
-                    onInteractionStart: _pauseViewer,
-                    onInteractionEnd: _resumeViewer,
-                    onVisibilityChanged: _setSocialControlsVisible,
-                  ),
-                );
-              },
-            ),
             const BottomIcons(),
             _MemoryTopOverlay(
               title: widget.title,
@@ -1028,7 +989,6 @@ class BottomIcons extends StatelessWidget {
                       context,
                       actionFile,
                       onFileRemoved: (file) {
-                        fullScreenState._setSocialControlsVisible(false);
                         fullScreenState.hasFinalFileLoaded = false;
                         fullScreenState._resetAnimation();
                         inheritedData.removeCurrentMemory();
@@ -1281,9 +1241,7 @@ class _MemoryDateChevronPainter extends CustomPainter {
 }
 
 class _MemoryViewerScrimsAndCaption extends StatelessWidget {
-  final ValueListenable<bool> socialControlsVisible;
-
-  const _MemoryViewerScrimsAndCaption({required this.socialControlsVisible});
+  const _MemoryViewerScrimsAndCaption();
 
   @override
   Widget build(BuildContext context) {
@@ -1332,36 +1290,30 @@ class _MemoryViewerScrimsAndCaption extends StatelessWidget {
             IgnorePointer(
               child: Align(
                 alignment: Alignment.bottomCenter,
-                child: ValueListenableBuilder<bool>(
-                  valueListenable: socialControlsVisible,
-                  builder: (context, socialControlsVisible, _) {
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOut,
-                      width: double.infinity,
-                      height: socialControlsVisible
-                          ? kMemorySocialScrimHeight
-                          : safePadding.bottom +
-                                kMemoryBottomActionBarHeight +
-                                (captionText == null
-                                    ? 0
-                                    : _memoryCaptionActionBarGap +
-                                          _memoryCaptionLineHeight +
-                                          _memoryCaptionScrimTopPadding),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [
-                            Color.fromARGB(97, 0, 0, 0),
-                            Color.fromARGB(42, 0, 0, 0),
-                            Colors.transparent,
-                          ],
-                          stops: [0, 0.5, 1],
-                        ),
-                      ),
-                    );
-                  },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  width: double.infinity,
+                  height:
+                      safePadding.bottom +
+                      kMemoryBottomActionBarHeight +
+                      (captionText == null
+                          ? 0
+                          : _memoryCaptionActionBarGap +
+                                _memoryCaptionLineHeight +
+                                _memoryCaptionScrimTopPadding),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [
+                        Color.fromARGB(97, 0, 0, 0),
+                        Color.fromARGB(42, 0, 0, 0),
+                        Colors.transparent,
+                      ],
+                      stops: [0, 0.5, 1],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1551,37 +1503,16 @@ Future<void> _shareMemory(
     inheritedData.memories.length,
   );
   if (currentIndex == null) return;
-  final canShowMemoryShareLinkOption =
-      !(isLocalGalleryMode && !Configuration.instance.hasConfiguredAccount());
   final result = await showMemoryShareSelectionSheet(
     context,
     memories: inheritedData.memories,
     initialIndex: currentIndex,
-    canShareMemoryLink: canShowMemoryShareLinkOption,
   );
   if (!context.mounted || result == null) {
     return;
   }
 
   switch (result.action) {
-    case MemoryShareSheetAction.shareMemory:
-      final shareLinkData = await _getOrCreateMemoryLink(
-        context,
-        result.selectedMemories,
-        memoryTitle,
-      );
-      if (!context.mounted || shareLinkData == null) {
-        return;
-      }
-      final title = memoryTitle.trim();
-      await shareText(
-        formatMemoryShareText(
-          title.isNotEmpty ? title : context.strings.memories,
-          shareLinkData.$1,
-        ),
-        context: context,
-      );
-      return;
     case MemoryShareSheetAction.shareVideo:
       await _shareMemoryVideo(context, result.selectedMemories, memoryTitle);
     case MemoryShareSheetAction.shareItems:
@@ -1625,32 +1556,5 @@ Future<void> _shareMemoryVideo(
     if (context.mounted) {
       await showGenericErrorBottomSheet(context: context, error: e);
     }
-  }
-}
-
-Future<(String, int)?> _getOrCreateMemoryLink(
-  BuildContext context,
-  List<Memory> memories,
-  String memoryTitle,
-) async {
-  if (memories.isEmpty) return null;
-  final l10n = context.strings;
-  final dialog = createProgressDialog(context, l10n.creatingLink);
-  await dialog.show();
-  try {
-    final normalizedTitle = memoryTitle.trim();
-    final shareLinkData = await MemoryShareService.instance
-        .getOrCreateMemoryLink(
-          memories: memories,
-          title: normalizedTitle.isNotEmpty ? normalizedTitle : l10n.memories,
-        );
-    await dialog.hide();
-    return shareLinkData;
-  } catch (e) {
-    await dialog.hide();
-    if (context.mounted) {
-      await showGenericErrorBottomSheet(context: context, error: e);
-    }
-    return null;
   }
 }
