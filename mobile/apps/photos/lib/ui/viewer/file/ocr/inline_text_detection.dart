@@ -9,6 +9,7 @@ import "package:logging/logging.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/ocr/ocr_models.dart"
     show OcrModelComponent, TextRegionDetectionResult;
 import "package:photos/services/machine_learning/ocr_service.dart";
@@ -205,6 +206,7 @@ class _InlineTextDetectionState extends State<InlineTextDetection> {
   }
 
   bool _isFileEligible(EnteFile file) {
+    if (!kOfflineRunOcr) return false;
     if (widget.isGuestView || file.isTrash) return false;
     return file.fileType == FileType.image ||
         file.fileType == FileType.livePhoto;

@@ -132,12 +132,24 @@ class _GrantPermissionsWidgetState extends State<GrantPermissionsWidget>
       _isEnteringLocalGallery = false;
       rethrow;
     }
-    SyncService.instance.onPermissionGranted().ignore();
+    final Future<void> firstSync = SyncService.instance.onPermissionGranted();
     Bus.instance.fire(PermissionGrantedEvent());
     try {
       await MLService.instance.init();
       await SemanticSearchService.instance.init();
       unawaited(MLService.instance.runAllML(force: true));
+      // Offline fork: the run above can start before the first local sync
+      // has imported the device files, and then it finds no file to index.
+      // No later event starts a new run in the foreground, so start one
+      // when the first sync is complete.
+      unawaited(() async {
+        try {
+          await firstSync;
+          await MLService.instance.runAllML(force: true);
+        } catch (e) {
+          _logger.warning("ML run after the first sync failed", e);
+        }
+      }());
     } catch (e) {
       _logger.severe("Failed to initialize ML after permission grant", e);
     }

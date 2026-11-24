@@ -63,6 +63,7 @@ class MLService {
   Timer? _predownloadLocalModelsTimer;
 
   static const _kPredownloadLocalModelsDelay = Duration(seconds: 10);
+  static const _kComputeControllerStartDelay = Duration(seconds: 5);
   static const _kDeniedRunRetryDelay = Duration(seconds: 15);
   static const _kVectorGraphBuildBatch = 2000;
 
@@ -125,6 +126,12 @@ class MLService {
       }
     });
     _syncMlControllerStatusForBg();
+    if (!isProcessBg) {
+      // Offline fork: nothing else creates the compute controller in the
+      // foreground before the first touch. Its first event starts the index
+      // run, so create it a short time after the start.
+      Timer(_kComputeControllerStartDelay, () => computeController);
+    }
 
     _isInitialized = true;
     _schedulePredownloadLocalModels();
@@ -619,8 +626,7 @@ class MLService {
     }
 
     try {
-      final fileIDToCreationTime =
-          await _getLocalGalleryFileIdToCreationTime();
+      final fileIDToCreationTime = await _getLocalGalleryFileIdToCreationTime();
       await faceClustering.clusterAllFaces(
         fileIDToCreationTime: fileIDToCreationTime,
         rejectedClusterIDsByFaceID: faceIdNotToCluster,

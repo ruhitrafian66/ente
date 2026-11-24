@@ -8,6 +8,10 @@
 const bool kOfflineRunClip = false;
 const bool kOfflineRunPets = false;
 
+/// The OCR models (text selection in the photo viewer) are not bundled, and
+/// the app cannot download them. When false, no file is eligible for OCR.
+const bool kOfflineRunOcr = false;
+
 // Former `FlagService` values (package `ente_feature_flag`). Each constant
 // holds the value the flag had in a release build with no account. The flag
 // service is gone; change a value only on purpose.
