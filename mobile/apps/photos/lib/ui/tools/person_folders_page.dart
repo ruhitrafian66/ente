@@ -138,7 +138,10 @@ class _PersonFoldersPageState extends State<PersonFoldersPage>
             "$now\n\n"
             "Other apps and albums will not find these photos in the old "
             "folders. The app keeps a list of the original folders, and "
-            "\"Restore all\" moves the photos back.\n\n"
+            "\"Restore all\" moves the photos back. A photo from a folder "
+            "outside DCIM and Pictures (for example Download) cannot go "
+            "back there: it returns to a folder in Pictures with the same "
+            "name.\n\n"
             "While this is on, the app also moves new photos of named "
             "persons, and it moves photos when you rename, merge or remove "
             "a person.",
@@ -495,8 +498,7 @@ class _PersonFoldersPageState extends State<PersonFoldersPage>
       case PersonFolderSkipReason.foreignInPeopleFolder:
         return "Already in $kPersonFoldersRoot, not put there by the app";
       case PersonFolderSkipReason.sourceNotRestorable:
-        return "Outside ${kPersonFolderSourceRoots.join(" and ")} "
-            "(Android cannot move these back)";
+        return "Outside ${kPersonFolderSourceRoots.join(" and ")}";
       case PersonFolderSkipReason.nameCollision:
         return "A file with the same name is in the target folder";
       case PersonFolderSkipReason.movedExternally:

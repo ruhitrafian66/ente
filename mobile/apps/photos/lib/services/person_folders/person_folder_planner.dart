@@ -22,9 +22,12 @@
 // * An image that has no named person any more returns to its original
 //   folder.
 // * A file in `Pictures/People` that the tool did not put there stays there.
-// * The tool never moves a file when it cannot move the file back: a source
-//   outside `DCIM` and `Pictures` is skipped (see [kPersonFolderSourceRoots])
-//   and a file whose name is already in the target folder is skipped.
+// * Android permits images only below `DCIM` and `Pictures` (see
+//   [kPersonFolderSourceRoots]). An image from another folder (for example
+//   `Download`) is still sorted (owner's decision), but it cannot go back to
+//   that folder: its recorded "original" folder is a folder below `Pictures`
+//   (see [restoreFolderForPersonFolderSource]).
+// * A file whose name is already in the target folder is skipped.
 
 /// Parent of all person folders, relative to the root of the storage volume.
 const String kPersonFoldersRoot = "Pictures/People";
@@ -64,6 +67,28 @@ bool isRestorablePersonFolderSource(String? folder) {
   if (key.isEmpty) return false;
   final top = key.split("/").first;
   return kPersonFolderSourceRoots.any((root) => root.toLowerCase() == top);
+}
+
+/// Folder below `Pictures` for restored files whose source folder has no name
+/// that can be reused (for example the root of the storage volume).
+const String kPersonFolderRestoreFallback = "Pictures/Restored";
+
+/// The folder a file returns to when it leaves its person folder.
+///
+/// For a source below `DCIM` or `Pictures` this is the source itself. Android
+/// cannot put an image back into any other folder, so for those the file
+/// returns to `Pictures/<last part of the source folder>`: `Download` becomes
+/// `Pictures/Download`, and
+/// `Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images` becomes
+/// `Pictures/WhatsApp Images`.
+String restoreFolderForPersonFolderSource(String? folder) {
+  final normalized = normalizePersonFolderPath(folder);
+  if (isRestorablePersonFolderSource(normalized)) return normalized;
+  if (normalized.isEmpty) return kPersonFolderRestoreFallback;
+  final last = normalized.split("/").last;
+  // Never restore into the people root itself.
+  if (last.toLowerCase() == "people") return kPersonFolderRestoreFallback;
+  return "Pictures/$last";
 }
 
 /// A file on the device.
@@ -647,10 +672,6 @@ class PersonFolderPlanner {
         out.skip(id, PersonFolderSkipReason.foreignInPeopleFolder);
         continue;
       }
-      if (!isRestorablePersonFolderSource(file.folder)) {
-        out.skip(id, PersonFolderSkipReason.sourceNotRestorable);
-        continue;
-      }
       final from = normalizePersonFolderPath(file.folder);
       out.move(
         state,
@@ -662,7 +683,7 @@ class PersonFolderPlanner {
           toFolder: target,
           kind: PersonFolderMoveKind.sort,
           personId: personId,
-          originalFolder: from,
+          originalFolder: restoreFolderForPersonFolderSource(from),
         ),
       );
     }

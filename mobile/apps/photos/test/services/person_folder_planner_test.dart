@@ -589,26 +589,42 @@ void main() {
       expect(plan.moves.single.kind, PersonFolderMoveKind.sort);
     });
 
-    test("an image outside DCIM and Pictures is skipped", () {
-      final plan = PersonFolderPlanner.plan(
-        files: [
-          _image("1", folder: "Download"),
-          _image("2", folder: "Android/media/com.whatsapp/WhatsApp/Media"),
-          _image("3", folder: ""),
-          _image("4", folder: "Pictures"),
-          _image("5", folder: "dcim/Camera"),
-        ],
-        faces: [
-          for (final id in ["1", "2", "3", "4", "5"]) _face(id, "p1"),
-        ],
-        persons: [anna],
-      );
-      expect(plan.moves.map((move) => move.fileId), ["4", "5"]);
-      expect(plan.skips.map((skip) => skip.fileId), ["1", "2", "3"]);
-      expect(plan.skips.map((skip) => skip.reason).toSet(), {
-        PersonFolderSkipReason.sourceNotRestorable,
-      });
-    });
+    test(
+      "an image outside DCIM and Pictures is sorted and restores below Pictures",
+      () {
+        final plan = PersonFolderPlanner.plan(
+          files: [
+            _image("1", folder: "Download"),
+            _image("2", folder: "Android/media/com.whatsapp/WhatsApp/Media"),
+            _image("3", folder: ""),
+            _image("4", folder: "Pictures"),
+            _image("5", folder: "dcim/Camera"),
+          ],
+          faces: [
+            for (final id in ["1", "2", "3", "4", "5"]) _face(id, "p1"),
+          ],
+          persons: [anna],
+        );
+        // Owner's decision: these files are sorted too. They cannot return to
+        // their source folder, so the recorded original is below Pictures.
+        expect(plan.moves.map((move) => move.fileId), [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+        ]);
+        expect(plan.skips, isEmpty);
+        final original = {
+          for (final move in plan.moves) move.fileId: move.originalFolder,
+        };
+        expect(original["1"], "Pictures/Download");
+        expect(original["2"], "Pictures/Media");
+        expect(original["3"], "Pictures/Restored");
+        expect(original["4"], "Pictures");
+        expect(original["5"], "dcim/Camera");
+      },
+    );
 
     test("a missing file: the record is dropped, no error", () {
       final plan = PersonFolderPlanner.plan(
@@ -879,13 +895,15 @@ void main() {
       final first = device.plan(persons: persons, faces: faces);
       final execution = await device.run(first);
 
-      expect(execution.sorted, 2);
+      expect(execution.sorted, 3);
       expect(execution.error, isNull);
       expect(device.folderOf("1"), "Pictures/People/Anna");
       expect(device.folderOf("2"), "Pictures/People/Bob");
       expect(device.folderOf("3"), _camera);
-      expect(device.folderOf("4"), "Download");
-      expect(device.records.keys.toSet(), {"1", "2"});
+      // The image in "Download" is sorted too; it restores below Pictures.
+      expect(device.folderOf("4"), "Pictures/People/Anna");
+      expect(device.records.keys.toSet(), {"1", "2", "4"});
+      expect(device.records["4"]!.originalFolder, "Pictures/Download");
       expect(device.records["2"]!.originalFolder, "DCIM/Trip");
       expect(device.records["2"]!.personId, "p2");
       expect(device.records.values.any((record) => record.isPending), isFalse);
@@ -895,8 +913,7 @@ void main() {
       expect(second.moves, isEmpty);
       expect(second.recordDrops, isEmpty);
       expect(second.recordUpdates, isEmpty);
-      // Only the image in "Download" is reported again.
-      expect(second.skips.single.fileId, "4");
+      expect(second.skips, isEmpty);
     });
 
     test("rename, merge, removal and restore all", () async {
