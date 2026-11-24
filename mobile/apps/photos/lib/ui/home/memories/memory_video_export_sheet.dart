@@ -10,7 +10,6 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/memories/memory_music_track.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/memories/memory_video_exporter.dart";
-import "package:photos/services/video_preview_service.dart";
 import "package:photos/services/wake_lock_service.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
 
@@ -98,7 +97,6 @@ class _MemoryVideoExportSheetState extends State<_MemoryVideoExportSheet> {
       wakeLockFor: WakeLockFor.memoryVideoExport,
     );
     try {
-      await VideoPreviewService.instance.pauseForExport();
       final video = await _exporter.export(
         files: widget.files,
         musicTrack: widget.musicTrack,
@@ -119,7 +117,6 @@ class _MemoryVideoExportSheetState extends State<_MemoryVideoExportSheet> {
   void _releaseExportGuards() {
     if (!_holdsExportGuards) return;
     _holdsExportGuards = false;
-    VideoPreviewService.instance.resumeAfterExport();
     wakeLockService.updateWakeLock(
       enable: false,
       wakeLockFor: WakeLockFor.memoryVideoExport,

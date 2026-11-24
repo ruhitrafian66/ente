@@ -20,7 +20,6 @@ import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/models/ml/vector.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/filedata/model/file_data.dart";
 import "package:photos/services/machine_learning/ml_process_lock.dart";
 import "package:photos/src/rust/api/ml_db_api.dart" as rust;
 import "package:photos/utils/ml_util.dart";
@@ -50,7 +49,8 @@ class RustMLDataDB implements IMLDataDB<int> {
   // written for accounts works on the on-device data.
   static RustMLDataDB get instance =>
       kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final RustMLDataDB _accountInstance = RustMLDataDB._privateConstructor();
+  static final RustMLDataDB _accountInstance =
+      RustMLDataDB._privateConstructor();
   static final RustMLDataDB localGalleryInstance =
       RustMLDataDB._privateConstructor(
         databaseName: "ente.ml.offline.db",
@@ -650,26 +650,4 @@ class RustMLDataDB implements IMLDataDB<int> {
   @override
   Future<Set<String>> getClustersForMemoryLane(Set<String> assigned) async =>
       (await store).getClustersForMemoryLane(assigned: assigned);
-
-  @override
-  Future<void> putFDStatus(List<FDStatus> fdStatusList) async =>
-      (await store).putFdStatus(
-        fdStatusList: fdStatusList.map(mappers.toFdStatusRow).toList(),
-      );
-
-  @override
-  Future<Map<int, PreviewInfo>> getFileIDsVidPreview() async {
-    final db = await store;
-    final rows = await db.getFileIdsVidPreview();
-    return rows.map(
-      (fileID, info) => MapEntry(fileID, mappers.toPreviewInfo(info)),
-    );
-  }
-
-  @override
-  Future<Set<int>> getFileIDsWithFDData({DataType? type}) async {
-    final db = await store;
-    final fileIDs = await db.getFileIdsWithFdData(dataType: type?.toJson());
-    return fileIDs.inner.toSet();
-  }
 }

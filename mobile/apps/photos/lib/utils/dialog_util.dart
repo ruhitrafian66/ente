@@ -10,7 +10,6 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:photos/core/constants.dart';
 import 'package:photos/models/button_result.dart';
 import 'package:photos/models/typedefs.dart';
-import "package:photos/module/download/manager.dart";
 import "package:photos/service_locator.dart";
 import 'package:photos/ui/common/progress_dialog.dart';
 import 'package:photos/ui/components/action_sheet_widget.dart';
@@ -111,9 +110,6 @@ String parseErrorForUI(
   }
   if (error is AccountsError_Network) {
     return context.strings.networkConnectionRefusedErr;
-  }
-  if (error.toString() == DownloadManager.applePhotosUnsupportedResourceError) {
-    return context.strings.applePhotosUnsupportedResource;
   }
   if (error is DioException) {
     final DioException dioError = error;

@@ -712,7 +712,8 @@ class GalleryGroups {
 
   List<EnteFile> _copyFilesInRange(int start, int end) {
     // Create a real List<EnteFile> so _createNewGroup can add DummyFiles.
-    // A sublist of List<EnteTrashFile>, for example, only accepts EnteTrashFile.
+    // A sublist of List<DeviceTrashFile>, for example, only accepts
+    // DeviceTrashFile.
     return List<EnteFile>.from(allFiles.getRange(start, end));
   }
 

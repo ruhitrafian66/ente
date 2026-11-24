@@ -24,7 +24,6 @@ import "package:photos/models/collection/collection.dart";
 import "package:photos/models/selected_albums.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/collections_service.dart";
-import "package:photos/services/sync/remote_sync_service.dart";
 import "package:photos/settings/local_settings.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/collections/collection_list_page.dart";
@@ -282,9 +281,6 @@ class _AlbumsTabState extends State<AlbumsTab>
   Future<bool> _shouldShowDeleteEmptyAlbumsFor(
     List<Collection> collections,
   ) async {
-    if (!RemoteSyncService.instance.isFirstRemoteSyncDone()) {
-      return false;
-    }
     final userID = Configuration.instance.getUserID();
     if (userID == null) {
       return false;

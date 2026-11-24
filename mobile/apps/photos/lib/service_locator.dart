@@ -11,18 +11,10 @@ import "package:photos/gateways/collections/collection_files_gateway.dart";
 import "package:photos/gateways/collections/collection_share_gateway.dart";
 import "package:photos/gateways/collections/collections_gateway.dart";
 import "package:photos/gateways/entity/entity_gateway.dart";
-import "package:photos/gateways/files/file_data_gateway.dart";
-import "package:photos/gateways/files/file_magic_gateway.dart";
-import "package:photos/gateways/files/file_upload_gateway.dart";
-import "package:photos/gateways/files/files_gateway.dart";
-import "package:photos/gateways/trash/trash_gateway.dart";
 import "package:photos/gateways/users/users_gateway.dart";
-import "package:photos/module/download/gallery_download_queue_service.dart";
-import "package:photos/module/download/manager.dart";
 import "package:photos/services/backup_preference_service.dart";
 import "package:photos/services/collections_service.dart";
 import "package:photos/services/entity_service.dart";
-import "package:photos/services/filedata/filedata_service.dart";
 import "package:photos/services/location_service.dart";
 import "package:photos/services/machine_learning/compute_controller.dart";
 import "package:photos/services/machine_learning/ml_decryption_record_store.dart";
@@ -35,7 +27,6 @@ import "package:photos/services/memories_cache_service.dart";
 import "package:photos/services/permission/service.dart";
 import "package:photos/services/rewind/rewind_service.dart";
 import "package:photos/services/smart_albums_service.dart";
-import "package:photos/services/sync/trash_sync_service.dart";
 import "package:photos/services/text_embeddings_cache_service.dart";
 import "package:photos/services/wake_lock_service.dart";
 import "package:photos/settings/backup_settings.dart";
@@ -139,15 +130,6 @@ EntityService get entityService {
   return _entityService!;
 }
 
-TrashSyncService? _trashSyncService;
-TrashSyncService get trashSyncService {
-  _trashSyncService ??= TrashSyncService(
-    ServiceLocator.instance.prefs,
-    trashGateway,
-  );
-  return _trashSyncService!;
-}
-
 LocationService? _locationService;
 LocationService get locationService {
   _locationService ??= LocationService();
@@ -207,27 +189,6 @@ PermissionService get permissionService {
   return _permissionService!;
 }
 
-FileDataService? _fileDataService;
-FileDataService get fileDataService {
-  _fileDataService ??= FileDataService(
-    ServiceLocator.instance.prefs,
-    fileDataGateway,
-  );
-  return _fileDataService!;
-}
-
-DownloadManager? _downloadManager;
-DownloadManager get downloadManager {
-  _downloadManager ??= DownloadManager(ServiceLocator.instance.downloadDio);
-  return _downloadManager!;
-}
-
-GalleryDownloadQueueService? _galleryDownloadQueueService;
-GalleryDownloadQueueService get galleryDownloadQueueService {
-  _galleryDownloadQueueService ??= GalleryDownloadQueueService.instance;
-  return _galleryDownloadQueueService!;
-}
-
 SmartAlbumsService? _smartAlbumsService;
 SmartAlbumsService get smartAlbumsService {
   _smartAlbumsService ??= SmartAlbumsService();
@@ -248,36 +209,6 @@ InstallSourceService get installSourceService {
     getToken: Configuration.instance.getToken,
   );
   return _installSourceService!;
-}
-
-FilesGateway? _filesGateway;
-FilesGateway get filesGateway {
-  _filesGateway ??= FilesGateway(ServiceLocator.instance.enteDio);
-  return _filesGateway!;
-}
-
-FileDataGateway? _fileDataGateway;
-FileDataGateway get fileDataGateway {
-  _fileDataGateway ??= FileDataGateway(ServiceLocator.instance.enteDio);
-  return _fileDataGateway!;
-}
-
-FileMagicGateway? _fileMagicGateway;
-FileMagicGateway get fileMagicGateway {
-  _fileMagicGateway ??= FileMagicGateway(ServiceLocator.instance.enteDio);
-  return _fileMagicGateway!;
-}
-
-FileUploadGateway? _fileUploadGateway;
-FileUploadGateway get fileUploadGateway {
-  _fileUploadGateway ??= FileUploadGateway(ServiceLocator.instance.enteDio);
-  return _fileUploadGateway!;
-}
-
-TrashGateway? _trashGateway;
-TrashGateway get trashGateway {
-  _trashGateway ??= TrashGateway(ServiceLocator.instance.enteDio);
-  return _trashGateway!;
 }
 
 CollectionFilesGateway? _collectionFilesGateway;

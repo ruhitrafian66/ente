@@ -1,10 +1,5 @@
-import "dart:async";
-
-import "package:ente_pure_utils/ente_pure_utils.dart";
-import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/collection_meta_event.dart";
 import "package:photos/events/collection_updated_event.dart";
@@ -14,35 +9,25 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/file_load_result.dart";
 import "package:photos/models/gallery_type.dart";
 import "package:photos/models/selected_files.dart";
-import "package:photos/services/collections_service.dart";
-import "package:photos/services/sync/remote_sync_service.dart";
-import "package:photos/ui/components/buttons/button_widget.dart";
-import "package:photos/ui/components/end_to_end_banner.dart";
-import "package:photos/ui/components/models/button_type.dart";
-import "package:photos/ui/notification/toast.dart";
 import "package:photos/ui/viewer/actions/file_selection_overlay_bar.dart";
-import "package:photos/ui/viewer/gallery/collection_page.dart";
 import "package:photos/ui/viewer/gallery/component/group/type.dart";
 import "package:photos/ui/viewer/gallery/gallery.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
 import "package:photos/ui/viewer/gallery/state/selection_state.dart";
-import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/public_link_layout_util.dart";
 
 class SharedPublicCollectionPage extends StatefulWidget {
   final CollectionWithThumbnail c;
   final String tagPrefix;
   final List<EnteFile>? files;
-  final bool shouldShowJoinDialog;
 
   const SharedPublicCollectionPage(
     this.c, {
     this.tagPrefix = "shared_public_collection",
     super.key,
     this.files,
-    this.shouldShowJoinDialog = false,
   }) : assert(!(files == null), 'sharedLinkFiles cannot be empty');
 
   @override
@@ -59,57 +44,6 @@ class _SharedPublicCollectionPageState
   void initState() {
     super.initState();
     logger.info("Init SharedPublicCollectionPage");
-
-    if (widget.shouldShowJoinDialog) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showJoinDialog();
-      });
-    }
-  }
-
-  Future<void> _showJoinDialog() async {
-    final result = await showChoiceDialog(
-      context,
-      title: context.strings.joinAlbum,
-      body: context.strings.joinAlbumConfirmationDialogBody,
-      firstButtonLabel: context.strings.join,
-    );
-    if (result != null && result.action == ButtonAction.first) {
-      if (!mounted) return;
-      final dialog = createProgressDialog(
-        context,
-        context.strings.pleaseWait,
-        isDismissible: true,
-      );
-      await dialog.show();
-      try {
-        if (!mounted) {
-          await dialog.hide();
-          return;
-        }
-        await RemoteSyncService.instance.joinAndSyncCollection(
-          context,
-          widget.c.collection.id,
-        );
-        final c = CollectionsService.instance.getCollectionByID(
-          widget.c.collection.id,
-        );
-        await dialog.hide();
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        if (!mounted) return;
-        await routeToPage(
-          context,
-          CollectionPage(CollectionWithThumbnail(c!, null)),
-          useFadeTransition: true,
-        );
-      } catch (e, s) {
-        logger.severe("Failed to join public album", e, s);
-        await dialog.hide();
-        if (!mounted) return;
-        await showGenericErrorDialog(context: context, error: e);
-      }
-    }
   }
 
   @override
@@ -169,28 +103,6 @@ class _SharedPublicCollectionPageState
       albumName: widget.c.collection.displayName,
       galleryType: galleryType,
       groupType: groupType,
-      header:
-          widget.c.collection.isJoinEnabled &&
-              Configuration.instance.isLoggedIn()
-          ? Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: EndToEndBanner(
-                leadingIcon: Icons.people_outlined,
-                title: context.strings.joinAlbum,
-                caption: widget.c.collection.isCollectEnabledForPublicLink()
-                    ? context.strings.joinAlbumSubtext
-                    : context.strings.joinAlbumSubtextViewer,
-                trailingWidget: ButtonWidget(
-                  buttonType: ButtonType.primary,
-                  buttonSize: ButtonSize.small,
-                  icon: null,
-                  labelText: context.strings.join,
-                  shouldSurfaceExecutionStates: false,
-                  onTap: _joinAlbum,
-                ),
-              ),
-            )
-          : null,
       sortOrderFn: () => widget.c.collection.pubMagicMetadata.fileSortOrder,
     );
 
@@ -214,50 +126,5 @@ class _SharedPublicCollectionPageState
         ),
       ),
     );
-  }
-
-  Future<void> _joinAlbum() async {
-    final result = await showChoiceDialog(
-      context,
-      title: context.strings.joinAlbum,
-      body: context.strings.joinAlbumConfirmationDialogBody,
-      firstButtonLabel: context.strings.join,
-    );
-    if (result != null && result.action == ButtonAction.first) {
-      if (!mounted) return;
-      final dialog = createProgressDialog(
-        context,
-        context.strings.pleaseWait,
-        isDismissible: true,
-      );
-      await dialog.show();
-      try {
-        if (!mounted) {
-          await dialog.hide();
-          return;
-        }
-        await RemoteSyncService.instance.joinAndSyncCollection(
-          context,
-          widget.c.collection.id,
-        );
-        final c = CollectionsService.instance.getCollectionByID(
-          widget.c.collection.id,
-        );
-        await dialog.hide();
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        if (!mounted) return;
-        await routeToPage(
-          context,
-          CollectionPage(CollectionWithThumbnail(c!, null)),
-          useFadeTransition: true,
-        );
-      } catch (e, s) {
-        logger.severe("Failed to join collection", e, s);
-        await dialog.hide();
-        if (!mounted) return;
-        showToast(context, context.strings.somethingWentWrong);
-      }
-    }
   }
 }

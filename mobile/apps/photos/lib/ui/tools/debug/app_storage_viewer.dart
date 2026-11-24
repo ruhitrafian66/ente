@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import "package:logging/logging.dart";
 import 'package:path_provider/path_provider.dart';
-import 'package:photos/core/cache/video_cache_manager.dart';
 import 'package:photos/core/configuration.dart';
 import "package:photos/service_locator.dart";
 import 'package:photos/ui/tools/debug/path_storage_viewer.dart';
@@ -50,18 +49,11 @@ class _AppStorageViewerState extends State<AppStorageViewer> {
         .getThumbnailCacheDirectory();
     final imageCachePath =
         appTemporaryDirectory.path + "/" + DefaultCacheManager.key;
-    final videoCachePath =
-        appTemporaryDirectory.path + "/" + VideoCacheManager.key;
     if (!mounted) return;
     paths.addAll([
       PathStorageItem.name(
         imageCachePath,
         context.strings.remoteImages,
-        allowCacheClear: true,
-      ),
-      PathStorageItem.name(
-        videoCachePath,
-        context.strings.remoteVideos,
         allowCacheClear: true,
       ),
       PathStorageItem.name(

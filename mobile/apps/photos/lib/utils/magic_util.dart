@@ -3,7 +3,6 @@ import "dart:async";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:path/path.dart';
 import 'package:photos/core/event_bus.dart';
 import "package:photos/events/collection_meta_event.dart";
 import "package:photos/events/collection_updated_event.dart";
@@ -14,9 +13,7 @@ import 'package:photos/models/file/file.dart';
 import "package:photos/models/file/file_sort_order.dart";
 import "package:photos/models/metadata/collection_magic.dart";
 import "package:photos/models/metadata/common_keys.dart";
-import "package:photos/models/metadata/file_magic.dart";
 import 'package:photos/services/collections_service.dart';
-import 'package:photos/services/file_magic_service.dart';
 import 'package:photos/ui/common/progress_dialog.dart';
 import 'package:photos/ui/notification/toast.dart';
 import 'package:photos/utils/dialog_util.dart';
@@ -25,34 +22,16 @@ final _logger = Logger('MagicUtil');
 
 enum _VisibilityAction { hide, unHide, archive, unarchive }
 
+// Offline fork (removal stage 2): the file-level edits below (archive, time,
+// name, caption) were server operations in the removed FileMagicService. They
+// always failed without an account. The functions stay as failing stubs until
+// their callers are removed.
 Future<void> changeVisibility(
   BuildContext context,
   List<EnteFile> files,
   int newVisibility,
 ) async {
-  final dialog = createProgressDialog(
-    context,
-    newVisibility == archiveVisibility
-        ? context.strings.archiving
-        : context.strings.unarchiving,
-  );
-  await dialog.show();
-  try {
-    await FileMagicService.instance.changeVisibility(files, newVisibility);
-    await dialog.hide();
-    if (context.mounted) {
-      showShortToast(
-        context,
-        newVisibility == archiveVisibility
-            ? context.strings.successfullyArchived
-            : context.strings.successfullyUnarchived,
-      );
-    }
-  } catch (e, s) {
-    _logger.severe("failed to update file visibility", e, s);
-    await dialog.hide();
-    rethrow;
-  }
+  throw UnsupportedError("File visibility needs an account");
 }
 
 Future<void> changeCollectionVisibility(
@@ -265,91 +244,16 @@ Future<bool> editTime(
   BuildContext context,
   Map<EnteFile, int> filesToEditedTimes,
 ) async {
-  try {
-    final files = filesToEditedTimes.keys
-        .where((file) => file.uploadedFileID != null)
-        .toList();
-    if (files.isEmpty) {
-      _logger.severe('No files to edit time for');
-      return false;
-    }
-    final fileIdToTimeUpdate = <int, Map<String, dynamic>>{};
-    for (final entry in filesToEditedTimes.entries) {
-      final file = entry.key;
-      if (file.uploadedFileID == null) continue;
-      final editedTime = entry.value;
-      fileIdToTimeUpdate[file.uploadedFileID!] = {
-        editTimeKey: editedTime,
-        dateTimeKey: formatPubMagicDateTime(
-          DateTime.fromMicrosecondsSinceEpoch(editedTime),
-        ),
-      };
-    }
-
-    final dialog = createProgressDialog(context, context.strings.pleaseWait);
-    await dialog.show();
-    try {
-      await FileMagicService.instance.updatePublicMagicMetadata(
-        files,
-        null,
-        metadataUpdateMap: fileIdToTimeUpdate,
-      );
-      if (_shouldReloadGallery(editTimeKey)) {
-        Bus.instance.fire(
-          ForceReloadHomeGalleryEvent("FileMetadataChange-$editTimeKey"),
-        );
-      }
-      await dialog.hide();
-      if (context.mounted) {
-        showShortToast(context, context.strings.done);
-      }
-    } catch (e, s) {
-      _logger.severe("failed to update times $fileIdToTimeUpdate", e, s);
-      await dialog.hide();
-      rethrow;
-    }
-    return true;
-  } catch (e) {
-    if (!context.mounted) return false;
-    showShortToast(context, context.strings.somethingWentWrong);
-    return false;
-  }
+  showShortToast(context, context.strings.somethingWentWrong);
+  return false;
 }
 
 Future<void> editFilename(BuildContext context, EnteFile file) async {
-  final fileName = file.displayName;
-  final nameWithoutExt = basenameWithoutExtension(fileName);
-  final extName = extension(fileName);
-  final result = await showTextInputDialog(
-    context,
-    title: context.strings.renameFile,
-    submitButtonLabel: context.strings.rename,
-    initialValue: nameWithoutExt,
-    message: extName.toUpperCase(),
-    alignMessage: Alignment.centerRight,
-    hintText: context.strings.enterFileName,
-    maxLength: 50,
-    alwaysShowSuccessState: true,
-    onSubmit: (String text) async {
-      if (text.isEmpty || text.trim() == nameWithoutExt.trim()) {
-        return;
-      }
-      final newName = text + extName;
-      await _updatePublicMetadata(
-        context,
-        List.of([file]),
-        editNameKey,
-        newName,
-        showProgressDialogs: false,
-        showDoneToast: false,
-      );
-    },
+  _logger.severe("Failed to rename file");
+  await showGenericErrorDialog(
+    context: context,
+    error: UnsupportedError("File rename needs an account"),
   );
-  if (result is Exception) {
-    _logger.severe("Failed to rename file");
-    if (!context.mounted) return;
-    await showGenericErrorDialog(context: context, error: result);
-  }
 }
 
 Future<bool> editFileCaption(
@@ -357,61 +261,7 @@ Future<bool> editFileCaption(
   EnteFile file,
   String caption,
 ) async {
-  try {
-    await _updatePublicMetadata(
-      context,
-      [file],
-      captionKey,
-      caption,
-      showDoneToast: false,
-    );
-
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-Future<void> _updatePublicMetadata(
-  BuildContext? context,
-  List<EnteFile> files,
-  String key,
-  dynamic value, {
-  bool showDoneToast = true,
-  bool showProgressDialogs = true,
-}) async {
-  if (files.isEmpty) {
-    return;
-  }
-  ProgressDialog? dialog;
-  if (context != null && showProgressDialogs) {
-    dialog = createProgressDialog(context, context.strings.pleaseWait);
-    await dialog.show();
-  }
-  try {
-    final Map<String, dynamic> update = {key: value};
-    await FileMagicService.instance.updatePublicMagicMetadata(files, update);
-    if (context != null) {
-      await dialog?.hide();
-      if (showDoneToast && context.mounted) {
-        showShortToast(context, context.strings.done);
-      }
-    }
-
-    if (_shouldReloadGallery(key)) {
-      Bus.instance.fire(ForceReloadHomeGalleryEvent("FileMetadataChange-$key"));
-    }
-  } catch (e, s) {
-    _logger.severe("failed to update $key = $value", e, s);
-    if (context != null) {
-      await dialog?.hide();
-    }
-    rethrow;
-  }
-}
-
-bool _shouldReloadGallery(String key) {
-  return key == editTimeKey;
+  return false;
 }
 
 String _visActionProgressDialogText(

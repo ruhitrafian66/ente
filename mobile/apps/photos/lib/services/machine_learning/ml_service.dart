@@ -22,10 +22,8 @@ import "package:photos/models/file/file_type.dart";
 import "package:photos/models/ml/clip.dart";
 import "package:photos/models/ml/face/face.dart";
 import "package:photos/models/ml/ml_versions.dart";
-import "package:photos/module/download/file.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/filedata/model/file_data.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering_service.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
@@ -36,8 +34,8 @@ import "package:photos/services/machine_learning/ml_process_lock.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/machine_learning/ml_run_control.dart";
 import "package:photos/services/machine_learning/semantic_search/semantic_search_service.dart";
+import "package:photos/services/person_folders/person_folder_service.dart";
 import "package:photos/services/search_service.dart";
-import "package:photos/services/video_preview_service.dart";
 import "package:photos/utils/isolate/isolate_operations.dart";
 import "package:photos/utils/ml_util.dart";
 import "package:photos/utils/network_util.dart";
@@ -53,9 +51,6 @@ class MLService {
 
   int? _lastRemoteFetch;
   static const int _kRemoteFetchCooldownOnLite = 1000 * 60 * 5;
-  static const int _kStartupOwnedRemoteHydrationMissingFileThreshold = 200;
-  Future<void>? _ownedRemoteHydrationFuture;
-  bool _hasScheduledStartupOwnedRemoteHydration = false;
 
   late String client;
 
@@ -99,7 +94,6 @@ class MLService {
   Future<void> init() async {
     if (_isInitialized) {
       _schedulePredownloadLocalModels();
-      scheduleStartupOwnedRemoteHydration();
       return;
     }
     _logger.info("init called");
@@ -114,9 +108,6 @@ class MLService {
 
     Bus.instance.on<ComputeControlEvent>().listen((event) {
       if (!hasGrantedMLConsent) {
-        if (!isProcessBg && event.shouldRun) {
-          VideoPreviewService.instance.queueFiles(duration: Duration.zero);
-        }
         return;
       }
 
@@ -146,7 +137,6 @@ class MLService {
 
     _isInitialized = true;
     _schedulePredownloadLocalModels();
-    scheduleStartupOwnedRemoteHydration();
     _logger.info('init done');
   }
 
@@ -187,134 +177,6 @@ class MLService {
     }
   }
 
-  void scheduleStartupOwnedRemoteHydration() {
-    if (_hasScheduledStartupOwnedRemoteHydration ||
-        isProcessBg ||
-        !hasGrantedMLConsent ||
-        isLocalGalleryMode ||
-        !localSettings.remoteFetchEnabled) {
-      return;
-    }
-    _hasScheduledStartupOwnedRemoteHydration = true;
-    unawaited(_runStartupOwnedRemoteHydration());
-  }
-
-  Future<void> _runStartupOwnedRemoteHydration() async {
-    if (!hasGrantedMLConsent || isLocalGalleryMode) {
-      return;
-    }
-    try {
-      await fileDataService.syncFDStatus();
-    } catch (e, s) {
-      _logger.warning(
-        "Skipping startup-owned remote ML hydration because FD status refresh failed",
-        e,
-        s,
-      );
-      return;
-    }
-    try {
-      await hydrateRemoteEmbeddingsForOwnedFiles(
-        reason: "startup",
-        skipHydrationIfCandidateFileCountAtMost:
-            _kStartupOwnedRemoteHydrationMissingFileThreshold,
-      );
-    } catch (e, s) {
-      _logger.warning(
-        "Skipping startup-owned remote ML hydration because owned hydration failed",
-        e,
-        s,
-      );
-    }
-  }
-
-  Future<void> hydrateRemoteEmbeddingsForOwnedFiles({
-    required String reason,
-    int? skipHydrationIfCandidateFileCountAtMost,
-  }) async {
-    if (isProcessBg ||
-        isLocalGalleryMode ||
-        !hasGrantedMLConsent ||
-        !localSettings.remoteFetchEnabled) {
-      return;
-    }
-    final existing = _ownedRemoteHydrationFuture;
-    if (existing != null) {
-      _logger.info(
-        "Owned remote ML hydration already running, joining existing run ($reason)",
-      );
-      return existing;
-    }
-    final control = MlRunControl();
-    final attempt = await _runExclusiveWithControl(
-      MlOperation.startupRemoteHydration,
-      control,
-      () async {
-        final future = _runOwnedRemoteHydrationSafely(
-          reason: reason,
-          control: control,
-          skipHydrationIfCandidateFileCountAtMost:
-              skipHydrationIfCandidateFileCountAtMost,
-        );
-        _ownedRemoteHydrationFuture = future;
-        try {
-          await future;
-        } finally {
-          if (identical(_ownedRemoteHydrationFuture, future)) {
-            _ownedRemoteHydrationFuture = null;
-          }
-        }
-      },
-    );
-    if (attempt != MlLockAttempt.ran) {
-      _logger.info(
-        "Skipping owned remote ML hydration ($reason): ml process lock "
-        "denied (${attempt.name})",
-      );
-    }
-  }
-
-  Future<void> _runOwnedRemoteHydrationSafely({
-    required String reason,
-    required MlRunControl control,
-    int? skipHydrationIfCandidateFileCountAtMost,
-  }) async {
-    assert(MlProcessLock.instance.isBusy, "ml funnel must be held");
-    if (control.stopRequested) {
-      _logRunStopped(control, "before owned remote hydration started");
-      return;
-    }
-    try {
-      final summary = await hydrateOwnedRemoteMLData(
-        mlDataDB: MLDataDB.instance,
-        control: control,
-        skipHydrationIfCandidateFileCountAtMost:
-            skipHydrationIfCandidateFileCountAtMost,
-      );
-      if (summary.candidateFiles == 0) {
-        _logger.info(
-          "Skipping owned remote ML hydration ($reason): no owned files need remote hydration",
-        );
-        return;
-      }
-      if (summary.skippedDueToCandidateThreshold) {
-        _logger.info(
-          "Skipping owned remote ML hydration ($reason): only ${summary.candidateFiles} "
-          "owned files are missing remote ML data (threshold: > "
-          "$skipHydrationIfCandidateFileCountAtMost)",
-        );
-        return;
-      }
-      _logger.info(
-        "Owned remote ML hydration ($reason) finished for ${summary.candidateFiles} files "
-        "(faces hydrated: ${summary.hydratedFaces}, clip hydrated: ${summary.hydratedClips}, "
-        "still pending local ML: ${summary.remainingLocalMl})",
-      );
-    } catch (e, s) {
-      _logger.warning("Owned remote ML hydration ($reason) failed", e, s);
-    }
-  }
-
   void _schedulePredownloadLocalModels() {
     if (isProcessBg || _predownloadLocalModelsTimer?.isActive == true) {
       return;
@@ -339,14 +201,8 @@ class MLService {
     return canFetch;
   }
 
-  Future<void> _sync() async {
-    await fileDataService.syncFDStatus();
-    await PersonService.instance.sync();
-  }
-
   Future<MlRunDisposition> runAllML({
     bool force = false,
-    bool remoteSyncOnly = false,
     bool allowImageIndexing = true,
     int? maxFilesToIndex,
     MlRunControl? control,
@@ -400,7 +256,6 @@ class MLService {
           disposition = await _runAllMLProtected(
             mode: mode,
             force: force,
-            remoteSyncOnly: remoteSyncOnly,
             allowImageIndexing: allowImageIndexing,
             maxFilesToIndex: maxFilesToIndex,
             control: runControl,
@@ -446,7 +301,6 @@ class MLService {
   Future<MlRunDisposition> _runAllMLProtected({
     required MLMode mode,
     required bool force,
-    required bool remoteSyncOnly,
     required bool allowImageIndexing,
     required int? maxFilesToIndex,
     required MlRunControl control,
@@ -458,30 +312,10 @@ class MLService {
     }
     final mlDataDB = _dbForMode(mode);
     try {
-      if (remoteSyncOnly && mode == MLMode.localGallery) {
-        return MlRunDisposition.completed;
-      }
-      await _sync();
+      await PersonService.instance.sync();
       if (control.stopRequested) {
         _logRunStopped(control, "after sync");
         return MlRunDisposition.stopped;
-      }
-
-      if (remoteSyncOnly) {
-        if (localSettings.remoteFetchEnabled && canFetch()) {
-          await _fetchAndIndexAllImages(
-            mode: mode,
-            control: control,
-            allowImageIndexing: false,
-          );
-        }
-        if (control.stopRequested) {
-          return MlRunDisposition.stopped;
-        }
-        await PersonService.instance.sync();
-        return control.stopRequested
-            ? MlRunDisposition.stopped
-            : MlRunDisposition.completed;
       }
 
       final int unclusteredFacesCount = await mlDataDB
@@ -546,9 +380,8 @@ class MLService {
       return MlRunDisposition.completed;
     } finally {
       _logger.info("ML finished running");
-      if (!isProcessBg) {
-        VideoPreviewService.instance.queueFiles();
-      }
+      // Offline fork: re-sort person folders after an ML pass.
+      PersonFolderService.instance.onMlRunFinished();
     }
   }
 
@@ -861,13 +694,6 @@ class MLService {
       actuallyRanML = result.ranML;
       if (!actuallyRanML) return actuallyRanML;
       final bool isLocalGallery = instruction.isLocalGallery;
-      final FileDataEntity? dataEntity = isLocalGallery
-          ? null
-          : (instruction.existingRemoteFileML ??
-                FileDataEntity.empty(
-                  instruction.file.uploadedFileID!,
-                  DataType.mlData,
-                ));
       final List<Face> faces = [];
       if (result.facesRan) {
         if (result.faces!.isEmpty) {
@@ -884,33 +710,6 @@ class MLService {
             );
           }
         }
-        if (!isLocalGallery) {
-          dataEntity!.putFace(
-            RemoteFaceEmbedding(
-              faces,
-              faceMlVersion,
-              client: client,
-              height: result.decodedImageSize.height,
-              width: result.decodedImageSize.width,
-              flags: result.remoteFlags,
-            ),
-          );
-        }
-      }
-      if (result.clipRan) {
-        if (!isLocalGallery) {
-          dataEntity!.putClip(
-            RemoteClipEmbedding(
-              result.clip!.embedding,
-              version: clipMlVersion,
-              client: client,
-              flags: result.remoteFlags,
-            ),
-          );
-        }
-      }
-      if (!isLocalGallery && (result.facesRan || result.clipRan)) {
-        await fileDataService.putFileData(instruction.file, dataEntity!);
       }
       if (result.facesRan) await mlDataDB.bulkInsertFaces(faces);
       if (result.clipRan) {
@@ -974,9 +773,6 @@ class MLService {
         _logger.info(
           "Stored empty ML result markers for fileID ${instruction.fileKey}: ${storedMarkers.join(', ')}",
         );
-        if (e is RepeatedFileDecryptionError) {
-          await mlDecryptionRecordStore.add(instruction.fileKey);
-        }
         indexedOrSkipped = true;
         return true;
       }
@@ -999,7 +795,6 @@ class MLService {
             );
           }
         }
-        await _evictRemoteCacheAfterMLProcessing(instruction.file);
       }
     }
   }
@@ -1054,25 +849,6 @@ class MLService {
     return Platform.isIOS &&
         file.fileType != FileType.video &&
         !file.isRemoteOnlyFile;
-  }
-
-  bool _shouldEvictRemoteCacheAfterMLProcessing(EnteFile file) {
-    return file.isRemoteOnlyFile && file.fileType != FileType.video;
-  }
-
-  Future<void> _evictRemoteCacheAfterMLProcessing(EnteFile file) async {
-    if (!_shouldEvictRemoteCacheAfterMLProcessing(file)) {
-      return;
-    }
-    try {
-      await removeFromDownloadCache(file);
-    } catch (e, s) {
-      _logger.warning(
-        "Failed to evict remote file cached for ML for fileID ${file.uploadedFileID}",
-        e,
-        s,
-      );
-    }
   }
 
   bool _canRunMLFunction({required String function}) {

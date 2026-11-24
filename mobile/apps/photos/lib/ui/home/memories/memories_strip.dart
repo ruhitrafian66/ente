@@ -33,7 +33,6 @@ import 'package:photos/ui/home/memories/memory_card.dart';
 import "package:photos/ui/home/memories/memory_card_constants.dart";
 import "package:photos/ui/home/memories/memory_cover_util.dart";
 import "package:photos/ui/home/memories/memory_lane_card.dart";
-import "package:photos/ui/home/memories/memory_video_prefetcher.dart";
 import "package:photos/ui/home/memories/specials/special_memory_card.dart";
 import "package:photos/ui/rewind/entry/rewind_entry.dart";
 import "package:photos/ui/rewind/entry/rewind_memory_tile.dart";
@@ -75,7 +74,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
   Uint8List? _oldestMemoryLaneFace;
   Uint8List? _newestMemoryLaneFace;
   PersonEntity? _memoryLanePerson;
-  final _videoPrefetcher = MemoryVideoPrefetcher();
   final _scrollController = ScrollController();
   bool _shouldShowCraftingMemories = false;
   List<SmartMemory> _memories = [];
@@ -134,7 +132,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     _collectionUpdatedSubscription.cancel();
     _diffSyncCompleteSubscription.cancel();
     _warmTimer?.cancel();
-    _videoPrefetcher.dispose();
     _scrollController.dispose();
     MemoryLaneService.instance.readyPersonIds.removeListener(
       _onMemoryLaneReadyTimelinesChanged,
@@ -391,14 +388,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     _warmTimer = Timer(const Duration(seconds: 5), () {
       if (!mounted || gen != _warmGeneration) return;
       final itemLists = memories.map((e) => e.memories).toList(growable: false);
-      _videoPrefetcher.prefetchFiles(
-        itemLists
-            .take(kMemoryCoverWarmCap)
-            .where((items) => items.isNotEmpty)
-            .map((items) => items[getNextMemoryIndex(items)].file),
-        stillActive: () => mounted && gen == _warmGeneration,
-        replacePending: true,
-      );
       unawaited(
         warmMemoryCovers(
           itemLists,
@@ -429,7 +418,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     _warmTimer = null;
     _warmGeneration++;
     _lastWarmSignature = null;
-    _videoPrefetcher.clearPending();
   }
 
   Future<void> _fetchMemoryLane() async {

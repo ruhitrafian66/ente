@@ -14,23 +14,18 @@ import 'package:path_provider/path_provider.dart';
 import "package:photos/app_mode.dart";
 import 'package:photos/core/cache/image_cache.dart';
 import 'package:photos/core/cache/thumbnail_in_memory_cache.dart';
-import 'package:photos/core/cache/video_cache_manager.dart';
 import 'package:photos/core/constants.dart';
 import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/collections_db.dart';
 import 'package:photos/db/files_db.dart';
-import "package:photos/db/gallery_downloads_db.dart";
 import "package:photos/db/memories_db.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/photo_review_db.dart";
-import 'package:photos/db/trash_db.dart';
-import 'package:photos/db/upload_locks_db.dart';
 import "package:photos/events/app_mode_changed_event.dart";
 import 'package:photos/events/signed_in_event.dart';
 import 'package:photos/events/user_logged_out_event.dart';
 import 'package:photos/gateways/users/models/key_attributes.dart';
-import 'package:photos/module/upload/upload_artifact.dart';
 import "package:photos/offline_fork.dart";
 import 'package:photos/service_locator.dart';
 import 'package:photos/services/authenticated_session.dart';
@@ -46,7 +41,6 @@ import 'package:photos/services/notification_key_service.dart';
 import "package:photos/services/notification_service.dart";
 import 'package:photos/services/search_service.dart';
 import 'package:photos/services/sync/sync_service.dart';
-import 'package:photos/services/video_preview_service.dart';
 import 'package:photos/src/rust/third_party/ente_frb_lib/account_deletion.dart'
     as account_deletion;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -180,7 +174,15 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
     }
   }
 
-  // Leave upload artifacts for FileUploader to resume or delete.
+  // Offline fork: the uploader is gone. This is the former
+  // `isUploadTempArtifactPath` predicate, kept so that the temp clean-up
+  // skips the same files as before.
+  static bool _isUploadTempArtifactPath(String path) {
+    final fileName = path.split(Platform.pathSeparator).last;
+    return fileName.startsWith(uploadTempFilePrefix) &&
+        fileName.endsWith('.encrypted');
+  }
+
   Future<void> _cleanUpStaleFiles(Directory tempDocumentsDir) async {
     try {
       final currentTime = DateTime.now().microsecondsSinceEpoch;
@@ -191,7 +193,7 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
         final files = tempDocumentsDir.listSync();
         for (final file in files) {
           if (file is File) {
-            if (isUploadTempArtifactPath(file.path)) {
+            if (_isUploadTempArtifactPath(file.path)) {
               skippedTempUploadFiles++;
               continue;
             }
@@ -218,7 +220,6 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
     _logger.info("Logging out, autoLogout: $autoLogout");
     MLService.instance.stopActiveRun(MlStopReason.logout);
     if (!autoLogout) {
-      VideoPreviewService.instance.stop('logout');
       if (SyncService.instance.isSyncInProgress()) {
         SyncService.instance.stopSync();
         try {
@@ -254,13 +255,10 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
     );
 
     await FilesDB.instance.clearTable();
-    await GalleryDownloadsDB.instance.clearTable();
     await CollectionsDB.instance.clearTable();
     await MemoriesDB.instance.clearTable();
     await PhotoReviewDB.instance.clearTable();
     await MLDataDB.instance.clearTable();
-    await UploadLocksDB.instance.clearTable();
-    await TrashDB.instance.clearTable();
 
     ThumbnailInMemoryLruCache.clearAll();
     FileLruCache.clearAll();
@@ -269,12 +267,6 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
       await DefaultCacheManager().emptyCache();
     } catch (e) {
       _logger.warning("Failed to clear image cache", e);
-    }
-
-    try {
-      await VideoCacheManager.instance.emptyCache();
-    } catch (e) {
-      _logger.warning("Failed to clear video cache", e);
     }
 
     await SimilarImagesService.instance.clearCache();

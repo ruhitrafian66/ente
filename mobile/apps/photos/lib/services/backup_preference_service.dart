@@ -1,8 +1,11 @@
 import 'package:logging/logging.dart';
+import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/device_files_db.dart';
 import 'package:photos/db/files_db.dart';
+import 'package:photos/events/backup_folders_updated_event.dart';
+import 'package:photos/events/local_photos_updated_event.dart';
 import 'package:photos/models/device_collection.dart';
-import 'package:photos/services/sync/remote_sync_service.dart';
+import 'package:photos/models/file/file.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class BackupPreferenceService {
@@ -123,7 +126,13 @@ class BackupPreferenceService {
     if (updateMap.isEmpty) {
       return;
     }
-    await RemoteSyncService.instance.updateDeviceFolderSyncStatus(updateMap);
+    // Offline fork: the local part of the removed
+    // RemoteSyncService.updateDeviceFolderSyncStatus (no upload queue).
+    await FilesDB.instance.updateDevicePathSyncStatus(updateMap);
+    Bus.instance.fire(
+      LocalPhotosUpdatedEvent(<EnteFile>[], source: "deviceFolderSync"),
+    );
+    Bus.instance.fire(BackupFoldersUpdatedEvent());
     _logger.fine('Updated ${updateMap.length} device folders backup status');
   }
 }

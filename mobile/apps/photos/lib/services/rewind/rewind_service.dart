@@ -21,7 +21,6 @@ import "package:photos/services/rewind/rewind_edition.dart";
 import "package:photos/services/rewind/rewind_progress.dart";
 import "package:photos/services/rewind/rewind_request.dart";
 import "package:photos/services/sync/local_sync_service.dart";
-import "package:photos/services/sync/remote_sync_service.dart";
 import "package:photos/src/rust/api/rewind_api.dart" as rust;
 import "package:photos/ui/rewind/story/rewind_story.dart";
 import "package:shared_preferences/shared_preferences.dart";
@@ -307,9 +306,8 @@ class RewindService {
   int? get _owner =>
       isLocalGalleryMode ? 0 : Configuration.instance.getUserID();
 
-  bool get _hasSyncedLibrary => isLocalGalleryMode
-      ? LocalSyncService.instance.hasCompletedFirstImport()
-      : RemoteSyncService.instance.isFirstRemoteSyncDone();
+  bool get _hasSyncedLibrary =>
+      LocalSyncService.instance.hasCompletedFirstImport();
 
   Future<String> _cacheDirectory() async => path.join(
     (await getApplicationSupportDirectory()).path,

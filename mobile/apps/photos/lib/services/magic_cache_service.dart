@@ -23,7 +23,6 @@ import "package:photos/models/search/generic_search_result.dart";
 import "package:photos/models/search/hierarchical/hierarchical_search_filter.dart";
 import "package:photos/models/search/hierarchical/magic_filter.dart";
 import "package:photos/models/search/search_types.dart";
-import "package:photos/module/upload/service/file_uploader.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/semantic_search/semantic_search_service.dart";
 import "package:photos/services/search_service.dart";
@@ -342,10 +341,6 @@ class MagicCacheService {
       _pendingUpdateReason.add("Forced update");
     }
     await _updateCacheIfTheTimeHasCome();
-    if (FileUploader.instance.hasPendingUploads && !forced && !interactive) {
-      _scheduleBackgroundUpdate();
-      return;
-    }
     if (_pendingUpdateReason.isEmpty) {
       _logger.info(
         "No update needed as ${_pendingUpdateReason.toList()} and isUpdateInProgress $_isUpdateInProgress",

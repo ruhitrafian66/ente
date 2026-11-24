@@ -113,7 +113,6 @@ void main() {
             indexNotifier: indexNotifier,
             removeCurrentMemory: () {},
             preloadThumbnail: (_) {},
-            preloadVideos: (_) {},
             child: const FullScreenMemory(
               "Memory",
               0,

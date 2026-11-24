@@ -14,10 +14,8 @@ import 'package:photos/db/files_db.dart';
 import "package:photos/events/files_updated_event.dart";
 import 'package:photos/events/local_photos_updated_event.dart';
 import "package:photos/events/reset_zoom_of_photo_view_event.dart";
-import "package:photos/events/retry_failed_image_load_event.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
-import 'package:photos/module/download/download_error.dart';
 import 'package:photos/module/download/file.dart';
 import 'package:photos/module/download/thumbnail.dart';
 import "package:photos/module/metadata/exif.dart";
@@ -28,8 +26,6 @@ import "package:photos/ui/actions/file/file_actions.dart";
 import "package:photos/ui/viewer/file/file_viewer_image_page_readiness.dart";
 import "package:photos/ui/viewer/file/image_zoom/image_zoom_viewer.dart";
 import 'package:photos/ui/viewer/file/thumbnail_widget.dart';
-import 'package:photos/ui/viewer/gallery/state/selection_state.dart';
-import 'package:photos/utils/dialog_util.dart';
 import 'package:photos/utils/image_util.dart';
 import "package:photos/utils/ram_check_util.dart";
 
@@ -75,10 +71,6 @@ class _ZoomableImageState extends State<ZoomableImage> {
   bool _loadedLargeThumbnail = false;
   bool _loadingFinalImage = false;
   bool _loadedFinalImage = false;
-  bool _finalImageDecryptionFailed = false;
-  // Downloads cannot be cancelled. Defer a retry until the current attempt
-  // fails.
-  bool _pendingFinalImageRetry = false;
   bool _convertToSupportedFormat = false;
   bool _showingThumbnailFallback = false;
   // Start the memory slideshow timer when any image is ready, without waiting
@@ -88,8 +80,6 @@ class _ZoomableImageState extends State<ZoomableImage> {
   final _imageFrameReady = ValueNotifier(false);
   final _imageZoomController = ImageZoomController();
   late final StreamSubscription<ResetZoomOfPhotoView> _resetZoomSubscription;
-  late final StreamSubscription<RetryFailedImageLoadEvent>
-  _retryFailedLoadSubscription;
 
   // Flutter can crash while decoding very large images.
   // https://github.com/flutter/flutter/issues/110331
@@ -138,22 +128,6 @@ class _ZoomableImageState extends State<ZoomableImage> {
         unawaited(_imageZoomController.reset());
       }
     });
-
-    _retryFailedLoadSubscription = Bus.instance
-        .on<RetryFailedImageLoadEvent>()
-        .listen((_) {
-          if (!mounted || _loadedFinalImage) return;
-          _finalImageDecryptionFailed = false;
-          if (!_loadedSmallThumbnail && _photo.isRemoteOnlyFile) {
-            // Thumbnail requests are deduplicated. Evict the failed request
-            // before retrying.
-            removePendingGetThumbnailRequestIfAny(_photo);
-          }
-          if (_loadingFinalImage) {
-            _pendingFinalImageRetry = true;
-          }
-          setState(() {});
-        });
   }
 
   void _onZoomChanged() {
@@ -212,17 +186,12 @@ class _ZoomableImageState extends State<ZoomableImage> {
       ..removeListener(_onZoomChanged)
       ..dispose();
     _resetZoomSubscription.cancel();
-    _retryFailedLoadSubscription.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_photo.isRemoteOnlyFile) {
-      _loadNetworkImage();
-    } else {
-      _loadLocalImage(context);
-    }
+    _loadLocalImage(context);
     final content = ImageZoomViewer(
       imageProvider: _imageProvider,
       controller: _imageZoomController,
@@ -277,73 +246,6 @@ class _ZoomableImageState extends State<ZoomableImage> {
     });
   }
 
-  void _loadNetworkImage() {
-    if (!_loadedSmallThumbnail && !_loadedFinalImage) {
-      final cachedThumbnail = ThumbnailInMemoryLruCache.get(_photo);
-      if (cachedThumbnail != null) {
-        _imageProvider = Image.memory(cachedThumbnail).image;
-        _loadedSmallThumbnail = true;
-        _notifyReadyOnce();
-      } else {
-        getThumbnailFromServer(_photo)
-            .then((file) {
-              final imageProvider = Image.memory(file).image;
-              if (mounted) {
-                precacheImage(imageProvider, context)
-                    .then((value) {
-                      if (mounted) {
-                        setState(() {
-                          _imageProvider = imageProvider;
-                          _loadedSmallThumbnail = true;
-                        });
-                        _notifyReadyOnce();
-                      }
-                    })
-                    .catchError((e) {
-                      _logger.severe(
-                        "Could not load image " + _photo.toString(),
-                      );
-                      _loadedSmallThumbnail = true;
-                    });
-              }
-            })
-            .catchError((e, s) {
-              _logger.warning(
-                "Failed to fetch thumbnail from server for ${_photo.tag}",
-                e,
-                s,
-              );
-            });
-      }
-    }
-    if (!_loadedFinalImage &&
-        !_loadingFinalImage &&
-        !_finalImageDecryptionFailed) {
-      _loadingFinalImage = true;
-      getFileFromServer(_photo, throwOnDecryptionFailure: true)
-          .then((file) {
-            if (file != null) {
-              _onFileLoaded(file);
-            } else {
-              // Most network failures return null; retry them like exceptions.
-              _onFinalImageFetchFailed();
-            }
-          })
-          .catchError((e, s) {
-            _logger.warning(
-              "Failed to fetch final image from server for ${_photo.tag}",
-              e,
-              s,
-            );
-            if (e is DownloadDecryptionError) {
-              _onFinalImageDecryptionFailed();
-            } else {
-              _onFinalImageFetchFailed();
-            }
-          });
-    }
-  }
-
   void _loadLocalImage(BuildContext context) {
     if (!_loadedSmallThumbnail &&
         !_loadedLargeThumbnail &&
@@ -377,7 +279,6 @@ class _ZoomableImageState extends State<ZoomableImage> {
 
     if (!_loadingFinalImage && !_loadedFinalImage && !_photo.isDeviceTrash) {
       _loadingFinalImage = true;
-      final selectedFiles = SelectionState.maybeOf(context)?.selectedFiles;
       getFile(
         _photo,
         isOrigin:
@@ -388,25 +289,14 @@ class _ZoomableImageState extends State<ZoomableImage> {
           _onFileLoaded(file);
         } else {
           _logger.info("File was deleted " + _photo.toString());
-          if (_photo.uploadedFileID != null) {
-            if (selectedFiles?.dedupeByUploadID ?? false) {
-              if (!mounted) return;
-              selectedFiles!.mutateFile(_photo, () => _photo.localID = null);
-            } else {
-              _photo.localID = null;
-            }
-            FilesDB.instance.update(_photo);
-            _loadNetworkImage();
-          } else {
-            FilesDB.instance.deleteLocalFile(_photo);
-            Bus.instance.fire(
-              LocalPhotosUpdatedEvent(
-                [_photo],
-                type: EventType.deletedFromDevice,
-                source: "zoomPreview",
-              ),
-            );
-          }
+          FilesDB.instance.deleteLocalFile(_photo);
+          Bus.instance.fire(
+            LocalPhotosUpdatedEvent(
+              [_photo],
+              type: EventType.deletedFromDevice,
+              source: "zoomPreview",
+            ),
+          );
         }
       });
     }
@@ -511,21 +401,6 @@ class _ZoomableImageState extends State<ZoomableImage> {
         }
       });
     }
-  }
-
-  void _onFinalImageFetchFailed() {
-    _loadingFinalImage = false;
-    if (_pendingFinalImageRetry && mounted && !_loadedFinalImage) {
-      _pendingFinalImageRetry = false;
-      setState(() {});
-    }
-  }
-
-  void _onFinalImageDecryptionFailed() {
-    _loadingFinalImage = false;
-    _finalImageDecryptionFailed = true;
-    if (!mounted) return;
-    unawaited(showDownloadDecryptionFailedDialog(context: context));
   }
 
   Future<void> _loadHeicWithRust(File file) async {

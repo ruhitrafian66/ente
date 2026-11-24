@@ -15,7 +15,6 @@ import "package:photos/core/event_bus.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/photo_review/photo_review_models.dart";
-import "package:photos/service_locator.dart";
 import "package:photos/services/favorites_service.dart";
 import "package:photos/services/photo_review/photo_review_service.dart";
 import "package:photos/ui/tools/photo_review/widgets/review_swipe_stack.dart";
@@ -329,9 +328,7 @@ class _ReviewMonthPageState extends State<ReviewMonthPage> {
     final queued = _queued.toList();
     if (queued.isEmpty || _deleting) return;
     final hasLocal = queued.any((file) => file.localID != null);
-    final hasRemote =
-        !isLocalGalleryMode && queued.any((file) => file.isUploaded);
-    if (!hasLocal && !hasRemote) return;
+    if (!hasLocal) return;
     var didDeleteFiles = false;
     var deletedLocal = false;
     void recordDeletion({
@@ -355,8 +352,6 @@ class _ReviewMonthPageState extends State<ReviewMonthPage> {
       final didDelete = await showDeleteConfirmationSheet(
         context,
         files: queued,
-        isLocal: hasLocal,
-        isRemote: hasRemote,
         count: queued.length,
         onDeleteFromLocal: () async {
           final result = await deleteFilesOnDeviceOnly(context, queued);
@@ -365,18 +360,6 @@ class _ReviewMonthPageState extends State<ReviewMonthPage> {
             kept: result.where((file) => file.isUploaded).toList(),
           );
           deletedLocal = result.isNotEmpty;
-          return result.isNotEmpty;
-        },
-        onDeleteFromRemote: () async {
-          final remote = queued.where((file) => file.isUploaded).toList();
-          await deleteFilesFromRemoteOnly(context, List.of(remote));
-          recordDeletion(removed: remote);
-          return remote.isNotEmpty;
-        },
-        onDeleteFromBoth: () async {
-          final result = await deleteFilesFromEverywhere(context, queued);
-          recordDeletion(removed: result);
-          deletedLocal = result.any((file) => file.localID != null);
           return result.isNotEmpty;
         },
       );

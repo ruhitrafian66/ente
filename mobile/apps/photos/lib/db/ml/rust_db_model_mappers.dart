@@ -7,7 +7,6 @@ import "package:photos/models/ml/face/face.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/models/ml/vector.dart";
-import "package:photos/services/filedata/model/file_data.dart";
 import "package:photos/src/rust/api/ml_db_api.dart" as rust;
 
 rust.FaceRow toFaceRow(Face face) {
@@ -53,20 +52,4 @@ EmbeddingVector toEmbeddingVector(rust.EmbeddingVector vector) {
 
 rust.ClusterSummary toClusterSummaryRow((Uint8List, int) summary) {
   return rust.ClusterSummary(avg: summary.$1, count: summary.$2);
-}
-
-rust.FdStatus toFdStatusRow(FDStatus status) {
-  return rust.FdStatus(
-    fileId: status.fileID,
-    userId: status.userID,
-    dataType: status.type,
-    size: status.size,
-    objectId: status.objectID,
-    objectNonce: status.objectNonce,
-    updatedAt: status.updatedAt,
-  );
-}
-
-PreviewInfo toPreviewInfo(rust.PreviewInfo info) {
-  return PreviewInfo(objectId: info.objectId, objectSize: info.objectSize);
 }

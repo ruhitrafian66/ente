@@ -12,9 +12,7 @@ import "package:photos/core/event_bus.dart";
 import "package:photos/events/guest_view_event.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
-import "package:photos/models/metadata/file_magic.dart";
 import 'package:photos/module/download/file.dart';
-import "package:photos/services/file_magic_service.dart";
 import "package:photos/src/rust/api/motion_photo_api.dart";
 import "package:photos/states/detail_page_state.dart";
 import 'package:photos/ui/notification/toast.dart';
@@ -299,45 +297,16 @@ class _ZoomableLiveImageNewState extends State<ZoomableLiveImageNew>
   }
 
   Future<File?> _getLivePhotoVideo() async {
-    if (_enteFile.isRemoteOnlyFile &&
-        !(await isFileCached(_enteFile, liveVideo: true))) {
-      if (!mounted) return null;
-      showShortToast(context, context.strings.downloading);
-    }
-
-    File? videoFile = await getFile(widget.enteFile, liveVideo: true)
+    final File? videoFile = await getFile(widget.enteFile, liveVideo: true)
         .timeout(const Duration(seconds: 15))
         .onError((dynamic e, s) {
           _logger.info("getFile failed ${_enteFile.tag}", e);
           return null;
         });
-
-    // FixMe: Here, we are fetching video directly when getFile failed
-    // getFile with liveVideo as true can fail for file with localID when
-    // the live photo was downloaded from remote.
-    if ((videoFile == null || !videoFile.existsSync()) &&
-        _enteFile.uploadedFileID != null) {
-      videoFile = await getFileFromServer(widget.enteFile, liveVideo: true)
-          .timeout(const Duration(seconds: 15))
-          .onError((dynamic e, s) {
-            _logger.info("getRemoteFile failed ${_enteFile.tag}", e);
-            return null;
-          });
-    }
     return videoFile;
   }
 
   Future<_MotionPhotoVideoResult> _getMotionPhotoVideo() async {
-    if (_enteFile.isRemoteOnlyFile && !(await isFileCached(_enteFile))) {
-      if (!mounted) {
-        return const _MotionPhotoVideoResult(
-          MotionPhotoAvailability.unknown,
-          null,
-        );
-      }
-      showShortToast(context, context.strings.downloading);
-    }
-
     final File? imageFile =
         await getFile(
           widget.enteFile,
@@ -349,14 +318,6 @@ class _ZoomableLiveImageNewState extends State<ZoomableLiveImageNew>
     if (imageFile != null) {
       final index = await getMotionVideoIndex(filePath: imageFile.path);
       if (index != null) {
-        if (!_enteFile.isMotionPhoto && _enteFile.canEditMetaInfo) {
-          FileMagicService.instance
-              .updatePublicMagicMetadata(
-                [_enteFile],
-                {motionVideoIndexKey: index.start.toInt()},
-              )
-              .ignore();
-        }
         final outputPath = await extractMotionVideoFile(
           filePath: imageFile.path,
           destinationDirectory: (await getTemporaryDirectory()).path,
@@ -372,11 +333,6 @@ class _ZoomableLiveImageNewState extends State<ZoomableLiveImageNew>
           MotionPhotoAvailability.present,
           null,
         );
-      } else if (_enteFile.isMotionPhoto && _enteFile.canEditMetaInfo) {
-        _logger.info('Incorrectly tagged as MP, reset tag ${_enteFile.tag}');
-        FileMagicService.instance
-            .updatePublicMagicMetadata([_enteFile], {motionVideoIndexKey: 0})
-            .ignore();
       }
       return const _MotionPhotoVideoResult(
         MotionPhotoAvailability.absent,

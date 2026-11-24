@@ -10,9 +10,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart" show AppLifecycleState, WidgetsBinding;
 import "package:logging/logging.dart";
 import "package:permission_handler/permission_handler.dart";
-import "package:photos/db/upload_locks_db.dart";
 import "package:photos/main.dart";
-import "package:photos/module/upload/service/file_uploader.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/ml_run_control.dart";
 import "package:photos/services/notification_service.dart";
@@ -84,10 +82,6 @@ class BackgroundTasks {
         );
         if (acquired) {
           try {
-            await UploadLocksDB.instance.releaseLocksAcquiredByOwnerBefore(
-              ProcessType.background.toString(),
-              DateTime.now().microsecondsSinceEpoch,
-            );
             if (shouldRetireLegacySchedules) await retireLegacySchedules();
           } finally {
             await ProcessLockClient.instance.release(

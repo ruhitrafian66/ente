@@ -19,13 +19,11 @@ import 'package:photos/models/device_collection.dart';
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
-import "package:photos/models/file/trash_file.dart";
 import 'package:photos/models/files_split.dart';
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/metadata/common_keys.dart";
 import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
-import 'package:photos/module/download/gallery.dart';
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import 'package:photos/services/collections_service.dart';
@@ -35,7 +33,6 @@ import "package:photos/services/machine_learning/face_ml/person/person_service.d
 import 'package:photos/ui/actions/collection/collection_file_actions.dart';
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
 import 'package:photos/ui/collections/collection_action_sheet.dart';
-import "package:photos/ui/common/photo_library_add_permission.dart";
 import 'package:photos/ui/components/action_sheet_widget.dart';
 import "package:photos/ui/components/bottom_action_bar/selection_action_sheet.dart";
 import 'package:photos/ui/components/buttons/button_widget.dart';
@@ -143,9 +140,6 @@ class _FileSelectionActionsWidgetState
         ownedAndPendingUploadFilesCount > 0 && split.ownedByOtherUsers.isEmpty;
 
     final bool anyUploadedFiles = split.ownedByCurrentUser.isNotEmpty;
-    final bool hasUploadedFileIDs = widget.selectedFiles.files.any(
-      (file) => file.uploadedFileID != null,
-    );
     // Offline fork: people actions need an ML file ID, not an upload.
     final bool hasMlFileIDs = widget.selectedFiles.files.any(
       (file) => file.mlFileID != null,
@@ -155,7 +149,6 @@ class _FileSelectionActionsWidgetState
         !widget.selectedFiles.files.any(
           (element) => element.fileType == FileType.video,
         );
-    final showDownloadOption = hasUploadedFileIDs;
     final bool isCollectionOwnerOrAdmin =
         widget.collection != null &&
         (widget.collection!.isOwner(currentUserID) ||
@@ -341,17 +334,6 @@ class _FileSelectionActionsWidgetState
             labelText: context.strings.permanentlyDelete,
             onTap: _permanentlyDeleteFromTrash,
             isCritical: true,
-          ),
-        );
-      }
-
-      if (showDownloadOption) {
-        items.add(
-          SelectionSheetAction(
-            labelText: context.strings.download,
-            gridOrder: 7,
-            hugeIcon: HugeIcons.strokeRoundedDownload04,
-            onTap: () => _download(widget.selectedFiles.files.toList()),
           ),
         );
       }
@@ -1013,24 +995,17 @@ class _FileSelectionActionsWidgetState
     final isDeviceOnly = widget.selectedFiles.files.every(
       (f) => f.isDeviceTrash,
     );
-    if (isDeviceOnly) {
-      final deletedIDs = await permanentlyDeleteFromDeviceTrash(
-        context,
-        widget.selectedFiles.files.map((f) => f.localID!).toList(),
-      );
-      widget.selectedFiles.unSelectAll(
-        widget.selectedFiles.files
-            .where((f) => deletedIDs.contains(f.localID))
-            .toSet(),
-      );
-      return;
-    }
-    if (await deleteFromEnteTrash(
+    // The trash gallery holds device trash files only.
+    if (!isDeviceOnly) return;
+    final deletedIDs = await permanentlyDeleteFromDeviceTrash(
       context,
-      widget.selectedFiles.files.whereType<EnteTrashFile>().toList(),
-    )) {
-      widget.selectedFiles.clearAll();
-    }
+      widget.selectedFiles.files.map((f) => f.localID!).toList(),
+    );
+    widget.selectedFiles.unSelectAll(
+      widget.selectedFiles.files
+          .where((f) => deletedIDs.contains(f.localID))
+          .toSet(),
+    );
   }
 
   Future<void> _deleteSelectedFromDevice() async {
@@ -1078,142 +1053,6 @@ class _FileSelectionActionsWidgetState
       if (mounted) {
         await showMediaManagementHintSheet(context);
       }
-    }
-  }
-
-  Future<void> _download(List<EnteFile> files) async {
-    if (files.isEmpty) {
-      return;
-    }
-
-    final l10n = context.strings;
-    final existingLocalFolderNames = await Future.wait(
-      files.map((file) => getExistingLocalFolderNameForDownloadSkipToast(file)),
-    );
-    if (!mounted) return;
-
-    final filesToDownload = <EnteFile>[];
-    final skippedFiles = <EnteFile>[];
-    String? skippedSingleFolderName;
-    for (int i = 0; i < files.length; i++) {
-      final file = files[i];
-      final existingLocalFolderName = existingLocalFolderNames[i];
-      if (existingLocalFolderName != null) {
-        skippedFiles.add(file);
-        skippedSingleFolderName = existingLocalFolderName;
-        continue;
-      }
-      filesToDownload.add(
-        file.isRemoteOnlyFile
-            ? file.copyWith()
-            : (file.copyWith()..localID = null),
-      );
-    }
-    final skippedFilesCount = skippedFiles.length;
-    int addedToQueueCount = 0;
-
-    if (filesToDownload.isNotEmpty) {
-      if (!await ensurePhotoLibraryAddPermission(context)) return;
-      if (!mounted) return;
-
-      if (flagService.internalUser) {
-        try {
-          final enqueueResult = await galleryDownloadQueueService.enqueueFiles(
-            filesToDownload,
-            persistToFilesDB: widget.type != GalleryType.sharedPublicCollection,
-          );
-          addedToQueueCount = enqueueResult.addedCount;
-        } catch (e) {
-          _logger.warning("Failed to enqueue files for download", e);
-          if (!mounted) return;
-          await showGenericErrorDialog(context: context, error: e);
-          return;
-        }
-      } else {
-        final totalFiles = filesToDownload.length;
-        int downloadedFiles = 0;
-        final downloadingMessage = l10n.downloading;
-
-        final dialog = createProgressDialog(
-          context,
-          "$downloadingMessage ($downloadedFiles/$totalFiles)",
-          isDismissible: true,
-        );
-        final didShowDialog = await dialog.show();
-        try {
-          final taskQueue = SimpleTaskQueue(maxConcurrent: 5);
-          final futures = <Future>[];
-          for (final file in filesToDownload) {
-            futures.add(
-              taskQueue.add(() async {
-                await downloadToGallery(
-                  file,
-                  persistToFilesDB:
-                      widget.type != GalleryType.sharedPublicCollection,
-                );
-                downloadedFiles++;
-                if (didShowDialog) {
-                  dialog.update(
-                    message:
-                        "$downloadingMessage ($downloadedFiles/$totalFiles)",
-                  );
-                }
-              }),
-            );
-          }
-          await Future.wait(futures);
-          addedToQueueCount = downloadedFiles;
-          if (didShowDialog) {
-            await dialog.hide();
-          }
-        } catch (e, s) {
-          _logger.warning("Failed to save files", e, s);
-          if (didShowDialog) {
-            await dialog.hide();
-          }
-          if (mounted) {
-            await showGenericErrorDialog(context: context, error: e);
-          }
-          return;
-        }
-      }
-    }
-
-    if (!mounted) return;
-    if (skippedFilesCount > 0) {
-      String finalMessage;
-      if (skippedFilesCount == 1) {
-        final skippedFile = skippedFiles.first;
-        finalMessage = l10n.downloadSkippedInSelectionSingleFile(
-          fileName: getDownloadSkipToastFileName(skippedFile),
-          albumName: skippedSingleFolderName ?? l10n.gallery,
-        );
-      } else {
-        finalMessage = l10n.downloadSkippedInSelectionMultipleFiles(
-          fileCount: skippedFilesCount,
-        );
-      }
-      showToast(context, finalMessage, iosLongToastLengthInSec: 4);
-    }
-
-    if (!flagService.internalUser &&
-        skippedFilesCount == 0 &&
-        addedToQueueCount > 0) {
-      showToast(
-        context,
-        context.strings.filesSavedToGallery,
-        iosLongToastLengthInSec: 4,
-      );
-    }
-
-    if (addedToQueueCount == 0 && skippedFilesCount == 0) {
-      return;
-    }
-
-    if (skippedFilesCount == 0) {
-      widget.selectedFiles.clearAll();
-    } else {
-      widget.selectedFiles.replaceSelection(skippedFiles.toSet());
     }
   }
 

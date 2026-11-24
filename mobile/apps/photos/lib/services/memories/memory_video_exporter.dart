@@ -62,9 +62,7 @@ class MemoryVideoExporter {
   static final _logger = Logger("MemoryVideoExporter");
 
   final Future<File?> Function(EnteFile file) _resolveFile;
-  final Future<File?> Function(EnteFile file) _resolveFileFromServer;
   final Future<Uint8List?> Function(EnteFile file) _resolveThumbnail;
-  final Future<Uint8List?> Function(EnteFile file) _resolveThumbnailFromServer;
   final Future<File> Function(MemoryMusicTrack track)? _resolveMusic;
   final SlideshowExport _export;
   final Future<void> Function() _cancelExport;
@@ -74,19 +72,14 @@ class MemoryVideoExporter {
 
   MemoryVideoExporter({
     Future<File?> Function(EnteFile file)? resolveFile,
-    Future<File?> Function(EnteFile file)? resolveFileFromServer,
     Future<Uint8List?> Function(EnteFile file)? resolveThumbnail,
-    Future<Uint8List?> Function(EnteFile file)? resolveThumbnailFromServer,
     Future<File> Function(MemoryMusicTrack track)? resolveMusic,
     SlideshowExport? export,
     Future<void> Function()? cancelExport,
     String Function()? outputDirectory,
     Random? random,
   }) : _resolveFile = resolveFile ?? getFile,
-       _resolveFileFromServer = resolveFileFromServer ?? getFileFromServer,
        _resolveThumbnail = resolveThumbnail ?? getThumbnail,
-       _resolveThumbnailFromServer =
-           resolveThumbnailFromServer ?? getThumbnailFromServer,
        _resolveMusic = resolveMusic,
        _export = export ?? NativeVideoEditor.exportSlideshow,
        _cancelExport = cancelExport ?? NativeVideoEditor.cancelProcessing,
@@ -253,7 +246,6 @@ class MemoryVideoExporter {
   }
 
   Future<File?> _resolveItem(EnteFile file, List<File> scratchFiles) async {
-    final isLocal = file.localID != null;
     final extension = file.displayName.split(".").last.toLowerCase();
     final useThumbnail =
         isRawImageExtension(extension) ||
@@ -262,24 +254,9 @@ class MemoryVideoExporter {
         (const {"heic", "heif"}.contains(extension) &&
             await isAndroidSDKVersionLowerThan(28));
     if (file.fileType == FileType.video || !useThumbnail) {
-      final resolved = await _resolveFile(file);
-      if (isLocal &&
-          file.isUploaded &&
-          (resolved == null || !await resolved.exists())) {
-        return _resolveFileFromServer(file);
-      }
-      return resolved;
+      return _resolveFile(file);
     }
-    Uint8List? thumbnail;
-    try {
-      thumbnail = await _resolveThumbnail(file);
-    } catch (e, s) {
-      if (!isLocal || !file.isUploaded) rethrow;
-      _logger.warning("Failed to load local thumbnail for ${file.tag}", e, s);
-    }
-    if (thumbnail == null && isLocal && file.isUploaded) {
-      thumbnail = await _resolveThumbnailFromServer(file);
-    }
+    final thumbnail = await _resolveThumbnail(file);
     if (thumbnail == null) return null;
     _logger.info("Using the thumbnail of file ${file.tag}");
     final raster = File("${_outputDirectory()}memory-${const Uuid().v4()}.jpg");

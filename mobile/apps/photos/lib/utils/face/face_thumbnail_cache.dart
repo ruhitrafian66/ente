@@ -430,36 +430,14 @@ Future<Map<String, Uint8List>?> _getFaceCrops(
 }) async {
   late String? imagePath;
   if (useFullFile && file.fileType != FileType.video) {
-    File? ioFile = await getFile(file);
-    if (file.isUploaded &&
-        !file.isRemoteOnlyFile &&
-        (ioFile == null || !await ioFile.exists())) {
-      ioFile = await getFile(EnteFile.from(file)..localID = null);
-    }
+    final File? ioFile = await getFile(file);
     if (ioFile == null) {
       _logger.severe("Failed to get file for face crop generation");
       return null;
     }
     imagePath = ioFile.path;
   } else {
-    File? thumbnail;
-    try {
-      thumbnail = await getThumbnailForUploadedFile(file);
-    } catch (e, s) {
-      if (!file.isUploaded || file.isRemoteOnlyFile) {
-        rethrow;
-      }
-      _logger.warning(
-        "Failed to get local thumbnail for face crop generation",
-        e,
-        s,
-      );
-    }
-    if (thumbnail == null && file.isUploaded && !file.isRemoteOnlyFile) {
-      thumbnail = await getThumbnailForUploadedFile(
-        EnteFile.from(file)..localID = null,
-      );
-    }
+    final File? thumbnail = await getThumbnailForUploadedFile(file);
     if (thumbnail == null) {
       _logger.severe("Failed to get thumbnail for face crop generation");
       return null;

@@ -109,7 +109,15 @@ Upstream already had an account-free "local gallery" mode (`AppMode.localGallery
 
 Last update: 2026-11-24.
 
-In progress: removal stage 1 (five workers strip references to the stage 1 kill list; then the integrator deletes the kill-list files and runs the analyzer). The worker brief is the "Stage 1" section of the plan. Also in progress: the person folder sort feature (new files only; hook edits in `main.dart`, `ml_service.dart` and the tools screen are applied after stage 1 lands).
+Removal progress: stage 0 (`1249d3c`), stage 1 (`ef81248`, account-era feature leaves, 67k lines deleted) and stage 2 (data plane: upload, remote sync, download, streaming, server trash) are done; `lib/` is analyzer-clean and the unit tests pass after each. Stages 3 to 7 remain. Stage 1 and stage 2 are NOT yet checked on the phone.
+
+Method that worked for stages 1 and 2: write one shared brief, give 4 or 5 workers disjoint ownership sets (one worker owns all hub files), workers only strip references and never delete kill-list files, workers verify through a serialised analyzer wrapper (a `mkdir` lock around `flutter analyze --no-pub <paths>`), then the integrator deletes the kill list, runs `dart fix --apply lib`, the analyzer and the tests, and fixes cross-worker leftovers.
+
+Analyzer caveat: `analysis_options.yaml` excludes `test/**`, so `flutter analyze` (and `flutter analyze test`) reports "No issues found" for tests. Pass the test FILES explicitly: `flutter analyze --no-pub $(find test integration_test -name "*.dart")`. Ignore the `directives_ordering` lints there; they exist upstream.
+
+Known test state: all unit tests pass except `test/services/memories/photo_selector_test.dart` and `smart_memories_source_selection_test.dart`, which fail in setUpAll because they need a host build of the Rust library (`ENTE_PHOTOS_FRB_LIBRARY`).
+
+Person folder sort: implemented and connected (init in `main.dart` foreground only, re-sort hook after "ML finished running" in `ml_service.dart`, entry "Person folders" on the Free up space screen). 66 planner tests pass. NOT run on a device. It uses `PhotoManager.editor.android.moveAssetsToPath` (a MediaStore `RELATIVE_PATH` update, so the MediaStore ID and all face data should survive; verify on one file first with `adb shell content query --uri content://media/external/images/media --projection _id:relative_path --where "_id=<id>"`). Deviation from the owner's rule, pending their confirmation: images outside `DCIM/` and `Pictures/` are skipped, because Android would not let the app move them back. The removal must keep `LocalSyncService.syncAll()`; the tool calls it after moves.
 
 Commits on `offline-faces` (local only, not pushed): `788c382` checkpoint with all features, analyzer clean; `7f949a1` index counter fix, logcat option, device test notes. Run `git log --oneline` for anything newer.
 
@@ -131,6 +139,7 @@ NOT yet verified on the device:
 - App lock, memories, widgets, background (WorkManager) indexing, delete from gallery, video playback.
 
 Open issues seen in the log (not fixed):
+- Video viewer: when the device file is missing, the native player now shows an endless spinner (the server fallback and its error dialog are gone). The MediaKit player still has a hard-coded GitHub fallback URL. `lib/ui/tools/similar_images_page.dart` can delete nothing in the fork. Rewind needs a downloaded asset pack and is unavailable. `magic_util.dart` keeps four failing stubs (edit time, file name, caption, visibility) whose callers should be removed. Help & Support is gone, and with it the only UI entry to export or view logs.
 - `LocationService` tries to download `https://assets.ente.com/location/v2/cities.bin` through Rust and fails (no network). Location search is therefore empty. Either bundle the file or remove the feature in the removal.
 - `SemanticSearchService` / `MagicCacheService` log SEVERE "Clip text loading failed" at start and on each magic-cache update. Harmless, but the callers should be switched off.
 - Samsung HEIC files log "bounded decode refused: required auxiliary type" and fall back to a full decode. Results are stored, but this is a speed cost worth a look.

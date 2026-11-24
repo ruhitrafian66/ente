@@ -1,12 +1,9 @@
 import "dart:io";
-import "dart:isolate";
 
-import "package:archive/archive_io.dart";
 import "package:flutter/services.dart";
 import "package:logging/logging.dart";
 import "package:path/path.dart" as path;
 import "package:path_provider/path_provider.dart";
-import "package:photos/services/remote_assets_service.dart";
 import "package:synchronized/synchronized.dart";
 
 class RewindAssetStore {
@@ -16,9 +13,6 @@ class RewindAssetStore {
   static const courierPrime = "Courier Prime";
 
   static const _version = "rewind-2026-v8";
-  static const _url = "https://rewind-assets.ente.com/$_version.zip";
-  static const _sha256 =
-      "4d301790b1423991cb4cc58b32a5aca5809fc533590daf2fc048f52fd2afe03c";
   static const _fonts = {
     lilitaOne: "fonts/LilitaOne-Regular.ttf",
     nunito: "fonts/Nunito-Black.ttf",
@@ -52,23 +46,9 @@ class RewindAssetStore {
     );
     final target = Directory(path.join(root, _version));
     if (await target.exists()) return target.path;
-    final zip = await RemoteAssetsService.instance.getAsset(
-      _url,
-      expectedSha256: _sha256,
-    );
-    final zipPath = zip.path;
-    final stagingPath = "${target.path}.unpacking";
-    final staging = Directory(stagingPath);
-    if (await staging.exists()) await staging.delete(recursive: true);
-    await Isolate.run(() => _unzip(zipPath, stagingPath));
-    await staging.rename(target.path);
-    await RemoteAssetsService.instance.deleteAsset(_url);
-    for (final entry in await Directory(root).list().toList()) {
-      if (path.basename(entry.path) != _version) {
-        await entry.delete(recursive: true);
-      }
-    }
-    return target.path;
+    // Offline fork: the asset pack was a network download. Without a pack
+    // that is already on the device, Rewind stays unavailable.
+    throw StateError("Rewind assets are not on this device");
   }
 
   Future<void> _loadFonts(String directory) async {
@@ -80,23 +60,5 @@ class RewindAssetStore {
       await loader.load();
     }
     _fontsLoaded = true;
-  }
-}
-
-void _unzip(String zipPath, String outputPath) {
-  final input = InputFileStream(zipPath);
-  try {
-    for (final entry in ZipDecoder().decodeStream(input)) {
-      if (!entry.isFile) continue;
-      final target = path.join(outputPath, path.normalize(entry.name));
-      if (!path.isWithin(outputPath, target)) {
-        throw FormatException("Unexpected entry ${entry.name}");
-      }
-      File(target)
-        ..createSync(recursive: true)
-        ..writeAsBytesSync(entry.content);
-    }
-  } finally {
-    input.closeSync();
   }
 }

@@ -4,7 +4,6 @@ import "package:ente_components/hugeicons.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/ui/rewind/shell/rewind_page_scope.dart";
 import "package:photos/ui/rewind/theme/rewind_assets.dart";
 import "package:photos/ui/rewind/theme/rewind_colors.dart";
@@ -37,18 +36,6 @@ const _shareArtwork = (
   color: RewindColors.cream,
 );
 
-const _saveArtwork = (
-  asset: RewindAssets.finaleSaveButton,
-  rect: Rect.fromLTWH(100.92, 526.85, 201.641, 93.561),
-  turnDeg: -1.98,
-  face: Rect.fromLTRB(6, 10, 196, 80),
-  icon: Rect.fromLTWH(36.22, 33.51, 17.43, 17.43),
-  iconStroke: 2.4,
-  textCenter: Offset(106.82, 42.1),
-  textSize: 15.689,
-  color: RewindColors.outline,
-);
-
 class FinaleActions extends StatefulWidget {
   const FinaleActions({
     required this.active,
@@ -66,8 +53,6 @@ class FinaleActions extends StatefulWidget {
 }
 
 class _FinaleActionsState extends State<FinaleActions> {
-  static const _saveDelayMs = 220;
-
   final _shareButton = GlobalKey();
 
   void _share() {
@@ -77,44 +62,10 @@ class _FinaleActionsState extends State<FinaleActions> {
     )?.shareVideo(shareButtonRect(context, _shareButton));
   }
 
-  void _save() {
-    HapticFeedback.selectionClick().ignore();
-    RewindPageScope.navigatorOf(context)?.saveVideo();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final videoSaved = RewindPageScope.navigatorOf(context)?.videoSaved;
-    final still = MediaQuery.disableAnimationsOf(context);
-    final saveAtMs = widget.delayMs + _saveDelayMs;
     return Stack(
       children: [
-        if (Configuration.instance.hasConfiguredAccount())
-          _place(
-            _saveArtwork,
-            ValueListenableBuilder(
-              valueListenable: widget.elapsedMs,
-              builder: (context, ms, save) =>
-                  IgnorePointer(ignoring: !still && ms < saveAtMs, child: save),
-              child: RewindEntrance(
-                preset: RewindPreset.line,
-                active: widget.active,
-                delayMs: saveAtMs,
-                child: ValueListenableBuilder(
-                  valueListenable:
-                      videoSaved ?? const AlwaysStoppedAnimation(false),
-                  builder: (context, saved, _) => _ArtworkButton(
-                    artwork: _saveArtwork,
-                    label: saved ? "Saved to Ente" : "Save to Ente",
-                    icon: saved
-                        ? HugeIcons.strokeRoundedTick02
-                        : HugeIcons.strokeRoundedDownload04,
-                    onTap: saved ? null : _save,
-                  ),
-                ),
-              ),
-            ),
-          ),
         _place(
           _shareArtwork,
           RewindEntrance(

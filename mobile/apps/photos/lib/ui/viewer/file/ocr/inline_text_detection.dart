@@ -9,7 +9,6 @@ import "package:logging/logging.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
-import "package:photos/module/download/file.dart";
 import "package:photos/services/machine_learning/ocr/ocr_models.dart"
     show OcrModelComponent, TextRegionDetectionResult;
 import "package:photos/services/machine_learning/ocr_service.dart";
@@ -391,13 +390,8 @@ class _InlineTextDetectionState extends State<InlineTextDetection> {
   }
 
   Future<File?> _resolveStillImage(int generation) async {
-    final file = widget.file;
-    final canUseUploadedCopy = file.isUploaded && !file.isRemoteOnlyFile;
-    File? localFile = await _ocrService.resolveImageFile(file);
+    final localFile = await _ocrService.resolveImageFile(widget.file);
     if (!mounted || generation != _evaluationGeneration) return null;
-    if (canUseUploadedCopy && (localFile == null || !localFile.existsSync())) {
-      localFile = await getFileFromServer(file);
-    }
     return localFile;
   }
 

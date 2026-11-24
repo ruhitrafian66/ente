@@ -20,15 +20,6 @@ class ThumbnailPlaceHolder extends StatelessWidget {
   }
 }
 
-class UnSyncedIcon extends StatelessWidget {
-  const UnSyncedIcon({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const _BottomLeftOverlayIcon(Icons.cloud_off_outlined, baseSize: 18);
-  }
-}
-
 class FavoriteOverlayIcon extends StatelessWidget {
   const FavoriteOverlayIcon({super.key});
 

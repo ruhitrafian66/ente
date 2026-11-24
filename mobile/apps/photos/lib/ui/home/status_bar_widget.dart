@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import "package:intl/intl.dart";
 import "package:logging/logging.dart";
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/ente_theme_data.dart';
@@ -16,14 +14,12 @@ import 'package:photos/events/sync_status_update_event.dart';
 import 'package:photos/events/tab_changed_event.dart';
 import 'package:photos/models/home_tab.dart';
 import "package:photos/service_locator.dart";
-import "package:photos/services/sync/large_backup_session_tracker.dart";
 import 'package:photos/services/sync/sync_service.dart';
 import "package:photos/theme/ente_theme.dart";
 import 'package:photos/ui/components/home_header_widget.dart';
 import 'package:photos/ui/home/christmas/christmas_lights_banner.dart';
 import 'package:photos/ui/home/christmas/christmas_utils.dart';
 import 'package:photos/ui/home/header_error_widget.dart';
-import "package:photos/ui/home/large_backup_screen.dart";
 import "package:photos/ui/settings/ml/ml_consent_sheet.dart";
 
 const double kContainerHeight = 36;
@@ -47,8 +43,6 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
       !hasGrantedMLConsent &&
       (isLocalGalleryMode || flagService.hasSyncedAccountFlags()) &&
       !localSettings.hasSeenMLEnablingBanner;
-  final LargeBackupSessionTracker _largeBackupSession =
-      SyncService.instance.largeBackupSessionTracker;
   Error? _syncError;
 
   @override
@@ -132,30 +126,8 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
             ? Divider(height: 8, color: getEnteColorScheme(context).strokeFaint)
             : const SizedBox.shrink(),
         if (_showErrorBanner) HeaderErrorWidget(error: _syncError),
-        if (_shouldShowLargeBackupBanner) _largeBackupBanner(context),
         if (_showMlBanner && !_showErrorBanner) const _MachineLearningBanner(),
       ],
-    );
-  }
-
-  bool get _shouldShowLargeBackupBanner =>
-      Platform.isIOS && !_showErrorBanner && _largeBackupSession.isActive;
-
-  Widget _largeBackupBanner(BuildContext context) {
-    return _bannerPadding(
-      BannerComponent(
-        key: const ValueKey("large-backup-standby-banner"),
-        leadingIcon: HugeIcons.strokeRoundedCloudUpload,
-        title: context.strings.backupModeKeepAppOpen,
-        subtitle: context.strings.backupModeScreenWillDim,
-        state: BannerComponentState.success,
-        onTap: () async {
-          if (!_largeBackupSession.isActive) {
-            return;
-          }
-          await showLargeBackupScreen(context, _largeBackupSession);
-        },
-      ),
     );
   }
 }
@@ -249,27 +221,6 @@ class _SyncStatusWidgetState extends State<SyncStatusWidget> {
     if (_event!.status == SyncStatus.startedFirstGalleryImport ||
         _event!.status == SyncStatus.completedFirstGalleryImport) {
       return context.strings.loadingGallery;
-    }
-    if (_event!.status == SyncStatus.applyingRemoteDiff) {
-      return context.strings.syncing;
-    }
-    if (_event!.status == SyncStatus.preparingForUpload) {
-      if (_event!.total == null || _event!.total! <= 0) {
-        return context.strings.encryptingBackup;
-      } else if (_event!.total == 1) {
-        return context.strings.uploadingSingleMemory;
-      } else {
-        return context.strings.uploadingMultipleMemories(
-          count: NumberFormat().format(_event!.total!),
-        );
-      }
-    }
-    if (_event!.status == SyncStatus.inProgress) {
-      final format = NumberFormat();
-      return context.strings.syncProgress(
-        completed: format.format(_event!.completed!),
-        total: format.format(_event!.total!),
-      );
     }
     if (_event!.status == SyncStatus.paused) {
       return _event!.reason;

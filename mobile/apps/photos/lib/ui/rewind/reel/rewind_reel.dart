@@ -172,10 +172,4 @@ class _ReelNavigator implements RewindNavigator {
 
   @override
   void shareVideo(Rect? origin) {}
-
-  @override
-  ValueListenable<bool> get videoSaved => const AlwaysStoppedAnimation(false);
-
-  @override
-  void saveVideo() {}
 }

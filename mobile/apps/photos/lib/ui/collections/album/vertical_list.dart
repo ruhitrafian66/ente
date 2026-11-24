@@ -14,13 +14,11 @@ import 'package:photos/models/collection/collection_items.dart';
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/services/collections_service.dart';
 import "package:photos/services/hidden_service.dart";
-import 'package:photos/services/sync/remote_sync_service.dart';
 import "package:photos/ui/actions/collection/collection_file_actions.dart";
 import "package:photos/ui/actions/collection/collection_sharing_actions.dart";
 import "package:photos/ui/collections/album/column_item.dart";
 import "package:photos/ui/collections/album/new_list_item.dart";
 import 'package:photos/ui/collections/collection_action_sheet.dart';
-import "package:photos/ui/collections/shared_media_backup_sheet.dart";
 import 'package:photos/ui/notification/toast.dart';
 import 'package:photos/ui/viewer/gallery/collection_page.dart';
 import "package:photos/ui/viewer/gallery/empty_state.dart";
@@ -66,8 +64,6 @@ class AlbumVerticalListWidget extends StatefulWidget {
 
 class _AlbumVerticalListWidgetState extends State<AlbumVerticalListWidget> {
   final _logger = Logger("CollectionsListWidgetState");
-  bool _hasConfirmedSharedMediaBackup = false;
-  bool _isConfirmingSharedMediaBackup = false;
 
   final CollectionActions _collectionActions = CollectionActions(
     CollectionsService.instance,
@@ -326,9 +322,6 @@ class _AlbumVerticalListWidgetState extends State<AlbumVerticalListWidget> {
 
   Future<void> _nameAlbum(BuildContext context, String albumName) async {
     if (albumName.isNotEmpty) {
-      if (!await _confirmSharedMediaBackup(context) || !context.mounted) {
-        return;
-      }
       bool hasVerifiedLock = false;
       late final Collection? collection;
 
@@ -490,9 +483,6 @@ class _AlbumVerticalListWidgetState extends State<AlbumVerticalListWidget> {
     int collectionID,
     bool showProgressDialog,
   ) async {
-    if (!await _confirmSharedMediaBackup(context) || !context.mounted) {
-      return false;
-    }
     final bool result = await _collectionActions.addToCollection(
       context,
       collectionID,
@@ -505,22 +495,6 @@ class _AlbumVerticalListWidgetState extends State<AlbumVerticalListWidget> {
       widget.selectedFiles?.clearAll();
     }
     return result;
-  }
-
-  Future<bool> _confirmSharedMediaBackup(BuildContext context) async {
-    final sharedFiles = widget.sharedFiles;
-    if (sharedFiles == null || _hasConfirmedSharedMediaBackup) return true;
-    if (_isConfirmingSharedMediaBackup) return false;
-    _isConfirmingSharedMediaBackup = true;
-    try {
-      _hasConfirmedSharedMediaBackup = await confirmSharedMediaBackup(
-        context,
-        sharedFiles,
-      );
-      return _hasConfirmedSharedMediaBackup;
-    } finally {
-      _isConfirmingSharedMediaBackup = false;
-    }
   }
 
   Future<bool> _moveFilesToCollection(
@@ -547,7 +521,6 @@ class _AlbumVerticalListWidgetState extends State<AlbumVerticalListWidget> {
       );
       await dialog.hide();
       CollectionsService.instance.recordCollectionUsage(toCollectionID);
-      unawaited(RemoteSyncService.instance.sync(silently: true));
       widget.selectedFiles?.clearAll();
 
       return true;
@@ -582,7 +555,6 @@ class _AlbumVerticalListWidgetState extends State<AlbumVerticalListWidget> {
         widget.selectedFiles!.files.toList(),
       );
       CollectionsService.instance.recordCollectionUsage(toCollectionID);
-      unawaited(RemoteSyncService.instance.sync(silently: true));
       widget.selectedFiles?.clearAll();
       await dialog.hide();
       return true;

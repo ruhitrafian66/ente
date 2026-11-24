@@ -4,8 +4,6 @@ import "package:ente_strings/ente_strings.dart";
 import "package:figma_squircle/figma_squircle.dart";
 import 'package:flutter/material.dart';
 import 'package:photos/models/device_collection.dart';
-import "package:photos/service_locator.dart";
-import "package:photos/ui/components/collection_share_badge.dart";
 import 'package:photos/ui/viewer/file/thumbnail_widget.dart';
 import 'package:photos/ui/viewer/gallery/device/device_folder_page.dart';
 
@@ -15,7 +13,6 @@ class DeviceFolderRowItem extends StatelessWidget {
 
   static const _cornerRadius = 20.0;
   static const _cornerSmoothing = 0.6;
-  static const _overlayPadding = 8.0;
   static const _thumbnailToTextSpacing = 8.0;
   static const _titleToSubtitleSpacing = 2.0;
 
@@ -27,7 +24,6 @@ class DeviceFolderRowItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isBackedUp = deviceCollection.shouldBackup;
     final colors = context.componentColors;
     return GestureDetector(
       child: Column(
@@ -64,12 +60,6 @@ class DeviceFolderRowItem extends StatelessWidget {
                                   deviceCollection.thumbnail!.tag,
                             ),
                           ),
-                          if (!isBackedUp && !isLocalGalleryMode)
-                            const Positioned(
-                              right: _overlayPadding,
-                              bottom: _overlayPadding,
-                              child: CollectionUnSyncedBadge(),
-                            ),
                         ],
                       ),
                     ),

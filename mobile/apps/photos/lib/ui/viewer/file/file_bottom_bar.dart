@@ -233,31 +233,17 @@ class FileBottomBarState extends State<FileBottomBar> {
           child: IconButton(
             icon: const Icon(CupertinoIcons.gobackward, color: Colors.white),
             onPressed: () {
-              if (widget.file.isDeviceTrash) {
-                _restoreFromDeviceTrash()
-                    .then((didRestore) {
-                      if (!didRestore || !mounted) return;
-                      showToast(
-                        context,
-                        context.strings.restoredItems(count: 1),
-                      );
-                    })
-                    .onError((e, s) {
-                      if (!mounted) return;
-                      showGenericErrorDialog(
-                        context: context,
-                        error: e,
-                      ).ignore();
-                    });
-                return;
-              }
-              final selectedFiles = SelectedFiles();
-              selectedFiles.toggleSelection(widget.file);
-              showCollectionActionSheet(
-                context,
-                selectedFiles: selectedFiles,
-                actionType: CollectionActionType.restoreFiles,
-              );
+              // Offline fork: a trash file is always a device trash file.
+              if (!widget.file.isDeviceTrash) return;
+              _restoreFromDeviceTrash()
+                  .then((didRestore) {
+                    if (!didRestore || !mounted) return;
+                    showToast(context, context.strings.restoredItems(count: 1));
+                  })
+                  .onError((e, s) {
+                    if (!mounted) return;
+                    showGenericErrorDialog(context: context, error: e).ignore();
+                  });
             },
           ),
         ),
@@ -275,21 +261,14 @@ class FileBottomBarState extends State<FileBottomBar> {
               color: Colors.white,
             ),
             onPressed: () async {
-              if (widget.file.isDeviceTrash) {
-                final deletedIDs = await permanentlyDeleteFromDeviceTrash(
-                  context,
-                  [widget.file.localID!],
-                );
-                if (deletedIDs.isNotEmpty) {
-                  await widget.onFileRemoved(widget.file);
-                }
-                return;
-              }
-              if (await deleteFromEnteTrash(context, [
-                    widget.file.asEnteTrashFile!,
-                  ]) ==
-                  true) {
-                widget.onFileRemoved(widget.file);
+              // Offline fork: a trash file is always a device trash file.
+              if (!widget.file.isDeviceTrash) return;
+              final deletedIDs = await permanentlyDeleteFromDeviceTrash(
+                context,
+                [widget.file.localID!],
+              );
+              if (deletedIDs.isNotEmpty) {
+                await widget.onFileRemoved(widget.file);
               }
             },
           ),

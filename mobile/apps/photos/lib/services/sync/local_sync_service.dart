@@ -6,7 +6,6 @@ import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photo_manager/photo_manager.dart";
 import "package:photos/core/configuration.dart";
-import "package:photos/core/errors.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/core/user_config.dart";
 import "package:photos/db/common/conflict_algo.dart";
@@ -18,10 +17,8 @@ import "package:photos/events/local_photos_updated_event.dart";
 import "package:photos/events/permission_granted_event.dart";
 import "package:photos/events/sync_status_update_event.dart";
 import "package:photos/models/file/file.dart";
-import "package:photos/models/ignored_file.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/app_lifecycle_service.dart";
-import "package:photos/services/ignored_files_service.dart";
 import "package:photos/services/sync/album_refresh_coordinator.dart";
 import "package:photos/services/sync/import/diff.dart";
 import "package:photos/services/sync/import/local_assets.dart";
@@ -68,11 +65,9 @@ class LocalSyncService {
               return;
             }
             _registerChangeCallback();
-            if (isLocalGalleryMode) {
-              // Local gallery onboarding grants permission without explicitly
-              // invoking SyncService, so trigger local import right away.
-              unawaited(checkAndSync());
-            }
+            // Local gallery onboarding grants permission without explicitly
+            // invoking SyncService, so trigger local import right away.
+            unawaited(checkAndSync());
           });
     }
   }
@@ -101,8 +96,7 @@ class LocalSyncService {
     _existingSync = Completer<void>();
     final int ownerID = Configuration.instance.getUserIDV2();
 
-    // Local sync must not race downloads; that can create incorrect FilesDB
-    // rows.
+    // Serialise local imports; a race can create incorrect FilesDB rows.
     await _lock.synchronized(() async {
       final existingLocalFileIDs = await _db.getExistingLocalFileIDs(ownerID);
       _logger.info("${existingLocalFileIDs.length} localIDs were discovered");
@@ -139,16 +133,9 @@ class LocalSyncService {
           toTime: syncStartTime,
         );
       }
-      final hasCompletedInitialImport = hasCompletedFirstImport();
-      final shouldCompleteLocalGalleryHandoff =
-          !isLocalGalleryMode && localSettings.isFromLocalGalleryToEnte;
-      if (!hasCompletedInitialImport || shouldCompleteLocalGalleryHandoff) {
+      if (!hasCompletedFirstImport()) {
         await _prefs.setBool(kHasCompletedFirstImportKey, true);
-        if (isLocalGalleryMode) {
-          await localSettings.setIsFromLocalGalleryToEnte(true);
-        } else if (shouldCompleteLocalGalleryHandoff) {
-          await localSettings.setIsFromLocalGalleryToEnte(false);
-        }
+        await localSettings.setIsFromLocalGalleryToEnte(true);
         if (backupPreferenceService.hasSkippedOnboardingPermission) {
           await backupPreferenceService.setOnboardingPermissionSkipped(false);
         }
@@ -190,17 +177,9 @@ class LocalSyncService {
   }
 
   Future<bool> syncAll() async {
-    if (!Configuration.instance.isLoggedIn()) {
-      if (!isLocalGalleryMode) {
-        _logger.warning("syncAll called when user is not logged in");
-        return false;
-      }
-    }
     final stopwatch = EnteWatch("localSyncAll")..start();
 
-    final localAssets = await getAllLocalAssets(
-      needsTitle: isLocalGalleryMode ? true : null,
-    );
+    final localAssets = await getAllLocalAssets(needsTitle: true);
     _logger.info(
       "Loading allLocalAssets ${localAssets.length} took ${stopwatch.elapsedMilliseconds}ms ",
     );
@@ -298,36 +277,7 @@ class LocalSyncService {
     }
 
     _logger.info("syncAll took ${stopwatch.elapsed.inMilliseconds}ms ");
-    // syncAll can repair mappings without inserting new local files.
-    // We still need the follow-up remote sync to promote those entries.
     return hasUnsyncedFiles || hasAnyMappingChanged;
-  }
-
-  Future<void> ignoreUpload(EnteFile file, InvalidFileError error) async {
-    if (file.localID == null ||
-        file.deviceFolder == null ||
-        file.title == null) {
-      _logger.warning('Invalid file received for ignoring: $file');
-      return;
-    }
-    if (Platform.isIOS && error.reason == InvalidReason.sourceFileMissing) {
-      // Do not persist this failure; iCloud may make the asset available later.
-      return;
-    }
-    final reason = error.reason == InvalidReason.photosResourceUnavailable
-        ? (error.message?.toString() ?? error.reason.name)
-        : error.reason.name;
-    final ignored = IgnoredFile(
-      file.localID,
-      file.title,
-      file.deviceFolder,
-      reason,
-    );
-    await IgnoredFilesService.instance.cacheAndInsert([ignored]);
-  }
-
-  Lock getLock() {
-    return _lock;
   }
 
   bool hasCompletedFirstImport() {
@@ -336,11 +286,6 @@ class LocalSyncService {
 
   // Onboarding skips and only-new backup intentionally bypass the first import.
   bool hasCompletedFirstImportOrBypassed() {
-    if (!isLocalGalleryMode &&
-        Configuration.instance.hasConfiguredAccount() &&
-        localSettings.isFromLocalGalleryToEnte) {
-      return false;
-    }
     if (hasCompletedFirstImport()) {
       return true;
     }

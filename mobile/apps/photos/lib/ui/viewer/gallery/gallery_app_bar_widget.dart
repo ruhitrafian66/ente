@@ -21,14 +21,12 @@ import "package:photos/models/file/file.dart";
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/metadata/common_keys.dart";
 import 'package:photos/models/selected_files.dart';
-import 'package:photos/module/download/gallery.dart';
 import 'package:photos/service_locator.dart';
 import 'package:photos/services/collections_service.dart';
 import "package:photos/states/location_screen_state.dart";
 import "package:photos/theme/ente_theme.dart";
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
 import "package:photos/ui/collections/album/smart_album_people.dart";
-import "package:photos/ui/common/photo_library_add_permission.dart";
 import "package:photos/ui/common/web_page.dart";
 import 'package:photos/ui/components/action_sheet_widget.dart';
 import 'package:photos/ui/components/buttons/button_widget.dart';
@@ -64,8 +62,6 @@ class GalleryAppBarWidget extends StatefulWidget {
     SelectedFiles selectedFiles, {
     String? subtitle,
     DeviceCollection? deviceCollection,
-    bool? isDeviceFolderBackedUp,
-    Future<void> Function()? onDisableDeviceFolderBackup,
     Collection? collection,
     EnteFile? cover,
     Widget? coverWidget,
@@ -93,8 +89,6 @@ class GalleryAppBarWidget extends StatefulWidget {
         selectedFiles,
         subtitle: subtitle,
         deviceCollection: deviceCollection,
-        isDeviceFolderBackedUp: isDeviceFolderBackedUp,
-        onDisableDeviceFolderBackup: onDisableDeviceFolderBackup,
         collection: collection,
         cover: cover,
         coverWidget: coverWidget,
@@ -175,8 +169,6 @@ class GalleryAppBarWidget extends StatefulWidget {
   final String? subtitle;
   final SelectedFiles selectedFiles;
   final DeviceCollection? deviceCollection;
-  final bool? isDeviceFolderBackedUp;
-  final Future<void> Function()? onDisableDeviceFolderBackup;
   final Collection? collection;
   final EnteFile? cover;
   final Widget? coverWidget;
@@ -195,8 +187,6 @@ class GalleryAppBarWidget extends StatefulWidget {
     this.selectedFiles, {
     this.subtitle,
     this.deviceCollection,
-    this.isDeviceFolderBackedUp,
-    this.onDisableDeviceFolderBackup,
     this.collection,
     this.cover,
     this.coverWidget,
@@ -225,13 +215,11 @@ enum AlbumPopupAction {
   autoAddPhotos,
   sort,
   leave,
-  disableBackup,
   addPhotos,
   pinAlbum,
   shareePinAlbum,
   removeLink,
   cleanUncategorized,
-  downloadAlbum,
   editLocation,
   deleteLocation,
   galleryGuestView,
@@ -649,8 +637,6 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
               SmartAlbumPeople(collectionId: widget.collection!.id),
             );
             setState(() {});
-          } else if (value == AlbumPopupAction.disableBackup) {
-            await widget.onDisableDeviceFolderBackup!.call();
           } else if (value == AlbumPopupAction.sort) {
             await _showSortOption(context);
           } else if (value == AlbumPopupAction.sharedArchive) {
@@ -693,8 +679,6 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
             }
           } else if (value == AlbumPopupAction.cleanUncategorized) {
             await onCleanUncategorizedClick(context);
-          } else if (value == AlbumPopupAction.downloadAlbum) {
-            await _downloadPublicAlbumToGallery(widget.files!);
           } else if (value == AlbumPopupAction.editLocation) {
             editLocation();
           } else if (value == AlbumPopupAction.deleteLocation) {
@@ -718,7 +702,7 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
     required bool onCover,
   }) {
     if (widget.deviceCollection != null && onCover) {
-      return _canDisableDeviceFolderBackup;
+      return false;
     }
     return galleryType.canEditDetails() ||
         galleryType == GalleryType.quickLink ||
@@ -732,10 +716,7 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
         widget.collection != null ||
         widget.deviceCollection != null ||
         galleryType.canDelete() ||
-        galleryType == GalleryType.sharedCollection ||
-        _canDisableDeviceFolderBackup ||
-        (galleryType == GalleryType.sharedPublicCollection &&
-            (widget.collection?.isDownloadEnabledForPublicLink() ?? false));
+        galleryType == GalleryType.sharedCollection;
   }
 
   Future<List<EntePopupMenuOption<AlbumPopupAction>>>
@@ -949,39 +930,8 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
           ),
           labelColor: warningColor,
         ),
-      if (_canDisableDeviceFolderBackup)
-        _menuOption(
-          AlbumPopupAction.disableBackup,
-          strings.disableBackup,
-          const HugeIcon(
-            icon: HugeIcons.strokeRoundedUpload01,
-            size: IconSizes.small,
-          ),
-        ),
-      if (galleryType == GalleryType.sharedPublicCollection &&
-          (widget.collection?.isDownloadEnabledForPublicLink() ?? false))
-        _menuOption(
-          AlbumPopupAction.downloadAlbum,
-          strings.download,
-          HugeIcon(
-            icon: onCover
-                ? HugeIcons.strokeRoundedDownload04
-                : HugeIcons.strokeRoundedDownload01,
-            size: IconSizes.small,
-          ),
-        ),
     ];
   }
-
-  bool get _isDeviceFolderBackedUp =>
-      widget.isDeviceFolderBackedUp ??
-      widget.deviceCollection?.shouldBackup ??
-      false;
-
-  bool get _canDisableDeviceFolderBackup =>
-      galleryType == GalleryType.localFolder &&
-      _isDeviceFolderBackedUp &&
-      widget.onDisableDeviceFolderBackup != null;
 
   bool get _isAlbumSlideshowAvailable =>
       widget.collection != null || widget.deviceCollection != null;
@@ -1015,48 +965,6 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
       secondaryLabel: secondaryLabel,
       trailingWidget: trailingWidget,
     );
-  }
-
-  Future<void> _downloadPublicAlbumToGallery(List<EnteFile>? files) async {
-    if (files == null || files.isEmpty) {
-      return;
-    }
-    if (!await ensurePhotoLibraryAddPermission(context)) return;
-    if (!mounted) return;
-
-    if (flagService.internalUser) {
-      try {
-        await galleryDownloadQueueService.enqueueFiles(
-          files,
-          persistToFilesDB: false,
-        );
-      } catch (e, s) {
-        _logger.severe("Failed to download album", e, s);
-        if (!mounted) return;
-        await showGenericErrorDialog(context: context, error: e);
-      }
-      return;
-    }
-
-    final totalFiles = files.length;
-    final dialog = createProgressDialog(
-      context,
-      "Downloading... 0/$totalFiles",
-      isDismissible: false,
-    );
-    await dialog.show();
-
-    try {
-      for (var i = 0; i < files.length; i++) {
-        await downloadToGallery(files[i], persistToFilesDB: false);
-        dialog.update(message: "Downloading... ${i + 1}/$totalFiles");
-      }
-    } catch (e, s) {
-      _logger.severe("Failed to download album", e, s);
-      if (!mounted) return;
-      await showGenericErrorDialog(context: context, error: e);
-    }
-    await dialog.hide();
   }
 
   Future<void> _startAlbumSlideshow() async {

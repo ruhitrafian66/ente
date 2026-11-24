@@ -14,7 +14,6 @@ import 'package:photos/gateways/collections/models/create_request.dart';
 import 'package:photos/models/collection/collection.dart';
 import 'package:photos/models/file/file.dart';
 import 'package:photos/services/collections_service.dart';
-import 'package:photos/services/sync/remote_sync_service.dart';
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
 
 class FavoritesService {
@@ -159,7 +158,6 @@ class FavoritesService {
     }
     _updateFavoriteFilesCache(files, favFlag: true);
     Bus.instance.fire(LocalPhotosUpdatedEvent(files, source: "favoriteAdd"));
-    RemoteSyncService.instance.sync(silently: true).ignore();
   }
 
   Future<void> updateFavorites(
@@ -192,7 +190,6 @@ class FavoritesService {
         source: favFlag ? "favoriteAdd" : "favoriteRemove",
       ),
     );
-    RemoteSyncService.instance.sync(silently: true).ignore();
   }
 
   Future<void> removeFromFavorites(BuildContext context, EnteFile file) async {
@@ -225,7 +222,6 @@ class FavoritesService {
     Bus.instance.fire(
       LocalPhotosUpdatedEvent([originalFile], source: "favoriteRemove"),
     );
-    RemoteSyncService.instance.sync(silently: true).ignore();
   }
 
   Future<EnteFile?> _resolveFavoritesEntryForRemoval(

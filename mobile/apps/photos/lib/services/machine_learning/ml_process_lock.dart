@@ -8,7 +8,6 @@ enum MlOperation {
   fullRun,
   indexing,
   clustering,
-  startupRemoteHydration,
   clipVectorMigration,
   clusterCentroidVectorMigration,
   clearData,

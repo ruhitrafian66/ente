@@ -3,8 +3,6 @@ import 'package:ente_pure_utils/ente_pure_utils.dart';
 import 'package:ente_strings/ente_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:photos/models/device_collection.dart';
-import "package:photos/service_locator.dart";
-import "package:photos/ui/components/collection_share_badge.dart";
 import "package:photos/ui/components/thumbnail_list_item.dart";
 import 'package:photos/ui/viewer/file/thumbnail_widget.dart';
 import 'package:photos/ui/viewer/gallery/device/device_folder_page.dart';
@@ -17,8 +15,6 @@ class DeviceFolderListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final componentColors = context.componentColors;
-    final isBackedUp = deviceCollection.shouldBackup;
-
     return ThumbnailListItem(
       backgroundColor: thumbnailListItemBackgroundColor(context),
       onTap: () {
@@ -50,12 +46,6 @@ class DeviceFolderListItem extends StatelessWidget {
               ),
             ),
           ),
-          if (!isBackedUp && !isLocalGalleryMode)
-            const Positioned(
-              right: -4,
-              bottom: -4,
-              child: CollectionUnSyncedBadge(showBorder: true),
-            ),
         ],
       ),
       title: Text(

@@ -11,6 +11,7 @@ import "package:photos/service_locator.dart";
 import "package:photos/services/collections_service.dart";
 import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/exact_duplicates_page.dart";
+import "package:photos/ui/tools/person_folders_page.dart";
 import "package:photos/ui/tools/photo_review/review_old_photos_page.dart";
 import "package:photos/ui/tools/png_to_jpg_page.dart";
 import "package:photos/ui/tools/similar_images_page.dart";
@@ -90,6 +91,15 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
             icon: HugeIcons.strokeRoundedImageCrop,
             onTap: () async {
               await routeToPage(context, const PngToJpgPage());
+            },
+          ),
+          _buildFreeSpaceOption(
+            title: "Person folders", // Offline fork: not localized
+            subtitle:
+                "Move photos of named persons into Pictures/People", // Offline fork: not localized
+            icon: HugeIcons.strokeRoundedFolder01,
+            onTap: () async {
+              await routeToPage(context, const PersonFoldersPage());
             },
           ),
         ],

@@ -23,11 +23,11 @@ import "package:photos/theme/text_style.dart";
 import 'package:photos/ui/components/buttons/button_widget.dart';
 import "package:photos/ui/components/models/button_type.dart";
 import "package:photos/ui/components/toggle_switch_widget.dart";
+import "package:photos/ui/notification/toast.dart";
 import "package:photos/ui/tools/similar_image_file_info.dart";
 import "package:photos/ui/viewer/actions/select_all_status_icon.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
-import "package:photos/utils/delete_file_util.dart";
 import "package:photos/utils/dialog_util.dart";
 import 'package:rive/rive.dart' as rive;
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -1132,7 +1132,9 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
       });
     }
     if (!mounted) return;
-    await deleteFilesFromRemoteOnly(context, allDeleteFiles.toList());
+    // Offline fork: this page deleted the remote copies only. No file has a
+    // remote copy, so the result is the same toast as before.
+    showToast(context, context.strings.selectedFilesAreNotOnEnte);
 
     if (allDeleteFiles.length > 100 && mounted && showUIFeedback) {
       final int totalSize = allDeleteFiles.fold<int>(

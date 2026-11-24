@@ -40,18 +40,7 @@ Future<void> share(
       // iOS origin files are faster to share but remain cached until restart;
       // the share API has no completion callback for cleanup.
       pathFutures.add(
-        getFile(file, isOrigin: true).then((fetchedFile) {
-          final path = fetchedFile?.path;
-          if (path == null && file.localID != null && file.isUploaded) {
-            _logger.warning(
-              "path was null for $file with localID: ${file.localID}. Getting file from server now",
-            );
-            return getFileFromServer(
-              file,
-            ).then((remoteFile) => remoteFile?.path);
-          }
-          return path;
-        }),
+        getFile(file, isOrigin: true).then((fetchedFile) => fetchedFile?.path),
       );
     }
     final paths = await Future.wait(pathFutures);

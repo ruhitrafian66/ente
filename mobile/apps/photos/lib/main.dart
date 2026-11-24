@@ -38,8 +38,6 @@ import "package:photos/db/offline_files_db.dart";
 import 'package:photos/ente_theme_data.dart';
 import 'package:photos/events/guest_view_event.dart';
 import "package:photos/locale.dart";
-import 'package:photos/module/upload/service/file_uploader.dart';
-import 'package:photos/module/upload/service/local_file_update_service.dart';
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/account/user_service.dart";
@@ -53,13 +51,12 @@ import 'package:photos/services/machine_learning/ml_service.dart';
 import 'package:photos/services/machine_learning/semantic_search/semantic_search_service.dart';
 import 'package:photos/services/memory_lane/memory_lane_service.dart';
 import "package:photos/services/notification_service.dart";
+import "package:photos/services/person_folders/person_folder_service.dart";
 import "package:photos/services/process_activity.dart";
 import "package:photos/services/rewind/rewind_2025_leftovers.dart";
 import 'package:photos/services/search_service.dart';
 import 'package:photos/services/sync/local_sync_service.dart';
-import 'package:photos/services/sync/remote_sync_service.dart';
 import "package:photos/services/sync/sync_service.dart";
-import "package:photos/services/video_preview_service.dart";
 import "package:photos/src/rust/api/log.dart" as photos_rust_log;
 import "package:photos/src/rust/frb_generated.dart";
 import 'package:photos/ui/wallpaper/wallpaper_page.dart';
@@ -337,10 +334,7 @@ Future<void> _runMinimally(
     await CollectionsService.instance.init(prefs);
     _logger.info("(for debugging) CollectionsService init done $tlog");
 
-    await FileUploader.instance.init(prefs, true);
-    LocalFileUpdateService.instance.init(prefs);
     await LocalSyncService.instance.init(prefs);
-    RemoteSyncService.instance.init(prefs);
     await SyncService.instance.init(prefs);
 
     await UserService.instance.init();
@@ -378,7 +372,6 @@ Future<void> _runMinimally(
           if (shouldStop?.call() ?? false) return;
           final disposition = await MLService.instance.runAllML(
             force: false,
-            remoteSyncOnly: isIOSBackgroundRefresh,
             allowImageIndexing: BgTaskUtils.allowsImageIndexing(taskId),
             maxFilesToIndex: BgTaskUtils.isRefreshTask(taskId) ? 100 : null,
             control: mlRunControl,
@@ -510,29 +503,20 @@ Future<void> _init(
     }
 
     FavoritesService.instance.initFav().ignore();
-    LocalFileUpdateService.instance.init(preferences);
-
-    _logger.info("FileUploader init $tlog");
-    await FileUploader.instance.init(preferences, isBackground);
-    _logger.info("FileUploader init done $tlog");
 
     _logger.info("LocalSyncService init $tlog");
     await LocalSyncService.instance.init(preferences);
     _logger.info("LocalSyncService init done $tlog");
 
-    RemoteSyncService.instance.init(preferences);
-    _logger.info("RemoteFileMLService done $tlog");
-
     PersonService.init(entityService, MLDataDB.instance, preferences);
+    // Offline fork: person folders tool. Foreground only: a move needs an
+    // Activity.
+    if (kOfflineFork && !isBackground) {
+      PersonFolderService.instance.init(preferences);
+    }
     _logger.info("SyncService init $tlog");
     await SyncService.instance.init(preferences);
     _logger.info("SyncService init done $tlog");
-    if (!isBackground && flagService.internalUser) {
-      _logger.info("GalleryDownloadQueueService init $tlog");
-      await galleryDownloadQueueService.init();
-      _logger.info("GalleryDownloadQueueService init done $tlog");
-    }
-
     if (!isBackground) {
       await _scheduleFGHomeWidgetSync();
     }
@@ -606,8 +590,6 @@ void logLocalSettings() {
     'ML local indexing enabled': localSettings.isMLLocalIndexingEnabled,
     'Multipart upload enabled': localSettings.userEnabledMultiplePart,
     'Gallery grid size': localSettings.getPhotoGridSize(),
-    'Video streaming enabled':
-        VideoPreviewService.instance.isVideoStreamingEnabled,
   };
 
   final formattedSettings = settings.entries

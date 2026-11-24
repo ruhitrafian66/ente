@@ -18,7 +18,6 @@ import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/collections_db.dart';
 import 'package:photos/db/device_files_db.dart';
 import 'package:photos/db/files_db.dart';
-import 'package:photos/db/trash_db.dart';
 import 'package:photos/events/collection_updated_event.dart';
 import 'package:photos/events/contact_relationships_invalidated_event.dart';
 import 'package:photos/events/files_updated_event.dart';
@@ -41,11 +40,9 @@ import "package:photos/service_locator.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
 import "package:photos/services/favorites_service.dart";
 import 'package:photos/services/sync/local_sync_service.dart';
-import 'package:photos/services/sync/remote_sync_service.dart';
 import "package:photos/settings/local_settings.dart";
 import "package:photos/src/rust/api/cast_api.dart";
 import "package:photos/utils/dialog_util.dart";
-import "package:photos/utils/file_key.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
 String? _resolvePublicAlbumAccessToken(Uri uri) {
@@ -856,7 +853,6 @@ class CollectionsService {
         role: role.toStringVal(),
       );
       _cacheSharees(_collectionIDToCollections[collectionID]!, sharees);
-      RemoteSyncService.instance.sync(silently: true).ignore();
       return sharees;
     } on DioException catch (e) {
       if (e.response?.statusCode == 402) {
@@ -893,7 +889,6 @@ class CollectionsService {
           role: shareRole,
         );
         _cacheSharees(_collectionIDToCollections[collectionID]!, sharees);
-        RemoteSyncService.instance.sync(silently: true).ignore();
       }
       return sharees;
     } on DioException catch (error) {
@@ -911,7 +906,6 @@ class CollectionsService {
         email: email,
       );
       _cacheSharees(_collectionIDToCollections[collectionID]!, sharees);
-      RemoteSyncService.instance.sync(silently: true).ignore();
       return sharees;
     } catch (e) {
       _logger.severe(e);
@@ -954,7 +948,6 @@ class CollectionsService {
         recipientEmail: recipientEmail,
         roles: roles,
       );
-      RemoteSyncService.instance.sync(silently: true).ignore();
       return {for (final result in results) result.collectionID: result.status};
     } on DioException catch (e) {
       if (e.response?.statusCode == 402) {
@@ -982,7 +975,6 @@ class CollectionsService {
       collectionIDs: collectionIDs,
     );
     _cacheBulkUnshares(results, recipientUserID);
-    RemoteSyncService.instance.sync(silently: true).ignore();
     return {for (final result in results) result.collectionID: result.status};
   }
 
@@ -1081,9 +1073,7 @@ class CollectionsService {
       _logger.info(
         'turning off backup status for folders $devicePathIDsToUnSync',
       );
-      await RemoteSyncService.instance.updateDeviceFolderSyncStatus(
-        devicePathIDsToUnSync,
-      );
+      await _filesDB.updateDevicePathSyncStatus(devicePathIDsToUnSync);
     }
   }
 
@@ -1154,6 +1144,18 @@ class CollectionsService {
       );
     }
     return _cachedKeys[collectionID]!;
+  }
+
+  // Offline fork (removal stage 2): copy of getFileKey from the removed
+  // utils/file_key.dart. It goes away with this service in stage 3.
+  Uint8List _getFileKey(EnteFile file) {
+    final encryptedKey = CryptoUtil.base642bin(file.encryptedKey!);
+    final nonce = CryptoUtil.base642bin(file.keyDecryptionNonce!);
+    return CryptoUtil.decryptSync(
+      encryptedKey,
+      getCollectionKey(file.collectionID!),
+      nonce,
+    );
   }
 
   Uint8List getPublicCollectionKey(int collectionID) {
@@ -2101,7 +2103,7 @@ class CollectionsService {
     for (final batch in batchedFiles) {
       final fileItems = <CollectionFileItem>[];
       for (final file in batch) {
-        final fileKey = getFileKey(file);
+        final fileKey = _getFileKey(file);
         file.generatedID =
             null; // So that a new entry is created in the FilesDB
         file.collectionID = collectionID;
@@ -2162,7 +2164,7 @@ class CollectionsService {
       final fileItems = <CollectionFileItem>[];
       for (final file in batch) {
         final int uploadedFileID = file.uploadedFileID!;
-        final fileKey = getFileKey(file);
+        final fileKey = _getFileKey(file);
         final encryptedKeyData = CryptoUtil.encryptSync(
           fileKey,
           getCollectionKey(collectionID),
@@ -2196,7 +2198,7 @@ class CollectionsService {
     for (final batch in batchedFiles) {
       final fileItems = <CollectionFileItem>[];
       for (final batchFile in batch) {
-        final fileKey = getFileKey(batchFile);
+        final fileKey = _getFileKey(batchFile);
         final encryptedKeyData = CryptoUtil.encryptSync(
           fileKey,
           getCollectionKey(dstCollectionID),
@@ -2317,7 +2319,7 @@ class CollectionsService {
   }) async {
     final int uploadedFileID = existingUploadedFile.uploadedFileID!;
 
-    final fileKey = getFileKey(existingUploadedFile);
+    final fileKey = _getFileKey(existingUploadedFile);
     final encryptedKeyData = CryptoUtil.encryptSync(
       fileKey,
       getCollectionKey(destCollectionID),
@@ -2359,7 +2361,7 @@ class CollectionsService {
     for (final batch in batchedFiles) {
       final fileItems = <CollectionFileItem>[];
       for (final file in batch) {
-        final fileKey = getFileKey(file);
+        final fileKey = _getFileKey(file);
         file.generatedID =
             null; // So that a new entry is created in the FilesDB
         file.collectionID = toCollectionID;
@@ -2389,9 +2391,6 @@ class CollectionsService {
       try {
         await collectionFilesGateway.restoreFiles(toCollectionID, fileItems);
         await _filesDB.insertMultiple(batch);
-        await TrashDB.instance.delete(
-          batch.map((e) => e.uploadedFileID!).toList(),
-        );
         Bus.instance.fire(
           CollectionUpdatedEvent(toCollectionID, batch, "restore"),
         );
@@ -2431,7 +2430,7 @@ class CollectionsService {
     for (final batch in batchedFiles) {
       final fileItems = <CollectionFileItem>[];
       for (final file in batch) {
-        final fileKey = getFileKey(file);
+        final fileKey = _getFileKey(file);
         file.generatedID =
             null; // So that a new entry is created in the FilesDB
         file.collectionID = toCollectionID;
@@ -2544,7 +2543,6 @@ class CollectionsService {
         ),
       );
     }
-    RemoteSyncService.instance.sync(silently: true).ignore();
   }
 
   Future<void> suggestDeleteFromCollection(
@@ -2576,7 +2574,6 @@ class CollectionsService {
         type: EventType.deletedFromRemote,
       ),
     );
-    RemoteSyncService.instance.sync(silently: true).ignore();
   }
 
   Future<Collection> createAndCacheCollection(

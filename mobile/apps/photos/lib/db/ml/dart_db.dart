@@ -20,7 +20,6 @@ import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/models/ml/vector.dart";
 import "package:photos/offline_fork.dart";
-import "package:photos/services/filedata/model/file_data.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_db_info_for_clustering.dart";
 import 'package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart';
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -54,7 +53,8 @@ class DartMLDataDB
   // written for accounts works on the on-device data.
   static DartMLDataDB get instance =>
       kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final DartMLDataDB _accountInstance = DartMLDataDB._privateConstructor();
+  static final DartMLDataDB _accountInstance =
+      DartMLDataDB._privateConstructor();
   static final DartMLDataDB localGalleryInstance =
       DartMLDataDB._privateConstructor(
         databaseName: "ente.ml.offline.db",
@@ -1802,57 +1802,5 @@ class DartMLDataDB
       offset += batchSize;
     }
     return clusters;
-  }
-
-  @override
-  Future<void> putFDStatus(List<FDStatus> fdStatusList) async {
-    if (fdStatusList.isEmpty) return;
-    final db = await asyncDB;
-    final inputs = <List<Object?>>[];
-    for (var status in fdStatusList) {
-      inputs.add([
-        status.fileID,
-        status.userID,
-        status.type,
-        status.size,
-        status.objectID,
-        status.objectNonce,
-        status.updatedAt,
-      ]);
-    }
-    await db.executeBatch(
-      'INSERT OR REPLACE INTO $fileDataTable ($fileIDColumn, user_id, type, size, obj_id, obj_nonce, updated_at ) values(?, ?, ?, ?, ?, ?, ?)',
-      inputs,
-    );
-  }
-
-  @override
-  Future<Map<int, PreviewInfo>> getFileIDsVidPreview() async {
-    final db = await asyncDB;
-    final res = await db.execute(
-      "SELECT $fileIDColumn, $objectIdColumn, size FROM $fileDataTable WHERE type='vid_preview'",
-    );
-    return res.asMap().map(
-      (i, e) => MapEntry(
-        e[fileIDColumn] as int,
-        PreviewInfo(
-          objectId: e[objectIdColumn] as String,
-          objectSize: e['size'] as int,
-        ),
-      ),
-    );
-  }
-
-  @override
-  Future<Set<int>> getFileIDsWithFDData({DataType? type}) async {
-    final db = await asyncDB;
-    final String query = type == null
-        ? 'SELECT $fileIDColumn FROM $fileDataTable'
-        : 'SELECT $fileIDColumn FROM $fileDataTable WHERE type = ?';
-    final List<Object?> args = type == null ? const [] : [type.toJson()];
-    final res = args.isEmpty
-        ? await db.execute(query)
-        : await db.execute(query, args);
-    return res.map((e) => e[fileIDColumn] as int).toSet();
   }
 }

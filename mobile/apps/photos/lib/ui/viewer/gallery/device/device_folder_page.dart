@@ -1,8 +1,5 @@
 import "package:collection/collection.dart";
-import "package:ente_pure_utils/ente_pure_utils.dart";
-import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
-import "package:logging/logging.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/device_files_db.dart";
@@ -14,11 +11,7 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/file_load_result.dart";
 import "package:photos/models/gallery_type.dart";
 import "package:photos/models/selected_files.dart";
-import "package:photos/service_locator.dart";
-import "package:photos/services/sync/remote_sync_service.dart";
 import "package:photos/ui/viewer/actions/file_selection_overlay_bar.dart";
-import "package:photos/ui/viewer/gallery/device/backup_header_widget.dart";
-import "package:photos/ui/viewer/gallery/device/skipped_device_folder_page.dart";
 import "package:photos/ui/viewer/gallery/gallery.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
@@ -36,17 +29,14 @@ class DeviceFolderPage extends StatefulWidget {
 }
 
 class _DeviceFolderPageState extends State<DeviceFolderPage> {
-  final _logger = Logger("_DeviceFolderPageState");
   final _selectedFiles = SelectedFiles();
   final _coverAppBarKey = GlobalKey();
-  late bool _shouldBackup;
   EnteFile? _cover;
   int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _shouldBackup = widget.deviceCollection.shouldBackup;
     _cover = widget.deviceCollection.thumbnail;
   }
 
@@ -81,21 +71,15 @@ class _DeviceFolderPageState extends State<DeviceFolderPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.strings;
     final appBar = GalleryAppBarWidget.sliverConfig(
       GalleryType.localFolder,
       widget.deviceCollection.name,
       _selectedFiles,
       coverAppBarKey: _coverAppBarKey,
-      subtitle: _shouldBackup ? l10n.backedUpAutomatically : l10n.notBackedUp,
       deviceCollection: widget.deviceCollection,
       cover: _cover,
       coverHeroTag:
           widget.coverHeroTag ?? "device_folder:${widget.deviceCollection.id}",
-      isDeviceFolderBackedUp: _shouldBackup,
-      onDisableDeviceFolderBackup: () async {
-        await _updateBackupStatus(false);
-      },
     );
     final gallery = Gallery(
       key: ValueKey("device_folder:${widget.deviceCollection.id}"),
@@ -110,14 +94,7 @@ class _DeviceFolderPageState extends State<DeviceFolderPage> {
       tagPrefix: "device_folder_files:${widget.deviceCollection.id}",
       galleryType: GalleryType.localFolder,
       selectedFiles: _selectedFiles,
-      header: Configuration.instance.hasConfiguredAccount()
-          ? BackupHeaderWidget(
-              widget.deviceCollection,
-              shouldBackup: _shouldBackup,
-              onBackupChanged: _updateBackupStatus,
-              onOpenSkippedFiles: _openSkippedFiles,
-            )
-          : const SizedBox.shrink(),
+      header: const SizedBox.shrink(),
       initialFiles: _initialFiles,
     );
     return GalleryBoundariesProvider(
@@ -144,35 +121,5 @@ class _DeviceFolderPageState extends State<DeviceFolderPage> {
   List<EnteFile>? get _initialFiles {
     final thumbnail = widget.deviceCollection.thumbnail;
     return thumbnail != null ? [thumbnail] : null;
-  }
-
-  Future<bool> _updateBackupStatus(bool shouldBackup) async {
-    if (_shouldBackup == shouldBackup) {
-      return true;
-    }
-    _logger.info("Toggling device folder sync status to $shouldBackup");
-    try {
-      await RemoteSyncService.instance.updateDeviceFolderSyncStatus({
-        widget.deviceCollection.id: shouldBackup,
-      });
-      await backupPreferenceService.setHasManualFolderSelection(true);
-      if (!mounted) {
-        return true;
-      }
-      setState(() {
-        _shouldBackup = shouldBackup;
-      });
-      return true;
-    } catch (e, s) {
-      _logger.severe("Could not update device folder sync status", e, s);
-      return false;
-    }
-  }
-
-  Future<void> _openSkippedFiles() async {
-    await routeToPage(
-      context,
-      SkippedDeviceFolderPage(widget.deviceCollection),
-    );
   }
 }

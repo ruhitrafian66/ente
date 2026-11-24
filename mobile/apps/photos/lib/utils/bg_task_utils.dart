@@ -7,9 +7,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart" show AppLifecycleState, WidgetsBinding;
 import "package:logging/logging.dart";
 import "package:permission_handler/permission_handler.dart";
-import "package:photos/db/upload_locks_db.dart";
 import "package:photos/main.dart";
-import "package:photos/module/upload/service/file_uploader.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/services/process_activity.dart";
 import "package:photos/utils/background_tasks.dart";
@@ -281,10 +279,6 @@ class BgTaskUtils {
     String taskId,
     SharedPreferences prefs,
   ) async {
-    await UploadLocksDB.instance.releaseLocksAcquiredByOwnerBefore(
-      ProcessType.background.toString(),
-      DateTime.now().microsecondsSinceEpoch,
-    );
     await prefs.remove(kLastBGTaskHeartBeatTime);
   }
 

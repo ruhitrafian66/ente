@@ -4,7 +4,6 @@ import "package:photos/models/ml/clip.dart";
 import "package:photos/models/ml/face/face.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/vector.dart";
-import "package:photos/services/filedata/model/file_data.dart";
 
 abstract class IMLDataDB<T> {
   Future<void> bulkInsertFaces(List<Face> faces);
@@ -126,9 +125,6 @@ abstract class IMLDataDB<T> {
     List<double> embedding,
   );
   Future<void> removeFaceIdCachedForPersonOrCluster(String personOrClusterID);
-  Future<void> putFDStatus(List<FDStatus> fdStatusList);
-  Future<Map<int, PreviewInfo>> getFileIDsVidPreview();
-  Future<Set<int>> getFileIDsWithFDData({DataType? type});
 
   Future<int> getClipVectorizableFileCount({int minimumMlVersion});
   Future<Map<String, String>> getFaceIdToPersonIdForFaces(

@@ -12,25 +12,16 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:photos/core/constants.dart';
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/files_db.dart';
-import 'package:photos/events/collection_updated_event.dart';
 import 'package:photos/events/files_updated_event.dart';
 import "package:photos/events/force_reload_trash_page_event.dart";
 import 'package:photos/events/local_photos_updated_event.dart';
-import 'package:photos/gateways/trash/models/trash_item_request.dart';
 import "package:photos/models/button_result.dart";
 import 'package:photos/models/file/file.dart';
-import "package:photos/models/file/trash_file.dart";
 import "package:photos/models/files_split.dart";
-import "package:photos/models/freeable_space_info.dart";
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/module/download/file.dart';
 import "package:photos/service_locator.dart";
-import "package:photos/services/files_service.dart";
 import "package:photos/services/free_space/deletion_batch_runner.dart";
-import "package:photos/services/sync/local_sync_service.dart";
-import 'package:photos/services/sync/remote_sync_service.dart';
-import 'package:photos/services/sync/sync_service.dart';
-import "package:photos/settings/local_settings.dart";
 import 'package:photos/ui/common/linear_progress_dialog.dart';
 import 'package:photos/ui/common/progress_dialog.dart';
 import 'package:photos/ui/components/buttons/button_widget.dart'
@@ -69,157 +60,6 @@ _tryTrashOrDeleteFiles(List<String> assetIDs) async {
     _logger.severe("Could not delete file", e, s);
     return (deletedIDs: <String>{}, trashedIDs: <String>{});
   }
-}
-
-Future<List<EnteFile>> deleteFilesFromEverywhere(
-  BuildContext context,
-  List<EnteFile> files,
-) async {
-  _logger.info("Trying to deleteFilesFromEverywhere " + files.toString());
-  final List<String> localAssetIDs = [];
-  final List<String> localSharedMediaIDs = [];
-  final List<String> alreadyDeletedIDs = [];
-  bool hasLocalOnlyFiles = false;
-  for (final file in files) {
-    if (file.localID != null) {
-      if (!(await _localFileExist(file))) {
-        _logger.warning("Already deleted " + file.toString());
-        alreadyDeletedIDs.add(file.localID!);
-      } else if (file.isSharedMediaToAppSandbox) {
-        localSharedMediaIDs.add(file.localID!);
-      } else {
-        localAssetIDs.add(file.localID!);
-      }
-    }
-    if (file.uploadedFileID == null) {
-      hasLocalOnlyFiles = true;
-    }
-  }
-  final result = await _tryTrashOrDeleteFiles(localAssetIDs);
-  final deletedIDs = result.deletedIDs
-    ..addAll(await _tryDeleteSharedMediaFiles(localSharedMediaIDs));
-  final removedIDs = deletedIDs.union(result.trashedIDs);
-  final updatedCollectionIDs = <int>{};
-  final List<TrashRequest> uploadedFilesToBeTrashed = [];
-  final List<EnteFile> deletedFiles = [];
-  for (final file in files) {
-    if (file.localID != null) {
-      if (removedIDs.contains(file.localID) ||
-          alreadyDeletedIDs.contains(file.localID)) {
-        deletedFiles.add(file);
-        if (file.uploadedFileID != null) {
-          uploadedFilesToBeTrashed.add(
-            TrashRequest(file.uploadedFileID!, file.collectionID!),
-          );
-          updatedCollectionIDs.add(file.collectionID!);
-        } else {
-          await FilesDB.instance.deleteLocalFile(file);
-        }
-      }
-    } else {
-      updatedCollectionIDs.add(file.collectionID!);
-      deletedFiles.add(file);
-      uploadedFilesToBeTrashed.add(
-        TrashRequest(file.uploadedFileID!, file.collectionID!),
-      );
-    }
-  }
-  if (uploadedFilesToBeTrashed.isNotEmpty) {
-    try {
-      final fileIDs = uploadedFilesToBeTrashed
-          .map((item) => item.fileID)
-          .toList();
-      await trashSyncService.trashFilesOnServer(uploadedFilesToBeTrashed);
-      await FilesDB.instance.deleteMultipleUploadedFiles(fileIDs);
-    } catch (e) {
-      _logger.severe(e);
-      rethrow;
-    }
-    for (final collectionID in updatedCollectionIDs) {
-      Bus.instance.fire(
-        CollectionUpdatedEvent(
-          collectionID,
-          deletedFiles
-              .where((file) => file.collectionID == collectionID)
-              .toList(),
-          "deleteFilesEverywhere",
-          type: EventType.deletedFromEverywhere,
-        ),
-      );
-    }
-  }
-  if (deletedFiles.isNotEmpty) {
-    Bus.instance.fire(
-      LocalPhotosUpdatedEvent(
-        deletedFiles,
-        type: EventType.deletedFromEverywhere,
-        source: "deleteFilesEverywhere",
-      ),
-    );
-    if (context.mounted) {
-      final message = hasLocalOnlyFiles && deletedIDs.isNotEmpty
-          ? context.strings.filesDeleted
-          : context.strings.movedToTrash;
-      showShortToast(context, message);
-    }
-  }
-  if (uploadedFilesToBeTrashed.isNotEmpty) {
-    // ignore: unawaited_futures
-    RemoteSyncService.instance.sync(silently: true);
-  }
-  return deletedFiles;
-}
-
-Future<void> deleteFilesFromRemoteOnly(
-  BuildContext context,
-  List<EnteFile> files,
-) async {
-  final l10n = context.strings;
-  files.removeWhere((element) => element.uploadedFileID == null);
-  if (files.isEmpty) {
-    showToast(context, l10n.selectedFilesAreNotOnEnte);
-    return;
-  }
-  _logger.info(
-    "Trying to deleteFilesFromRemoteOnly " +
-        files.map((f) => f.uploadedFileID).toString(),
-  );
-  final updatedCollectionIDs = <int>{};
-  final List<int> uploadedFileIDs = [];
-  final List<TrashRequest> trashRequests = [];
-  for (final file in files) {
-    updatedCollectionIDs.add(file.collectionID!);
-    uploadedFileIDs.add(file.uploadedFileID!);
-    trashRequests.add(TrashRequest(file.uploadedFileID!, file.collectionID!));
-  }
-  try {
-    await trashSyncService.trashFilesOnServer(trashRequests);
-    await FilesDB.instance.deleteMultipleUploadedFiles(uploadedFileIDs);
-  } catch (e, s) {
-    _logger.severe("Failed to delete files from remote", e, s);
-    rethrow;
-  }
-  for (final collectionID in updatedCollectionIDs) {
-    Bus.instance.fire(
-      CollectionUpdatedEvent(
-        collectionID,
-        files.where((file) => file.collectionID == collectionID).toList(),
-        "deleteFromRemoteOnly",
-        type: EventType.deletedFromRemote,
-      ),
-    );
-  }
-  Bus.instance.fire(
-    LocalPhotosUpdatedEvent(
-      files,
-      type: EventType.deletedFromRemote,
-      source: "deleteFromRemoteOnly",
-    ),
-  );
-  // ignore: unawaited_futures
-  SyncService.instance.sync();
-  // ignore: unawaited_futures
-  RemoteSyncService.instance.sync(silently: true);
 }
 
 Future<List<EnteFile>> deleteFilesOnDeviceOnly(
@@ -292,68 +132,14 @@ Future<List<EnteFile>> deleteFilesOnDeviceOnly(
   return deletedFiles;
 }
 
-Future<bool> deleteFromEnteTrash(
-  BuildContext context,
-  List<EnteTrashFile> trashFiles,
-) async {
-  bool didDeletionStart = false;
-  final actionResult = await showBottomSheetComponent<ButtonResult>(
-    context: context,
-    useRootNavigator: Platform.isIOS,
-    builder: (_) => PermanentlyDeleteConfirmationSheet(
-      onDelete: () async {
-        try {
-          didDeletionStart = true;
-          await trashSyncService.deleteFromTrash(trashFiles);
-          Bus.instance.fire(
-            FilesUpdatedEvent(
-              trashFiles,
-              type: EventType.deletedFromEverywhere,
-              source: "deleteFromTrash",
-            ),
-          );
-          // FilesUpdatedEvent does not reload Trash here.
-          Bus.instance.fire(ForceReloadTrashPageEvent());
-        } catch (e, s) {
-          _logger.info("failed to delete from trash", e, s);
-          rethrow;
-        }
-      },
-    ),
-  );
-
-  if (actionResult?.action == null ||
-      actionResult!.action == ButtonAction.cancel ||
-      actionResult.action == ButtonAction.fourth) {
-    return didDeletionStart ? true : false;
-  } else if (actionResult.action == ButtonAction.error) {
-    if (!context.mounted) return false;
-    await showGenericErrorDialog(
-      context: context,
-      error: actionResult.exception,
-    );
-    return false;
-  } else {
-    return true;
-  }
-}
-
-Future<void> showConfirmEmptyTrashSheet(
-  BuildContext context,
-  bool isOnEnteTrash,
-) async {
+Future<void> showConfirmEmptyTrashSheet(BuildContext context) async {
   var didDeleteDeviceTrash = false;
 
   Future<void> emptyTrash() async {
     try {
-      if (isOnEnteTrash) {
-        await trashSyncService.emptyTrash();
-      } else {
-        didDeleteDeviceTrash = await _emptyDeviceTrash();
-      }
+      didDeleteDeviceTrash = await _emptyDeviceTrash();
     } catch (e, s) {
-      final trashKind = isOnEnteTrash ? "Ente" : "device";
-      _logger.severe("failed to empty $trashKind trash", e, s);
+      _logger.severe("failed to empty device trash", e, s);
       if (context.mounted) {
         await showGenericErrorDialog(context: context, error: e);
       }
@@ -521,84 +307,6 @@ Future<LocalDeletionResult> deleteLocalFilesAfterRemovingAlreadyDeletedIDs(
 
   final platformResult = await _deletePlatformAssets(context, localAssetIDs);
   return combineDeletionResults(sharedMediaResult, platformResult);
-}
-
-// Only use on Android.
-Future<LocalDeletionResult>
-retryFreeUpSpaceAfterRemovingAssetsNonExistingInDisk(
-  BuildContext context, {
-  required Iterable<String> originalLocalIDs,
-}) async {
-  _logger.info(
-    "Retrying free up space after removing assets non-existing in disk",
-  );
-
-  final dialog = createProgressDialog(
-    context,
-    context.strings.pleaseWaitThisWillTakeAWhile,
-  );
-  final localAssetIDs = <String>[];
-  final localSharedMediaIDs = <String>[];
-  late LocalDeletionResult sharedMediaResult;
-
-  await dialog.show();
-  try {
-    final stopwatch = Stopwatch()..start();
-    final res = await PhotoManager.editor.android.removeAllNoExistsAsset();
-    if (res == false) {
-      _logger.warning("Failed to remove non-existing assets");
-    }
-    _logger.info(
-      "removeAllNoExistsAsset took: ${stopwatch.elapsedMilliseconds}ms",
-    );
-    await LocalSyncService.instance.sync();
-
-    final FreeableSpaceInfo status = await FilesService.instance
-        .getFreeableSpaceInfo();
-
-    final scopedLocalIDs = retainOriginalDeletionCandidates(
-      refreshedLocalIDs: status.localIDs,
-      originalLocalIDs: originalLocalIDs,
-    );
-    for (final localID in scopedLocalIDs) {
-      if (localID.startsWith(sharedMediaIdentifier)) {
-        localSharedMediaIDs.add(localID);
-      } else {
-        localAssetIDs.add(localID);
-      }
-    }
-    sharedMediaResult = await _deleteAndCheckpointSharedMediaFiles(
-      localSharedMediaIDs,
-    );
-    if (sharedMediaResult.isTerminalFailure) {
-      return LocalDeletionResult(
-        status: LocalDeletionStatus.failed,
-        deletedIDs: sharedMediaResult.deletedIDs,
-      );
-    }
-  } catch (e, s) {
-    _logger.severe("Could not complete MediaStore recovery", e, s);
-    return const LocalDeletionResult(status: LocalDeletionStatus.failed);
-  } finally {
-    await _hideProgressDialog(dialog);
-  }
-
-  if (!context.mounted) {
-    _logger.info(
-      "Skipping final platform deletion after the initiating page was disposed",
-    );
-    return LocalDeletionResult(
-      status: LocalDeletionStatus.failed,
-      deletedIDs: sharedMediaResult.deletedIDs,
-    );
-  }
-
-  final platformResult = await _deletePlatformAssets(context, localAssetIDs);
-  final result = combineDeletionResults(sharedMediaResult, platformResult);
-  return LocalDeletionResult(
-    status: result.status,
-    deletedIDs: result.deletedIDs,
-  );
 }
 
 Future<LocalDeletionResult> _deletePlatformAssets(
@@ -871,13 +579,7 @@ Future<void> showDeleteSheet(
   FilesSplit filesSplit, {
   @visibleForTesting
   Future<void> Function(BuildContext context, List<EnteFile> files)?
-  deleteFromRemoteOnlyOverride,
-  @visibleForTesting
-  Future<void> Function(BuildContext context, List<EnteFile> files)?
   deleteOnDeviceOnlyOverride,
-  @visibleForTesting
-  Future<void> Function(BuildContext context, List<EnteFile> files)?
-  deleteFromEverywhereOverride,
 }) async {
   final l10n = context.strings;
   if (selectedFiles.files.length != filesSplit.count) {
@@ -888,17 +590,6 @@ Future<void> showDeleteSheet(
   }
   final List<EnteFile> deletableFiles =
       filesSplit.ownedByCurrentUser + filesSplit.pendingUploads;
-  Future<bool> deleteFromRemoteOnlyAction(
-    BuildContext context,
-    List<EnteFile> files,
-  ) async {
-    if (deleteFromRemoteOnlyOverride != null) {
-      await deleteFromRemoteOnlyOverride(context, files);
-    } else {
-      await deleteFilesFromRemoteOnly(context, files);
-    }
-    return true;
-  }
 
   Future<bool> deleteOnDeviceOnlyAction(
     BuildContext context,
@@ -911,118 +602,48 @@ Future<void> showDeleteSheet(
     return (await deleteFilesOnDeviceOnly(context, files)).isNotEmpty;
   }
 
-  Future<bool> deleteFromEverywhereAction(
-    BuildContext context,
-    List<EnteFile> files,
-  ) async {
-    if (deleteFromEverywhereOverride != null) {
-      await deleteFromEverywhereOverride(context, files);
-      return true;
-    }
-    return (await deleteFilesFromEverywhere(context, files)).isNotEmpty;
-  }
-
   if (deletableFiles.isEmpty && filesSplit.ownedByOtherUsers.isNotEmpty) {
     showShortToast(context, l10n.cannotDeleteSharedFiles);
     return;
   }
-  if (isLocalGalleryMode) {
-    final localGalleryDeletableFiles = deletableFiles
-        .where((file) => file.localID != null)
-        .toList();
-    if (localGalleryDeletableFiles.isEmpty) {
-      showShortToast(context, l10n.noDeviceThatCanBeDeleted);
-      return;
-    }
-    var didDelete = false;
-    if (Platform.isAndroid &&
-        (await isAndroidSDKVersionLowerThan(android11SDKINT) ||
-            await PhotoManager.canManageMedia())) {
-      if (!context.mounted) return;
-      didDelete =
-          await showDeleteConfirmationSheet(
-            context,
-            files: localGalleryDeletableFiles,
-            count: localGalleryDeletableFiles.length,
-            isLocal: true,
-            isRemote: false,
-            onDeleteFromLocal: () async {
-              return await deleteOnDeviceOnlyAction(
-                context,
-                localGalleryDeletableFiles,
-              );
-            },
-            onDeleteFromRemote: () async {
-              throw AssertionError("delete from remote in local gallery mode");
-            },
-            onDeleteFromBoth: () async {
-              throw AssertionError("delete from both in local gallery mode");
-            },
-          ) ==
-          true;
-    } else {
-      if (!context.mounted) return;
-      didDelete = await deleteOnDeviceOnlyAction(
-        context,
-        localGalleryDeletableFiles,
-      );
-    }
-    if (!didDelete) {
-      return;
-    }
-    selectedFiles.unSelectAll(localGalleryDeletableFiles.toSet());
-    if (!context.mounted) return;
-    await showMediaManagementHintSheet(context);
+  final localGalleryDeletableFiles = deletableFiles
+      .where((file) => file.localID != null)
+      .toList();
+  if (localGalleryDeletableFiles.isEmpty) {
+    showShortToast(context, l10n.noDeviceThatCanBeDeleted);
     return;
   }
-  final hasRemoteFiles = deletableFiles.any((f) => f.isUploaded);
-  final hasLocalFiles = deletableFiles.any((f) => f.localID != null);
-
-  final bool isBothLocalAndRemote = hasRemoteFiles && hasLocalFiles;
-  final bool isLocalOnly = !hasRemoteFiles;
-  final bool isRemoteOnly = !hasLocalFiles;
-  if (!isBothLocalAndRemote && !isRemoteOnly && !isLocalOnly) {
-    throw AssertionError("Unexpected state");
+  var didDelete = false;
+  if (Platform.isAndroid &&
+      (await isAndroidSDKVersionLowerThan(android11SDKINT) ||
+          await PhotoManager.canManageMedia())) {
+    if (!context.mounted) return;
+    didDelete =
+        await showDeleteConfirmationSheet(
+          context,
+          files: localGalleryDeletableFiles,
+          count: localGalleryDeletableFiles.length,
+          onDeleteFromLocal: () async {
+            return await deleteOnDeviceOnlyAction(
+              context,
+              localGalleryDeletableFiles,
+            );
+          },
+        ) ==
+        true;
+  } else {
+    if (!context.mounted) return;
+    didDelete = await deleteOnDeviceOnlyAction(
+      context,
+      localGalleryDeletableFiles,
+    );
   }
-
-  var didDeleteLocalFiles = false;
-  final actionResult = await showDeleteConfirmationSheet(
-    context,
-    files: deletableFiles,
-    isLocal: hasLocalFiles,
-    isRemote: hasRemoteFiles,
-    count: deletableFiles.length,
-    onDeleteFromLocal: () async {
-      final didDelete = await deleteOnDeviceOnlyAction(context, deletableFiles);
-      didDeleteLocalFiles = didDelete;
-      return didDelete;
-    },
-    onDeleteFromRemote: () async {
-      final didDelete = await deleteFromRemoteOnlyAction(
-        context,
-        deletableFiles,
-      );
-      if (didDelete && context.mounted) {
-        showShortToast(context, l10n.movedToTrash);
-      }
-      return didDelete;
-    },
-    onDeleteFromBoth: () async {
-      final didDelete = await deleteFromEverywhereAction(
-        context,
-        deletableFiles,
-      );
-      didDeleteLocalFiles = didDelete;
-      return didDelete;
-    },
-  );
-  if (actionResult == true) {
-    selectedFiles.clearAll();
-    if (didDeleteLocalFiles) {
-      if (!context.mounted) return;
-      await showMediaManagementHintSheet(context);
-    }
+  if (!didDelete) {
+    return;
   }
+  selectedFiles.unSelectAll(localGalleryDeletableFiles.toSet());
+  if (!context.mounted) return;
+  await showMediaManagementHintSheet(context);
 }
 
 Future<void> _runDeleteAction(
@@ -1073,65 +694,13 @@ class PermanentlyDeleteConfirmationSheet extends StatelessWidget {
   }
 }
 
-class _MoreOptionsButton extends StatefulWidget {
-  const _MoreOptionsButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  State<_MoreOptionsButton> createState() => _MoreOptionsButtonState();
-}
-
-// TODO: Replace this component once ente_components has a ghost button variant.
-class _MoreOptionsButtonState extends State<_MoreOptionsButton> {
-  var _isPressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.strings;
-    final foreground = context.componentColors.textLight;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) => setState(() => _isPressed = false),
-      onTapCancel: () => setState(() => _isPressed = false),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _isPressed ? 0.98 : 1,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOutCubic,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              l10n.moreOptions,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              style: TextStyles.body.copyWith(color: foreground),
-            ),
-            const SizedBox(width: Spacing.xs),
-            Icon(
-              Icons.keyboard_arrow_up,
-              color: foreground,
-              size: IconSizes.small,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
+/// Confirms a delete from the device. Every file is a device file: this app
+/// has no remote copy.
 Future<bool?> showDeleteConfirmationSheet(
   BuildContext context, {
   required List<EnteFile> files,
-  required bool isLocal,
-  required bool isRemote,
   required int count,
   required Future<bool> Function() onDeleteFromLocal,
-  required Future<bool> Function() onDeleteFromRemote,
-  required Future<bool> Function() onDeleteFromBoth,
 }) async {
   final isTrashAction =
       files.every((file) => !file.isSharedMediaToAppSandbox) &&
@@ -1143,54 +712,23 @@ Future<bool?> showDeleteConfirmationSheet(
     context: context,
     useRootNavigator: Platform.isIOS,
     builder: (_) => _DeleteConfirmationSheet(
-      isLocal: isLocal,
-      isRemote: isRemote,
       isTrashAction: isTrashAction,
       count: count,
       onDeleteFromLocal: onDeleteFromLocal,
-      onDeleteFromRemote: onDeleteFromRemote,
-      onDeleteFromBoth: onDeleteFromBoth,
     ),
   );
 }
 
-class _DeleteConfirmationSheet extends StatefulWidget {
-  final bool isLocal;
-  final bool isRemote;
+class _DeleteConfirmationSheet extends StatelessWidget {
   final bool isTrashAction;
   final int count;
   final Future<bool> Function() onDeleteFromLocal;
-  final Future<bool> Function() onDeleteFromRemote;
-  final Future<bool> Function() onDeleteFromBoth;
 
   const _DeleteConfirmationSheet({
-    required this.isLocal,
-    required this.isRemote,
     required this.isTrashAction,
     required this.count,
     required this.onDeleteFromLocal,
-    required this.onDeleteFromRemote,
-    required this.onDeleteFromBoth,
   });
-
-  @override
-  State<StatefulWidget> createState() {
-    return _DeleteConfirmationSheetState();
-  }
-}
-
-class _DeleteConfirmationSheetState extends State<_DeleteConfirmationSheet> {
-  var _isMoreOptionsShown = false;
-  var _isSetAsDefaultSelected = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Always display the more options if the user hasn't set a preference yet.
-    if (localSettings.getDeletePreference() == null) {
-      _isMoreOptionsShown = true;
-    }
-  }
 
   Future<void> _onDelete(
     BuildContext context,
@@ -1218,30 +756,12 @@ class _DeleteConfirmationSheetState extends State<_DeleteConfirmationSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.strings;
-    final title = l10n.deleteItemsQuestion(count: widget.count);
-    var body = widget.isTrashAction
-        ? l10n.filesCanBeRestoredFromTrash(count: widget.count)
+    final title = l10n.deleteItemsQuestion(count: count);
+    var body = isTrashAction
+        ? l10n.filesCanBeRestoredFromTrash(count: count)
         : l10n.selectedFilesSavedOnDeviceOnly;
-    if (widget.count == 1 && widget.isLocal && widget.isRemote) {
-      body = l10n.singleFileInBothLocalAndRemote;
-    } else if (widget.count == 1 && widget.isRemote) {
-      body = l10n.singleFileInRemoteOnly;
-    } else if (widget.count == 1 && widget.isLocal && !widget.isTrashAction) {
+    if (count == 1 && !isTrashAction) {
       body = l10n.singleFileDeleteFromDevice;
-    } else if (widget.isLocal && widget.isRemote) {
-      body = l10n.someSelectedFilesBackedUpToEnte;
-    } else if (widget.isRemote) {
-      body = l10n.selectedFilesBackedUpToEnte;
-    }
-    var deletePreference = DeletePreference.DeleteFromBoth;
-    if (widget.isLocal && !widget.isRemote) {
-      deletePreference = DeletePreference.DeleteFromLocalOnly;
-    } else if (widget.isRemote && !widget.isLocal) {
-      deletePreference = DeletePreference.DeleteFromRemoteOnly;
-    } else {
-      deletePreference =
-          localSettings.getDeletePreference() ??
-          DeletePreference.DeleteFromBoth;
     }
 
     return BottomSheetComponent(
@@ -1256,6 +776,8 @@ class _DeleteConfirmationSheetState extends State<_DeleteConfirmationSheet> {
         ),
       ),
       actions: [
+        // The wrappers stay so that the button keeps the layout that it had
+        // when this sheet could switch between one and three buttons.
         AnimatedSize(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
@@ -1273,104 +795,13 @@ class _DeleteConfirmationSheetState extends State<_DeleteConfirmationSheet> {
                 children: [...previousChildren, ?currentChild],
               );
             },
-            child: (widget.isLocal && widget.isRemote && _isMoreOptionsShown)
-                ? Column(
-                    spacing: Spacing.md,
-                    children: [
-                      ButtonComponent(
-                        label: l10n.deleteFromDevice,
-                        variant: ButtonComponentVariant.secondary,
-                        onTap: () async {
-                          if (_isSetAsDefaultSelected) {
-                            await localSettings.setDeletePreference(
-                              .DeleteFromLocalOnly,
-                            );
-                          }
-                          if (!context.mounted) return;
-                          await _onDelete(context, widget.onDeleteFromLocal);
-                        },
-                      ),
-                      ButtonComponent(
-                        label: l10n.deleteFromEnte,
-                        variant: ButtonComponentVariant.secondary,
-                        onTap: () async {
-                          if (_isSetAsDefaultSelected) {
-                            await localSettings.setDeletePreference(
-                              .DeleteFromRemoteOnly,
-                            );
-                          }
-                          if (!context.mounted) return;
-                          await _onDelete(context, widget.onDeleteFromRemote);
-                        },
-                      ),
-                      ButtonComponent(
-                        label: l10n.deleteFromBoth,
-                        variant: ButtonComponentVariant.critical,
-                        onTap: () async {
-                          if (_isSetAsDefaultSelected) {
-                            await localSettings.setDeletePreference(
-                              .DeleteFromBoth,
-                            );
-                          }
-                          if (!context.mounted) return;
-                          await _onDelete(context, widget.onDeleteFromBoth);
-                        },
-                      ),
-                    ],
-                  )
-                : ButtonComponent(
-                    label: switch (deletePreference) {
-                      DeletePreference.DeleteFromRemoteOnly =>
-                        l10n.deleteFromEnte,
-                      DeletePreference.DeleteFromLocalOnly =>
-                        l10n.deleteFromDevice,
-                      DeletePreference.DeleteFromBoth => l10n.deleteFromBoth,
-                    },
-                    variant: ButtonComponentVariant.critical,
-                    onTap: () async {
-                      switch (deletePreference) {
-                        case DeletePreference.DeleteFromRemoteOnly:
-                          await _onDelete(context, widget.onDeleteFromRemote);
-                        case DeletePreference.DeleteFromLocalOnly:
-                          await _onDelete(context, widget.onDeleteFromLocal);
-                        case DeletePreference.DeleteFromBoth:
-                          await _onDelete(context, widget.onDeleteFromBoth);
-                      }
-                    },
-                  ),
+            child: ButtonComponent(
+              label: l10n.deleteFromDevice,
+              variant: ButtonComponentVariant.critical,
+              onTap: () => _onDelete(context, onDeleteFromLocal),
+            ),
           ),
         ),
-        if (widget.isLocal && widget.isRemote)
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
-            child: _isMoreOptionsShown
-                ? Center(
-                    child: LabeledControlComponent(
-                      control: CheckboxComponent(
-                        selected: _isSetAsDefaultSelected,
-                        onChanged: (value) {
-                          setState(() {
-                            _isSetAsDefaultSelected = value;
-                          });
-                        },
-                      ),
-                      label: l10n.setAsMyDefaultChoice,
-                      foreground: context.componentColors.textLight,
-                      onTap: () {
-                        setState(() {
-                          _isSetAsDefaultSelected = !_isSetAsDefaultSelected;
-                        });
-                      },
-                    ),
-                  )
-                : _MoreOptionsButton(
-                    onTap: () {
-                      setState(() {
-                        _isMoreOptionsShown = true;
-                      });
-                    },
-                  ),
-          ),
       ],
     );
   }
