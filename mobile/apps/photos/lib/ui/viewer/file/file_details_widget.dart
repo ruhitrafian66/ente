@@ -21,7 +21,6 @@ import "package:photos/module/metadata/exif.dart";
 import "package:photos/module/metadata/video.dart";
 import "package:photos/service_locator.dart";
 import 'package:photos/ui/viewer/file/file_caption_widget.dart';
-import "package:photos/ui/viewer/file_details/albums_item_widget.dart";
 import "package:photos/ui/viewer/file_details/creation_time_item_widget.dart";
 import 'package:photos/ui/viewer/file_details/exif_item_widgets.dart';
 import "package:photos/ui/viewer/file_details/file_info_faces_item_widget.dart";
@@ -189,13 +188,6 @@ class _FileDetailsWidgetState extends State<FileDetailsWidget> {
         },
       ),
     ]);
-
-    if (!file.isTrash) {
-      fileDetailsTiles.addAll([
-        AlbumsItemWidget(file, _currentUserID),
-        const SizedBox(height: Spacing.xxl),
-      ]);
-    }
 
     if (_isImage && !file.isDeviceTrash) {
       fileDetailsTiles.addAll([

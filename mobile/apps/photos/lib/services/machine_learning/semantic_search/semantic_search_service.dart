@@ -13,7 +13,6 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/clip.dart";
 import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/machine_learning/ml_computer.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/machine_learning/semantic_search/clip_similarity_scan.dart";
@@ -182,15 +181,12 @@ class SemanticSearchService {
       queryResults.map((e) => e.id).toList(),
     );
 
-    final ignoredCollections = CollectionsService.instance
-        .getHiddenCollectionIds();
-
     final deletedEntries = <int>[];
     final results = <EnteFile>[];
 
     for (final result in queryResults) {
       final file = filesMap[result.id];
-      if (file != null && !ignoredCollections.contains(file.collectionID)) {
+      if (file != null) {
         if (showThreshold) {
           file.debugCaption =
               "${fileIDToScoreMap[result.id]?.toStringAsFixed(3)}";
@@ -221,8 +217,6 @@ class SemanticSearchService {
       queryResults.map((e) => e.id),
     );
     final allFiles = await SearchService.instance.getAllFilesForSearch();
-    final ignoredCollections = CollectionsService.instance
-        .getHiddenCollectionIds();
     final localIdToFile = <String, EnteFile>{};
     for (final file in allFiles) {
       final localId = file.localID;
@@ -236,7 +230,7 @@ class SemanticSearchService {
     for (final result in queryResults) {
       final localId = localIdMap[result.id];
       final file = localId != null ? localIdToFile[localId] : null;
-      if (file != null && !ignoredCollections.contains(file.collectionID)) {
+      if (file != null) {
         if (showThreshold) {
           file.debugCaption =
               "${fileIDToScoreMap[result.id]?.toStringAsFixed(3)}";

@@ -18,7 +18,6 @@ import 'package:photos/models/file/file_type.dart';
 import 'package:photos/module/download/file.dart';
 import 'package:photos/module/download/thumbnail.dart';
 import 'package:photos/service_locator.dart';
-import 'package:photos/services/favorites_service.dart';
 import 'package:photos/ui/viewer/file/file_icons_widget.dart';
 import 'package:photos/ui/viewer/gallery/component/group/type.dart';
 import 'package:photos/ui/viewer/gallery/state/gallery_context_state.dart';
@@ -31,7 +30,6 @@ class ThumbnailWidget extends StatefulWidget {
   final bool rawThumbnail;
   // Offline fork: no sync status exists; the flag is kept for the callers.
   final bool shouldShowSyncStatus;
-  final bool showFavForAlbumOnly;
   final bool shouldShowLivePhotoOverlay;
   final Duration? diskLoadDeferDuration;
   // Offline fork: no server thumbnail exists; the value is kept for the
@@ -43,6 +41,7 @@ class ThumbnailWidget extends StatefulWidget {
   final bool gaplessPlayback;
   // Offline fork: no owner avatar exists; the flag is kept for the callers.
   final bool shouldShowOwnerAvatar;
+  // Offline fork: no favourite exists; the flag is kept for the callers.
   final bool shouldShowFavoriteIcon;
   final Color? placeholderColor;
 
@@ -57,7 +56,6 @@ class ThumbnailWidget extends StatefulWidget {
     this.rawThumbnail = false,
     this.shouldShowSyncStatus = true,
     this.shouldShowLivePhotoOverlay = false,
-    this.showFavForAlbumOnly = false,
     this.shouldShowOwnerAvatar = false,
     this.diskLoadDeferDuration,
     this.serverLoadDeferDuration,
@@ -192,15 +190,6 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
     Widget? content;
     if (image != null) {
       final List<Widget> contentChildren = [image];
-      if (widget.shouldShowFavoriteIcon) {
-        if (FavoritesService.instance.isFavoriteCache(
-          widget.file,
-          checkOnlyAlbum: widget.showFavForAlbumOnly,
-        )) {
-          contentChildren.add(const FavoriteOverlayIcon());
-        }
-      }
-
       if (widget.file.fileType != FileType.video &&
           widget.shouldShowLivePhotoOverlay &&
           widget.file.isLiveOrMotionPhoto) {

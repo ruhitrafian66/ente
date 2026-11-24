@@ -14,9 +14,7 @@ import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
 import "package:photos/offline_fork.dart";
-import 'package:photos/services/collections_service.dart';
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
-import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/notification/toast.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_actions.dart";
@@ -118,7 +116,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
   final _logger = Logger("_AppBarWidgetState");
   late Function() _selectedFilesListener;
   String? _appBarTitle;
-  late CollectionActions collectionActions;
   bool isQuickLink = false;
   late GalleryType galleryType;
   late PersonEntity person;
@@ -147,7 +144,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     super.initState();
     person = widget.person;
     galleryType = widget.type;
-    collectionActions = CollectionActions(CollectionsService.instance);
     _selectedFilesListener = () {
       setState(() {});
     };

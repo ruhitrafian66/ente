@@ -3,7 +3,6 @@ import "dart:math" as math;
 
 import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
-import "package:ente_icons/ente_icons.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -50,7 +49,6 @@ class ReviewSwipeStack extends StatefulWidget {
     required this.controller,
     required this.onSwiped,
     required this.onCardTap,
-    required this.isFavorite,
     super.key,
   });
 
@@ -76,7 +74,6 @@ class ReviewSwipeStack extends StatefulWidget {
   final Future<void> Function(EnteFile file, ReviewSwipeDirection direction)
   onSwiped;
   final ValueChanged<EnteFile> onCardTap;
-  final bool Function(EnteFile file) isFavorite;
 
   @override
   State<ReviewSwipeStack> createState() => _ReviewSwipeStackState();
@@ -308,7 +305,6 @@ class _ReviewSwipeStackState extends State<ReviewSwipeStack>
         size: _cardSize,
         radius: ReviewSwipeStack._cardRadius,
         border: ReviewSwipeStack._cardBorder,
-        isFavorite: widget.isFavorite(file),
         onTap: isTop ? () => widget.onCardTap(file) : null,
       ),
     );
@@ -343,7 +339,6 @@ class _ReviewCard extends StatelessWidget {
     required this.size,
     required this.radius,
     required this.border,
-    required this.isFavorite,
     required this.onTap,
   });
 
@@ -351,7 +346,6 @@ class _ReviewCard extends StatelessWidget {
   final Size size;
   final double radius;
   final double border;
-  final bool isFavorite;
   final VoidCallback? onTap;
 
   @override
@@ -413,16 +407,6 @@ class _ReviewCard extends StatelessWidget {
                           color: colors.specialWhite,
                         ),
                       ),
-                    ),
-                  ),
-                if (isFavorite)
-                  Positioned(
-                    right: Spacing.lg,
-                    top: Spacing.lg,
-                    child: Icon(
-                      EnteIcons.favoriteFilled,
-                      size: 20,
-                      color: colors.specialWhite,
                     ),
                   ),
               ],

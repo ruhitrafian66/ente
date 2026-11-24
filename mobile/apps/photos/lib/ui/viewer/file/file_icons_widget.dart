@@ -1,5 +1,4 @@
 import 'package:ente_components/ente_components.dart';
-import 'package:ente_icons/ente_icons.dart';
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
@@ -17,15 +16,6 @@ class ThumbnailPlaceHolder extends StatelessWidget {
       alignment: Alignment.center,
       color: color ?? context.componentColors.fillDark,
     );
-  }
-}
-
-class FavoriteOverlayIcon extends StatelessWidget {
-  const FavoriteOverlayIcon({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const _BottomLeftOverlayIcon(EnteIcons.favoriteFilled, baseSize: 22);
   }
 }
 
@@ -161,55 +151,6 @@ class FileOverlayText extends StatelessWidget {
           context,
         ).textTheme.titleSmall!.copyWith(color: Colors.white),
       ),
-    );
-  }
-}
-
-class _BottomLeftOverlayIcon extends StatelessWidget {
-  final IconData icon;
-  final double baseSize;
-
-  const _BottomLeftOverlayIcon(this.icon, {this.baseSize = 24});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        double inset = 4;
-        double size = baseSize;
-
-        if (constraints.hasBoundedWidth) {
-          final w = constraints.maxWidth;
-          if (w > 125) {
-            size = 24;
-          } else if (w < 75) {
-            inset = 3;
-            size = 16;
-          }
-        }
-
-        return Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.bottomLeft,
-              end: Alignment.center,
-              colors: [
-                Color.fromRGBO(0, 0, 0, 0.14),
-                Color.fromRGBO(0, 0, 0, 0.05),
-                Color.fromRGBO(0, 0, 0, 0.0),
-              ],
-              stops: [0, 0.6, 1],
-            ),
-          ),
-          child: Align(
-            alignment: Alignment.bottomLeft,
-            child: Padding(
-              padding: EdgeInsets.only(left: inset, bottom: inset),
-              child: Icon(icon, size: size, color: Colors.white),
-            ),
-          ),
-        );
-      },
     );
   }
 }

@@ -2,7 +2,6 @@ import "dart:async";
 
 import "package:flutter/widgets.dart";
 import "package:logging/logging.dart";
-import "package:photos/models/collection/collection.dart";
 import "package:photos/models/search/search_result.dart";
 import "package:photos/services/search_service.dart";
 import "package:photos/ui/viewer/search/search_query_utils.dart";
@@ -19,7 +18,6 @@ class SearchQueryService {
   Stream<List<SearchResult>> search(
     BuildContext context,
     String query, {
-    bool Function(Collection)? collectionFilter,
     Future<List<SearchResult>> Function()? magicSearch,
   }) {
     if (query.isEmpty) {
@@ -78,10 +76,6 @@ class SearchQueryService {
                 )
                 .toList(),
           ),
-      _searchService.getCollectionSearchResults(
-        query,
-        collectionFilter: collectionFilter,
-      ),
       _searchService.getDeviceCollectionSearchResults(query),
       _searchService.getMonthSearchResults(context, query),
       _searchService.getDateResults(context, query),

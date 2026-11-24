@@ -343,7 +343,6 @@ class MemoriesCacheService {
     }
     final remainingFiles = await FilesDB.instance.getFilesFromIDs(
       deletedUploadedIDs.toList(),
-      collectionsToIgnore: SearchService.instance.ignoreCollections(),
     );
     final remainingUploadedIDs = remainingFiles
         .map((file) => file.uploadedFileID)
@@ -809,7 +808,6 @@ class MemoriesCacheService {
       }
       final minimalFilesFromUploaded = await FilesDB.instance.getFilesFromIDs(
         minimalUploadedIDs.toList(),
-        collectionsToIgnore: SearchService.instance.ignoreCollections(),
       );
       final uploadedIdToFile = <int, EnteFile>{};
       for (final file in minimalFilesFromUploaded) {

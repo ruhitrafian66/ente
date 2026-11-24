@@ -13,30 +13,20 @@ import 'package:media_extension/media_extension.dart';
 import "package:media_extension/media_extension_action_types.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/guest_view_event.dart";
-import "package:photos/models/collection/collection.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
-import "package:photos/models/gallery_type.dart";
-import "package:photos/models/metadata/common_keys.dart";
-import 'package:photos/models/selected_files.dart';
 import 'package:photos/module/download/file.dart';
 import "package:photos/service_locator.dart";
 import "package:photos/services/app_lifecycle_service.dart";
-import 'package:photos/services/collections_service.dart';
-import 'package:photos/services/hidden_service.dart';
 import "package:photos/states/detail_page_state.dart";
 import "package:photos/theme/colors.dart";
 import "package:photos/ui/actions/file/file_actions.dart";
-import 'package:photos/ui/collections/collection_action_sheet.dart';
 import 'package:photos/ui/notification/toast.dart';
-import 'package:photos/ui/viewer/actions/suggest_delete_sheet.dart';
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/file/video_control/video_speed_bottom_sheet.dart";
 import "package:photos/ui/viewer/file/viewer_app_bar.dart";
-import "package:photos/ui/viewer/file_details/favorite_widget.dart";
 import 'package:photos/utils/dialog_util.dart';
-import "package:photos/utils/magic_util.dart";
 
 String _formatPlaybackSpeed(double speed) {
   return speed == 1.0 ? "1x" : "${speed}x";
@@ -44,10 +34,8 @@ String _formatPlaybackSpeed(double speed) {
 
 class FileAppBar extends StatefulWidget {
   final EnteFile file;
-  final Function(EnteFile) onFileRemoved;
   final Function(EnteFile) onEditRequested;
   final ValueNotifier<bool> enableFullScreenNotifier;
-  final GalleryType? galleryType;
   final DetailPageMode mode;
   final bool showEditAction;
   final FutureOr<void> Function(BuildContext context)? onBackPressed;
@@ -55,10 +43,8 @@ class FileAppBar extends StatefulWidget {
 
   const FileAppBar(
     this.file,
-    this.onFileRemoved,
     this.onEditRequested, {
     required this.enableFullScreenNotifier,
-    this.galleryType,
     this.mode = DetailPageMode.full,
     this.showEditAction = true,
     this.onBackPressed,
@@ -213,20 +199,6 @@ class FileAppBarState extends State<FileAppBar> {
       );
     }
 
-    final bool isOwnedByUser = widget.file.isOwner;
-    final bool isFileUploaded = widget.file.isUploaded;
-    final int? collectionID = widget.file.collectionID;
-    final Collection? collection = collectionID != null
-        ? CollectionsService.instance.getCollectionByID(collectionID)
-        : null;
-    bool isFileHidden = false;
-    if (isOwnedByUser && isFileUploaded) {
-      isFileHidden = collection?.isHidden() ?? false;
-    }
-    final bool canSuggestDeleteAction = canSuggestDeleteForFile(
-      file: widget.file,
-      collection: collection,
-    );
     if (widget.file.isLiveOrMotionPhoto) {
       _actions.add(
         IconButton(
@@ -242,16 +214,6 @@ class FileAppBarState extends State<FileAppBar> {
               context.strings.pressAndHoldToPlayVideoDetailed,
             );
           },
-        ),
-      );
-    }
-    if (!isFileHidden &&
-        isFileUploaded &&
-        !widget.file.isTrash &&
-        widget.galleryType != GalleryType.sharedPublicCollection) {
-      _actions.add(
-        Center(
-          child: FavoriteWidget(widget.file, iconSize: 24, tapTargetSize: 48),
         ),
       );
     }
@@ -281,19 +243,6 @@ class FileAppBarState extends State<FileAppBar> {
           ),
         );
       }
-      if (isOwnedByUser && !isFileHidden && isFileUploaded) {
-        final bool isArchived =
-            widget.file.magicMetadata.visibility == archiveVisibility;
-        items.add(
-          _fileMenuOption(
-            isArchived ? context.strings.unarchive : context.strings.archive,
-            value: 2,
-            hugeIcon: isArchived
-                ? HugeIcons.strokeRoundedUnarchive03
-                : HugeIcons.strokeRoundedArchive03,
-          ),
-        );
-      }
 
       if ((widget.file.fileType == FileType.image ||
               widget.file.fileType == FileType.livePhoto) &&
@@ -306,25 +255,6 @@ class FileAppBarState extends State<FileAppBar> {
           ),
         );
       }
-      if (isOwnedByUser && widget.file.isUploaded) {
-        if (!isFileHidden) {
-          items.add(
-            _fileMenuOption(
-              context.strings.hide,
-              value: 4,
-              hugeIcon: HugeIcons.strokeRoundedViewOffSlash,
-            ),
-          );
-        } else {
-          items.add(
-            _fileMenuOption(
-              context.strings.unhide,
-              value: 5,
-              hugeIcon: HugeIcons.strokeRoundedView,
-            ),
-          );
-        }
-      }
 
       items.add(
         _fileMenuOption(
@@ -333,16 +263,6 @@ class FileAppBarState extends State<FileAppBar> {
           hugeIcon: HugeIcons.strokeRoundedIncognito,
         ),
       );
-
-      if (canSuggestDeleteAction) {
-        items.add(
-          _fileMenuOption(
-            context.strings.suggestDeletion,
-            value: 13,
-            hugeIcon: HugeIcons.strokeRoundedFlag01,
-          ),
-        );
-      }
 
       items.add(
         _fileMenuOption(
@@ -388,7 +308,7 @@ class FileAppBarState extends State<FileAppBar> {
             if (!mounted) {
               return;
             }
-            await _handleFileMenuSelection(selected, collection);
+            await _handleFileMenuSelection(selected);
           },
           child: Tooltip(
             message: MaterialLocalizations.of(context).moreButtonTooltip,
@@ -425,18 +345,9 @@ class FileAppBarState extends State<FileAppBar> {
     );
   }
 
-  Future<void> _handleFileMenuSelection(
-    int value,
-    Collection? collection,
-  ) async {
-    if (value == 2) {
-      await _toggleFileArchiveStatus(widget.file);
-    } else if (value == 3) {
+  Future<void> _handleFileMenuSelection(int value) async {
+    if (value == 3) {
       await _setAs(widget.file);
-    } else if (value == 4) {
-      await _handleHideRequest(context);
-    } else if (value == 5) {
-      await _handleUnHideRequest(context);
     } else if (value == 6) {
       await _onTapGuestView();
     } else if (value == 7) {
@@ -451,27 +362,7 @@ class FileAppBarState extends State<FileAppBar> {
       widget.onEditRequested(widget.file);
     } else if (value == 12) {
       await showDetailsSheet(context, widget.file);
-    } else if (value == 13) {
-      if (collection != null) {
-        await _handleSuggestDelete(collection);
-      }
     }
-  }
-
-  Future<void> _handleSuggestDelete(Collection collection) async {
-    if (widget.file.uploadedFileID == null) {
-      return;
-    }
-    await showSuggestDeleteSheet(
-      context: context,
-      onConfirm: () async {
-        await CollectionsService.instance.suggestDeleteFromCollection(
-          collection.id,
-          [widget.file],
-        );
-        widget.onFileRemoved(widget.file);
-      },
-    );
   }
 
   void _onToggleLoopVideo() {
@@ -480,44 +371,6 @@ class FileAppBarState extends State<FileAppBar> {
       _reloadActions = true;
       shouldLoopVideo = !shouldLoopVideo;
     });
-  }
-
-  Future<void> _handleHideRequest(BuildContext context) async {
-    try {
-      final hideResult = await CollectionsService.instance.hideFiles(context, [
-        widget.file,
-      ]);
-      if (hideResult) {
-        widget.onFileRemoved(widget.file);
-      }
-    } catch (e, s) {
-      _logger.severe("failed to update file visibility", e, s);
-      if (!context.mounted) return;
-      await showGenericErrorDialog(context: context, error: e);
-    }
-  }
-
-  Future<void> _handleUnHideRequest(BuildContext context) async {
-    final selectedFiles = SelectedFiles();
-    selectedFiles.files.add(widget.file);
-    await showCollectionActionSheet(
-      context,
-      selectedFiles: selectedFiles,
-      actionType: CollectionActionType.unHide,
-    );
-  }
-
-  Future<void> _toggleFileArchiveStatus(EnteFile file) async {
-    final bool isArchived =
-        widget.file.magicMetadata.visibility == archiveVisibility;
-    await changeVisibility(context, [
-      widget.file,
-    ], isArchived ? visibleVisibility : archiveVisibility);
-    if (mounted) {
-      setState(() {
-        _reloadActions = true;
-      });
-    }
   }
 
   Future<void> _setAs(EnteFile file) async {

@@ -28,7 +28,6 @@ import "package:photos/models/gallery_type.dart";
 import 'package:photos/module/download/file.dart';
 import "package:photos/module/download/thumbnail.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/states/detail_page_state.dart";
 import "package:photos/theme/colors.dart";
 import "package:photos/theme/ente_theme.dart";
@@ -282,7 +281,6 @@ class _BodyState extends State<_Body> {
         Navigator.maybePop(context).ignore();
         return;
       }
-      _updateSharedCollectionState(selectedFile);
       _evaluateQrIfEligible(selectedFile);
       widget.config.onPageReady?.call(context);
     });
@@ -407,12 +405,10 @@ class _BodyState extends State<_Body> {
                 }
                 return FileAppBar(
                   _files![selectedIndex],
-                  _onFileRemoved,
                   _onEditFileRequested,
                   enableFullScreenNotifier: InheritedDetailPageState.of(
                     context,
                   ).enableFullScreenNotifier,
-                  galleryType: widget.config.galleryType,
                   mode: widget.config.mode,
                   showEditAction: widget.config.showEditAction,
                   onBackPressed: widget.config.onBackPressed,
@@ -751,7 +747,6 @@ class _BodyState extends State<_Body> {
 
   void _runSelectedFileSideEffects(EnteFile file) {
     Bus.instance.fire(GuestViewEvent(isGuestView, swipeLocked));
-    _updateSharedCollectionState(file);
     _evaluateQrIfEligible(file);
   }
 
@@ -792,7 +787,6 @@ class _BodyState extends State<_Body> {
     _syncBottomControlsInset();
     final selectedFile = _selectedFile;
     if (selectedFile != null) {
-      unawaited(_updateSharedCollectionState(selectedFile));
       _evaluateQrIfEligible(selectedFile);
     }
 
@@ -899,29 +893,6 @@ class _BodyState extends State<_Body> {
       context,
       "Please authenticate to view more photos and videos.",
     );
-  }
-
-  Future<void> _updateSharedCollectionState(EnteFile file) async {
-    final fileID = file.uploadedFileID;
-    final notifier = InheritedDetailPageState.maybeOf(
-      context,
-    )?.isInSharedCollectionNotifier;
-
-    if (notifier == null) return;
-
-    if (fileID == null) {
-      notifier.value = false;
-      return;
-    }
-
-    final isShared = await CollectionsService.instance.isFileInSharedCollection(
-      fileID,
-    );
-
-    // Ignore results for a file the user swiped away from while awaiting.
-    if (_selectedFile?.uploadedFileID == fileID) {
-      notifier.value = isShared;
-    }
   }
 
   EnteFile? get _selectedFile => _fileAt(_selectedIndexNotifier.value);

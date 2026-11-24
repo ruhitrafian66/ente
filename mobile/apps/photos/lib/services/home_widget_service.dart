@@ -10,13 +10,11 @@ import 'package:photos/core/constants.dart';
 import 'package:photos/models/file/file.dart';
 import 'package:photos/module/download/thumbnail.dart';
 import 'package:photos/service_locator.dart';
-import 'package:photos/services/album_home_widget_service.dart';
 import 'package:photos/services/app_navigation_service.dart';
 import 'package:photos/services/memories/smart_memories_service.dart';
 import 'package:photos/services/memory_home_widget_service.dart';
 import 'package:photos/services/people_home_widget_service.dart';
 import 'package:photos/ui/settings/ml/ml_consent_sheet.dart';
-import 'package:photos/ui/settings/widgets/albums_widget_settings.dart';
 import 'package:photos/ui/settings/widgets/memories_widget_settings.dart';
 import 'package:photos/ui/settings/widgets/people_widget_settings.dart';
 import 'package:synchronized/synchronized.dart';
@@ -38,13 +36,11 @@ class HomeWidgetService {
 
   static const String MEMORY_WIDGET_SCHEME = 'memorywidget';
   static const String PEOPLE_WIDGET_SCHEME = 'peoplewidget';
-  static const String ALBUM_WIDGET_SCHEME = 'albumwidget';
 
   static const String GENERATED_ID_PARAM = 'generatedId';
   static const String MAIN_KEY_PARAM = 'mainKey';
 
   static const String DATA_SUFFIX = '_data';
-  static const String UPLOADED_FILE_ID_KEY = 'uploadedFileID';
   static const String WIDGET_HIDE_TITLE_FLAGS_KEY = 'widgetHideTitleFlags';
 
   static final HomeWidgetService instance =
@@ -69,9 +65,8 @@ class HomeWidgetService {
     return WIDGET_IMAGE_LIMIT_V1;
   }
 
-  Future<void> initHomeWidget([bool isBg = false]) async {
+  Future<void> initHomeWidget() async {
     await setAppGroup();
-    await AlbumHomeWidgetService.instance.initAlbumHomeWidget(isBg);
     await PeopleHomeWidgetService.instance.initPeopleHomeWidget();
     await MemoryHomeWidgetService.instance.initMemoryHomeWidget();
   }
@@ -100,16 +95,9 @@ class HomeWidgetService {
     EnteFile file,
     String key,
     String title,
-    String? mainKey, {
-    int? uploadedFileID,
-  }) async {
-    final result = await _captureFileLegacy(
-      file,
-      key,
-      title,
-      mainKey,
-      uploadedFileID,
-    );
+    String? mainKey,
+  ) async {
+    final result = await _captureFileLegacy(file, key, title, mainKey);
     if (!result) {
       _logger.warning("Failed to capture file ${file.displayName}");
       return null;
@@ -140,7 +128,6 @@ class HomeWidgetService {
     String key,
     String title,
     String? mainKey,
-    int? uploadedFileID,
   ) async {
     try {
       final thumbnail = await getThumbnail(file);
@@ -171,7 +158,6 @@ class HomeWidgetService {
         "subText": subText,
         "generatedId": file.generatedID!,
         "mainKey": ?mainKey,
-        UPLOADED_FILE_ID_KEY: ?uploadedFileID,
       };
 
       await _saveWidgetMetadata(key, metadata);
@@ -217,7 +203,6 @@ class HomeWidgetService {
     }
 
     await Future.wait([
-      AlbumHomeWidgetService.instance.clearWidget(),
       PeopleHomeWidgetService.instance.clearWidget(),
       MemoryHomeWidgetService.instance.clearWidget(),
       setData(WIDGET_HIDE_TITLE_FLAGS_KEY, 0),
@@ -290,30 +275,6 @@ class HomeWidgetService {
           await PeopleHomeWidgetService.instance.onLaunchFromWidget(
             generatedId,
             personId,
-          );
-        }
-        break;
-
-      case ALBUM_WIDGET_SCHEME:
-        if (isConfigureRoute) {
-          _logger.info("Navigating to Album widget customization screen");
-          await AppNavigationService.instance.pushPage(
-            const AlbumsWidgetSettings(),
-          );
-        } else {
-          final collectionId = int.tryParse(
-            uri.queryParameters[MAIN_KEY_PARAM] ?? "",
-          );
-          if (collectionId == null) {
-            _logger.warning(
-              "Album widget launch failed: Invalid or missing collection ID",
-            );
-            return;
-          }
-
-          await AlbumHomeWidgetService.instance.onLaunchFromWidget(
-            generatedId,
-            collectionId,
           );
         }
         break;

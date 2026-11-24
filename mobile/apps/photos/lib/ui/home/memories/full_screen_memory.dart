@@ -21,13 +21,11 @@ import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/memories/memory.dart";
-import "package:photos/models/selected_files.dart";
 import "package:photos/module/download/file.dart";
 import "package:photos/module/download/thumbnail.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/memories/smart_memories_service.dart";
 import "package:photos/ui/actions/file/file_actions.dart";
-import "package:photos/ui/collections/collection_action_sheet.dart";
 import "package:photos/ui/home/memories/custom_listener.dart";
 import "package:photos/ui/home/memories/memory_music_session.dart";
 import "package:photos/ui/home/memories/memory_progress_indicator.dart";
@@ -36,7 +34,6 @@ import "package:photos/ui/home/memories/memory_video_export_sheet.dart";
 import "package:photos/ui/home/memories/memory_viewer_constants.dart";
 import "package:photos/ui/viewer/file/file_widget.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
-import "package:photos/ui/viewer/file_details/favorite_widget.dart";
 import "package:photos/ui/viewer/gallery/jump_to_date_gallery.dart";
 import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/share_util.dart";
@@ -840,11 +837,6 @@ class BottomIcons extends StatelessWidget {
 
           final l10n = context.strings;
           final isOwner = currentFile.isOwner;
-          final collection = currentFile.collectionID == null
-              ? null
-              : collectionsService.getCollectionByID(currentFile.collectionID!);
-          final isHidden =
-              currentFile.isUploaded && (collection?.isHidden() ?? false);
           final rowChildren = <Widget>[
             _MemoryActionButton(
               tooltip: l10n.info,
@@ -868,26 +860,6 @@ class BottomIcons extends StatelessWidget {
                 );
               },
             ),
-            if (currentFile.isUploaded && !isHidden)
-              _MemoryActionButton(
-                tooltip: l10n.addToAlbum,
-                icon: const HugeIcon(
-                  icon: HugeIcons.strokeRoundedAddSquare,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                onPressed: () async {
-                  await fullScreenState._runWithViewerPaused(() async {
-                    final selectedFiles = SelectedFiles();
-                    selectedFiles.files.add(currentFile);
-                    await showCollectionActionSheet(
-                      context,
-                      selectedFiles: selectedFiles,
-                      actionType: CollectionActionType.addFiles,
-                    );
-                  });
-                },
-              ),
             if (isOwner)
               _MemoryActionButton(
                 tooltip: l10n.delete,
@@ -1009,7 +981,6 @@ class _MemoryTopOverlay extends StatelessWidget {
           );
           if (safeIndex == null) return const SizedBox.shrink();
           final currentFile = inheritedData.memories[safeIndex].file;
-          final showFavorite = currentFile.isUploaded && !isLocalGalleryMode;
           return Padding(
             padding: EdgeInsets.only(top: max(safePadding.top, 40)),
             child: Column(
@@ -1115,17 +1086,6 @@ class _MemoryTopOverlay extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (showFavorite) ...[
-                          const SizedBox(width: 8),
-                          FavoriteWidget(
-                            currentFile,
-                            iconSize: 24,
-                            tapTargetSize: 48,
-                            key: ValueKey(
-                              currentFile.uploadedFileID ?? currentFile.localID,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),

@@ -22,31 +22,25 @@ import "package:photos/events/event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/force_reload_home_gallery_event.dart";
 import "package:photos/events/local_photos_updated_event.dart";
-import "package:photos/models/collection/collection.dart";
-import "package:photos/models/collection/collection_items.dart";
 import "package:photos/models/device_collection.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/file_load_result.dart";
 import "package:photos/models/gallery_type.dart";
 import "package:photos/models/metadata/common_keys.dart";
-import "package:photos/models/search/album_search_result.dart";
 import "package:photos/models/search/device_album_search_result.dart";
 import "package:photos/models/search/generic_search_result.dart";
-import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/search/search_result.dart";
 import "package:photos/models/search/search_types.dart";
 import "package:photos/models/selected_files.dart";
 import "package:photos/module/metadata/local_file.dart";
 import "package:photos/module/share/picker_result_uri.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/filter/db_filters.dart";
 import "package:photos/services/machine_learning/semantic_search/semantic_search_service.dart";
 import "package:photos/services/search_query_service.dart";
 import "package:photos/services/search_service.dart";
 import "package:photos/theme/ente_theme.dart";
-import "package:photos/ui/collections/album/list_item.dart";
 import "package:photos/ui/components/bottom_action_bar/action_bar_widget.dart";
 import "package:photos/ui/components/buttons/button_widget_v2.dart";
 import "package:photos/ui/components/selection_preview_button.dart";
@@ -65,8 +59,6 @@ typedef _PickerSearchResults = ({
   List<EnteFile> files,
   List<SearchResult> suggestions,
 });
-
-typedef _PickerAlbums = (List<Collection>, Set<int>);
 
 class ExternalMediaPickerPage extends StatefulWidget {
   final MediaType? requestedType;
@@ -89,26 +81,20 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
   final _searchQueryService = SearchQueryService(SearchService.instance);
   final _subscriptions = <StreamSubscription<Event>>[];
   Future<Map<int, EnteFile>>? _searchFiles;
-  Future<Set<int>>? _excludedFileIDs;
   bool _checkSelectedAlbums = false;
   Future<void>? _searchPreparation;
   int _searchGeneration = 0;
   final _searchController = TextEditingController();
   final _headerScrollController = ScrollController();
   final _searchDebouncer = Debouncer(const Duration(milliseconds: 314));
-  Future<_PickerAlbums>? _albums;
   Stream<_PickerSearchResults>? _searchResults;
   GenericSearchResult? _searchResult;
-  Collection? _collection;
   String _browseOriginQuery = "";
   String _query = "";
-  bool _showAlbums = false;
   bool _isBusy = false;
   List<EnteFile>? _preparingFiles;
 
-  bool get _isBrowsingResult => _collection != null || _searchResult != null;
-  bool get _isShowingAlbums =>
-      _showAlbums && _query.isEmpty && !_isBrowsingResult;
+  bool get _isBrowsingResult => _searchResult != null;
 
   @override
   void initState() {
@@ -121,7 +107,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
       _subscriptions.add(
         stream.listen((event) {
           _searchFiles = null;
-          _excludedFileIDs = null;
           final checkRemoved =
               event is FilesUpdatedEvent &&
               event.type == EventType.deletedFromRemote &&
@@ -152,8 +137,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
               }),
             );
           }
-          _albums = null;
-          if (_isShowingAlbums) setState(() {});
           if (_query.isNotEmpty) {
             setState(() => _searchResults = null);
             _scheduleSearch();
@@ -189,24 +172,7 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
     super.dispose();
   }
 
-  Future<Set<int>> get _excludedUploadIDs =>
-      _excludedFileIDs ??= _loadExcludedUploadIDs();
-
-  Future<Set<int>> _loadExcludedUploadIDs() async {
-    try {
-      final ids = await FilesDB.instance.getUploadedFileIDsInCollections(
-        CollectionsService.instance.archivedOrHiddenCollectionIds(),
-      );
-      return ids.toSet();
-    } catch (_) {
-      _excludedFileIDs = null;
-      rethrow;
-    }
-  }
-
   Future<void> _refreshSelectionVisibility() async {
-    final query = _excludedUploadIDs;
-    final excluded = await query;
     final removed = <EnteFile>{};
     final replacements = <int, EnteFile>{};
     if (_checkSelectedAlbums) {
@@ -232,7 +198,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
         ]);
         for (final copy in copies) {
           if (copy.collectionID != null &&
-              !excluded.contains(copy.uploadedFileID) &&
               copy.magicMetadata.visibility == visibleVisibility &&
               _matchesRequestedType(copy)) {
             replacements[copy.uploadedFileID!] = copy;
@@ -241,15 +206,7 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
       }
     }
     if (!mounted) return;
-    if (_excludedFileIDs != query) return _refreshSelectionVisibility();
     _checkSelectedAlbums = false;
-    if (excluded.isNotEmpty) {
-      removed.addAll(
-        _selectedFiles.files.where(
-          (file) => excluded.contains(file.uploadedFileID),
-        ),
-      );
-    }
     if (removed.any(_selectedFiles.files.contains)) {
       _selectedFiles.replaceSelection({
         for (final file in _selectedFiles.files)
@@ -260,11 +217,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
       });
     }
   }
-
-  Future<_PickerAlbums> _loadAlbums() => (
-    CollectionsService.instance.getCollectionForOnEnteSection(),
-    _excludedUploadIDs,
-  ).wait;
 
   Future<FileLoadResult> _loadFiles(
     int creationStartTime,
@@ -277,58 +229,25 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
     }
     final searchResult = _searchResult;
     final ownerID = Configuration.instance.getUserIDV2();
-    final collectionsToHide = CollectionsService.instance
-        .archivedOrHiddenCollectionIds();
     final filterOptions = DBFilterOptions(
       hideIgnoredForUpload: true,
       dedupeUploadID: true,
-      ignoredCollectionIDs: collectionsToHide,
       ignoreSavedFiles: true,
       onlyUploadedFiles: true,
       ignoreSharedItems:
-          _collection == null &&
           _searchResult == null &&
           _query.isEmpty &&
           localSettings.hideSharedItemsFromHomeGallery,
     );
 
-    final FileLoadResult result;
-    if (_collection != null) {
-      final loaded = await FilesDB.instance.getFilesInCollection(
-        _collection!.id,
-        creationStartTime,
-        creationEndTime,
-        limit: limit,
-        asc: asc,
-      );
-      result = FileLoadResult(
-        await applyDBFilters(
-          loaded.files
-              .where(
-                (file) => file.magicMetadata.visibility == visibleVisibility,
-              )
-              .toList(),
-          filterOptions,
-        ),
-        loaded.hasMore,
-      );
-    } else {
-      result = await FilesDB.instance.getAllPendingOrUploadedFiles(
-        creationStartTime,
-        creationEndTime,
-        ownerID,
-        limit: limit,
-        asc: asc,
-        filterOptions: filterOptions,
-      );
-    }
-
-    final excluded = await _excludedUploadIDs;
-    if (excluded.isNotEmpty) {
-      result.files.removeWhere(
-        (file) => excluded.contains(file.uploadedFileID),
-      );
-    }
+    final result = await FilesDB.instance.getAllPendingOrUploadedFiles(
+      creationStartTime,
+      creationEndTime,
+      ownerID,
+      limit: limit,
+      asc: asc,
+      filterOptions: filterOptions,
+    );
     if (searchResult == null && widget.requestedType == null) {
       return result;
     }
@@ -372,12 +291,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
       setState(() => _searchResults = _findFiles(_query, generation));
     });
   }
-
-  bool _isPickerCollection(Collection collection) =>
-      !collection.isHidden() &&
-      !collection.isArchived() &&
-      !collection.isQuickLinkCollection() &&
-      collection.type != CollectionType.uncategorized;
 
   RequestType get _deviceRequestType => switch (widget.requestedType) {
     MediaType.image => RequestType.image,
@@ -441,7 +354,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
       final batches = _searchQueryService.search(
         context,
         query,
-        collectionFilter: _isPickerCollection,
         magicSearch: () async {
           final service = SemanticSearchService.instance;
           final preparation = _searchPreparation ??= service
@@ -477,39 +389,11 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
           changed = folders.isNotEmpty;
         }
         for (final result in batch) {
-          if (result is AlbumSearchResult) {
-            final album = result.collectionWithThumbnail;
-            suggestions.add(
-              AlbumSearchResult(
-                CollectionWithThumbnail(
-                  album.collection,
-                  eligibleByID[album.thumbnail?.uploadedFileID],
-                ),
-              ),
-            );
-            changed = true;
-          } else if (result is GenericSearchResult) {
+          if (result is GenericSearchResult) {
             final fileIDs = result
                 .resultFiles()
                 .map((file) => file.uploadedFileID)
                 .toSet();
-            var params = result.params;
-            if (result.type() == ResultType.shared) {
-              final collections =
-                  (params[kContactCollections] as List<Collection>? ?? const [])
-                      .where(_isPickerCollection)
-                      .toList();
-              try {
-                fileIDs.addAll(
-                  await FilesDB.instance.getUploadedFileIDsInCollections(
-                    collections.map((collection) => collection.id).toSet(),
-                  ),
-                );
-              } catch (error, stack) {
-                _logger.warning("Could not search shared albums", error, stack);
-              }
-              params = {...params, kContactCollections: collections};
-            }
             final files = fileIDs
                 .map((id) => eligibleByID[id])
                 .nonNulls
@@ -533,7 +417,7 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
                   files,
                   hierarchicalSearchFilter: result
                       .getHierarchicalSearchFilter(),
-                  params: params,
+                  params: result.params,
                 ),
               );
             }
@@ -548,19 +432,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
       _logger.warning("Could not search picker media", error, stack);
       rethrow;
     }
-  }
-
-  void _openCollection(Collection collection) {
-    if (_isBusy || _isBrowsingResult) return;
-    final query = _query;
-    FocusScope.of(context).unfocus();
-    _searchController.clear();
-    _search("");
-    setState(() {
-      _browseOriginQuery = query;
-      _collection = collection;
-      _searchFiles = null;
-    });
   }
 
   void _openSearchResult(GenericSearchResult result) {
@@ -613,12 +484,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
         final files = await const PhotoManagerDeviceLibrary().files(
           result.map((asset) => asset.id).toList(),
         );
-        if (files.isNotEmpty) {
-          final excluded = await _excludedUploadIDs;
-          files.removeWhere(
-            (_, file) => excluded.contains(file.uploadedFileID),
-          );
-        }
         knownFiles = files;
       } catch (error, stack) {
         _logger.warning("Could not read device file metadata", error, stack);
@@ -781,7 +646,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
     if (_isBrowsingResult) {
       setState(() {
         _searchResult = null;
-        _collection = null;
         _searchFiles = null;
       });
       _searchController.text = _browseOriginQuery;
@@ -807,7 +671,7 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
           Spacing.xxl,
     );
     final bottomPadding =
-        (_isShowingAlbums ? 0 : selectionControlHeight) +
+        selectionControlHeight +
         Spacing.md +
         MediaQuery.paddingOf(context).bottom;
     final deviceButton = ConstrainedBox(
@@ -854,43 +718,16 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
               Spacing.md,
               Spacing.sm,
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: Spacing.sm,
-                    runSpacing: Spacing.sm,
-                    children: [
-                      for (final (showAlbums, label) in [
-                        (false, context.strings.photos),
-                        (true, context.strings.albums),
-                      ])
-                        FilterChipComponent(
-                          label: label,
-                          showSelectedTrailing: false,
-                          state: _showAlbums == showAlbums
-                              ? FilterChipComponentState.selected
-                              : FilterChipComponentState.unselected,
-                          onChanged: _isBusy
-                              ? null
-                              : (_) => setState(() {
-                                  _showAlbums = showAlbums;
-                                  _albums = null;
-                                }),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: Spacing.sm),
-                deviceButton,
-              ],
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: deviceButton,
             ),
           ),
         const DividerComponent(),
       ],
     );
     Widget gallery({List<EnteFile>? files, Widget? header}) => Gallery(
-      key: ValueKey((_collection?.id, _searchResult, _query, files)),
+      key: ValueKey((_searchResult, _query, files)),
       initialFiles: files,
       asyncLoader: files == null
           ? _loadFiles
@@ -963,9 +800,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
                     resultBuilder: (result) => SearchResultsWidgetGenerator(
                       result,
                       onResultTap: () => switch (result) {
-                        AlbumSearchResult() => _openCollection(
-                          result.collectionWithThumbnail.collection,
-                        ),
                         DeviceAlbumSearchResult() => _pickFromDevice(
                           initialAlbumID: result.deviceCollection.id,
                         ),
@@ -983,34 +817,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
           }
           return gallery(files: files, header: header);
         },
-      );
-    } else if (_isShowingAlbums) {
-      content = FutureBuilder<_PickerAlbums>(
-        future: _albums ??= _loadAlbums(),
-        builder: (context, snapshot) =>
-            snapshot.connectionState != ConnectionState.done
-            ? const Center(child: LoadingComponent())
-            : snapshot.hasError
-            ? Center(child: Text(context.strings.somethingWentWrong))
-            : ListView.separated(
-                padding: EdgeInsets.fromLTRB(
-                  Spacing.md,
-                  Spacing.md,
-                  Spacing.md,
-                  bottomPadding,
-                ),
-                itemCount: snapshot.data!.$1.length,
-                separatorBuilder: (_, _) => const SizedBox(height: Spacing.sm),
-                itemBuilder: (context, index) => AlbumListItemWidget(
-                  snapshot.data!.$1[index],
-                  canShowCover: (file) =>
-                      file.isUploaded &&
-                      file.magicMetadata.visibility == visibleVisibility &&
-                      !snapshot.data!.$2.contains(file.uploadedFileID) &&
-                      _matchesRequestedType(file),
-                  onTapCallback: _isBusy ? null : _openCollection,
-                ),
-              ),
       );
     } else if (_searchResult?.type() == ResultType.magic) {
       content = LayoutBuilder(
@@ -1075,7 +881,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
                     final selectedCount = _selectedFiles.files.length;
                     return Text(
                       _searchResult?.name() ??
-                          _collection?.displayName ??
                           (selectedCount == 0
                               ? context.strings.selectItemsToAdd
                               : context.strings.selectedPhotos(
@@ -1136,9 +941,8 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
                                 ],
                               ),
                             ),
-                            if (!_isShowingAlbums &&
-                                viewport.maxHeight >=
-                                    selectionControlHeight + Spacing.sm)
+                            if (viewport.maxHeight >=
+                                selectionControlHeight + Spacing.sm)
                               PositionedDirectional(
                                 start: Spacing.lg,
                                 end: Spacing.lg,

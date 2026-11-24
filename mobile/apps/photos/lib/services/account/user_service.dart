@@ -18,11 +18,8 @@ import 'package:photos/gateways/users/models/key_attributes.dart';
 import 'package:photos/gateways/users/models/sessions.dart';
 import 'package:photos/gateways/users/models/set_recovery_key_request.dart';
 import "package:photos/gateways/users/users_gateway.dart";
-import "package:photos/models/api/collection/user.dart";
 import 'package:photos/models/user_details.dart';
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
-import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import 'package:photos/src/rust/third_party/ente_frb_lib/accounts.dart'
     as accounts;
 import "package:photos/ui/components/alert_bottom_sheet.dart";
@@ -626,52 +623,5 @@ class UserService {
       _logger.severe("Failed to update email mfa", e);
       rethrow;
     }
-  }
-
-  List<UserSuggestion> getRelevantContacts() {
-    final int ownerID = Configuration.instance.getUserID()!;
-    final String ownerEmail = Configuration.instance.getEmail()!;
-    final suggestions = <UserSuggestion>[];
-    final existingEmails = <String>{ownerEmail};
-
-    void add(String email, {int? userID}) {
-      if (email.isNotEmpty && existingEmails.add(email)) {
-        suggestions.add(UserSuggestion(email, userID: userID));
-      }
-    }
-
-    for (final c in CollectionsService.instance.getActiveCollections()) {
-      if (c.owner.id == ownerID) {
-        for (final User u in c.sharees) {
-          add(u.email, userID: u.id);
-        }
-      } else if (c.owner.email.isNotEmpty) {
-        add(c.owner.email, userID: c.owner.id);
-        final participates = c.sharees.any(
-          (u) =>
-              u.email == ownerEmail &&
-              (u.isAdmin || u.isCollaborator || u.isViewer),
-        );
-        if (participates) {
-          for (final User u in c.sharees) {
-            if (u.isCollaborator || u.isAdmin) {
-              add(u.email, userID: u.id);
-            }
-          }
-        }
-      }
-    }
-
-    final familyMembers =
-        getCachedUserDetails()?.familyData?.members ?? const <FamilyMember>[];
-    for (final member in familyMembers) {
-      add(member.email, userID: member.userID);
-    }
-
-    for (final email in PersonService.instance.cachedLinkedPersonEmails) {
-      add(email);
-    }
-
-    return suggestions;
   }
 }

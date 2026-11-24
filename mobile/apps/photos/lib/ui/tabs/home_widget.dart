@@ -22,17 +22,14 @@ import "package:photos/events/sync_status_update_event.dart";
 import "package:photos/events/tab_changed_event.dart";
 import "package:photos/events/trigger_logout_event.dart";
 import "package:photos/events/user_logged_out_event.dart";
-import "package:photos/models/collection/collection_items.dart";
 import "package:photos/models/home_tab.dart";
 import "package:photos/models/search/index_of_indexed_stack.dart";
 import "package:photos/models/selected_albums.dart";
 import "package:photos/models/selected_files.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/album_home_widget_service.dart";
 import "package:photos/services/app_lifecycle_service.dart";
 import "package:photos/services/app_navigation_service.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/semantic_search/semantic_search_service.dart";
 import "package:photos/services/memory_home_widget_service.dart";
@@ -40,7 +37,6 @@ import "package:photos/services/notification_service.dart";
 import "package:photos/services/people_home_widget_service.dart";
 import "package:photos/services/sync/local_sync_service.dart";
 import "package:photos/theme/ente_theme.dart";
-import "package:photos/ui/collections/collection_action_sheet.dart";
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/components/models/button_type.dart";
 import "package:photos/ui/extents_page_view.dart";
@@ -56,7 +52,6 @@ import "package:photos/ui/rewind/entry/rewind_entry.dart";
 import "package:photos/ui/settings_page.dart";
 import "package:photos/ui/tabs/albums_tab.dart";
 import "package:photos/ui/viewer/actions/file_viewer.dart";
-import "package:photos/ui/viewer/gallery/collection_page.dart";
 import "package:photos/ui/viewer/search_tab/search_tab.dart";
 import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/intent_util.dart";
@@ -72,6 +67,8 @@ class HomeWidget extends StatefulWidget {
 class _HomeWidgetState extends State<HomeWidget> {
   final _logger = Logger("HomeWidgetState");
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  // Offline fork: always empty (no server albums). Kept only because
+  // HomeBottomNavigationBar still takes it.
   final _selectedAlbums = SelectedAlbums();
   final _selectedFiles = SelectedFiles();
   final _hasSelectedFilesNotifier = ValueNotifier<bool>(false);
@@ -86,11 +83,8 @@ class _HomeWidgetState extends State<HomeWidget> {
 
   // ignore: unused_field
   StreamSubscription? _intentDataStreamSubscription;
-  List<SharedMediaFile>? _sharedFiles;
-  bool _shouldRenderCreateCollectionSheet = false;
   bool _mediaViewFallbackNavigationScheduled = false;
   bool _personSyncTriggered = false;
-  bool _collectionsSyncTriggered = false;
   // Offline fork: always use the account-free entry flow, so the landing
   // (sign-up / login) page is unreachable.
   bool _startWithoutAccount =
@@ -256,7 +250,6 @@ class _HomeWidgetState extends State<HomeWidget> {
     await Future.delayed(const Duration(seconds: 5));
 
     _logger.info("Syncing home widget");
-    await AlbumHomeWidgetService.instance.checkPendingAlbumsSync();
     await PeopleHomeWidgetService.instance.checkPendingPeopleSync();
     await MemoryHomeWidgetService.instance.checkPendingMemorySync();
   }
@@ -384,38 +377,23 @@ class _HomeWidgetState extends State<HomeWidget> {
                     Navigator.of(context).pop(true);
                   },
                 ),
-                const SizedBox(height: 12),
-                ButtonWidget(
-                  buttonType: ButtonType.secondary,
-                  labelText: context.strings.backupFile,
-                  onTap: () async {
-                    Navigator.of(context).pop(false);
-                  },
-                ),
               ],
             );
           },
         ).then((shouldOpenFile) {
-          if (!mounted || _isGuestViewActive || shouldOpenFile == null) {
+          if (!mounted || _isGuestViewActive || shouldOpenFile != true) {
             return;
           }
-          if (shouldOpenFile) {
-            unawaited(
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) {
-                    return FileViewer(sharedMediaFile: value[0]);
-                  },
-                ),
+          unawaited(
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) {
+                  return FileViewer(sharedMediaFile: value[0]);
+                },
               ),
-            );
-          } else {
-            setState(() {
-              _shouldRenderCreateCollectionSheet = true;
-              _sharedFiles = value;
-            });
-          }
+            ),
+          );
         }),
       );
     }
@@ -444,17 +422,9 @@ class _HomeWidgetState extends State<HomeWidget> {
           ),
         ),
       );
-      return;
     }
-
-    if (value.isEmpty || !mounted || _isGuestViewActive) {
-      return;
-    }
-
-    setState(() {
-      _sharedFiles = value;
-      _shouldRenderCreateCollectionSheet = true;
-    });
+    // Offline fork: media shared to the app at start had only the "add to
+    // album" (upload) sheet as its target. That sheet is gone.
   }
 
   Future<bool> _consumeAndroidMediaViewIntent() async {
@@ -556,10 +526,6 @@ class _HomeWidgetState extends State<HomeWidget> {
           return;
         }
         if (_selectedTabIndex == 1) {
-          if (_selectedAlbums.albums.isNotEmpty) {
-            _selectedAlbums.clearAll();
-            return;
-          }
           if (_shouldAlbumsSearchConsumeBackNotifier.value) {
             _isAlbumsSearchActiveNotifier.value = false;
             return;
@@ -709,28 +675,12 @@ class _HomeWidgetState extends State<HomeWidget> {
       }
     }
     _ensurePersonSync();
-    _ensureCollectionsSync();
     if (_shouldShowPermissionWidget()) {
       _ensurePersonSync();
       return const GrantPermissionsWidget();
     }
     if (_shouldShowLoadingWidget()) {
       return const LoadingPhotosWidget();
-    }
-    if (_sharedFiles != null &&
-        _sharedFiles!.isNotEmpty &&
-        _shouldRenderCreateCollectionSheet) {
-      // Clear this before opening so rebuilds cannot open duplicate sheets.
-      _shouldRenderCreateCollectionSheet = false;
-      ReceiveSharingIntent.instance.reset();
-      Future.delayed(const Duration(milliseconds: 10), () {
-        if (!context.mounted) return;
-        showCollectionActionSheet(
-          context,
-          sharedFiles: _sharedFiles,
-          actionType: CollectionActionType.addFiles,
-        );
-      });
     }
 
     return Stack(
@@ -740,13 +690,11 @@ class _HomeWidgetState extends State<HomeWidget> {
             return ListenableBuilder(
               listenable: Listenable.merge([
                 _swipeToSelectInProgressNotifier,
-                _selectedAlbums,
                 _hasSelectedFilesNotifier,
               ]),
               builder: (context, child) {
                 final isPageScrollLocked =
                     _swipeToSelectInProgressNotifier.value ||
-                    _selectedAlbums.albums.isNotEmpty ||
                     _hasSelectedFilesNotifier.value;
                 return ValueListenableBuilder<int>(
                   valueListenable: _selectedTabIndexNotifier,
@@ -772,7 +720,6 @@ class _HomeWidgetState extends State<HomeWidget> {
                           1,
                           selectedTabIndex,
                           AlbumsTab(
-                            selectedAlbums: _selectedAlbums,
                             isActive: selectedTabIndex == 1,
                             isSearchActiveNotifier:
                                 _isAlbumsSearchActiveNotifier,
@@ -899,21 +846,6 @@ class _HomeWidgetState extends State<HomeWidget> {
         final personID = payload.substring("birthday_".length);
         // ignore: unawaited_futures
         memoriesCacheService.goToPersonMemory(personID);
-      } else {
-        final collectionID = Uri.parse(payload).queryParameters["collectionID"];
-        if (collectionID != null) {
-          final collection = CollectionsService.instance.getCollectionByID(
-            int.parse(collectionID),
-          )!;
-          final thumbnail = await CollectionsService.instance.getCover(
-            collection,
-          );
-          // ignore: unawaited_futures
-          AppNavigationService.instance.pushPage(
-            CollectionPage(CollectionWithThumbnail(collection, thumbnail)),
-            useFadeTransition: true,
-          );
-        }
       }
     }
   }
@@ -961,27 +893,5 @@ class _HomeWidgetState extends State<HomeWidget> {
       _logger.warning("Failed to sync persons", e, s);
       _personSyncTriggered = false;
     }
-  }
-
-  void _ensureCollectionsSync() {
-    if (_collectionsSyncTriggered) {
-      return;
-    }
-    if (isLocalGalleryMode) {
-      return;
-    }
-    if (!(backupPreferenceService.hasSkippedOnboardingPermission ||
-        backupPreferenceService.isOnlyNewBackupEnabled)) {
-      return;
-    }
-    // When first import is bypassed by skipped onboarding or only-new backup,
-    // trigger collection sync here instead of waiting for the
-    // completedFirstGalleryImport refresh path.
-    _collectionsSyncTriggered = true;
-    CollectionsService.instance.sync().then((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
   }
 }

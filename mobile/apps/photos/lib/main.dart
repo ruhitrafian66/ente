@@ -42,8 +42,6 @@ import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/account/user_service.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
-import 'package:photos/services/collections_service.dart';
-import 'package:photos/services/favorites_service.dart';
 import 'package:photos/services/home_widget_service.dart';
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/ml_run_control.dart";
@@ -223,7 +221,7 @@ Future<void> _homeWidgetSync([bool isBackground = false]) async {
   }
 
   try {
-    await HomeWidgetService.instance.initHomeWidget(isBackground);
+    await HomeWidgetService.instance.initHomeWidget();
   } catch (e, s) {
     _logger.severe("Error in syncing home widget", e, s);
   }
@@ -330,10 +328,6 @@ Future<void> _runMinimally(
     // rest of background services are being initialized.
     final controller = computeController;
 
-    _logger.info("(for debugging) CollectionsService init $tlog");
-    await CollectionsService.instance.init(prefs);
-    _logger.info("(for debugging) CollectionsService init done $tlog");
-
     await LocalSyncService.instance.init(prefs);
     await SyncService.instance.init(prefs);
 
@@ -383,12 +377,6 @@ Future<void> _runMinimally(
         }
       }
     }
-    if (shouldStop?.call() ?? false) return;
-    _logger.info("[BG TASK] smart albums sync");
-    if (hasGrantedMLConsent && !PersonService.isInitialized) {
-      PersonService.init(entityService, MLDataDB.instance, prefs);
-    }
-    await smartAlbumsService.syncSmartAlbums();
 
     _logger.info("[BG TASK] $taskId completed");
   } catch (e, s) {
@@ -482,10 +470,6 @@ Future<void> _init(
     await UserService.instance.init();
     _logger.info("UserService init done $tlog");
 
-    _logger.info("CollectionsService init $tlog");
-    await CollectionsService.instance.init(preferences);
-    _logger.info("CollectionsService init done $tlog");
-
     SearchService.instance.init();
 
     if (isPickerStartup) {
@@ -493,16 +477,12 @@ Future<void> _init(
         _logger.info("Minor inits for logged in state $tlog");
         PersonService.init(entityService, MLDataDB.instance, preferences);
         _logger.info("PersonService init for picker startup done $tlog");
-        await FavoritesService.instance.initFav();
-        _logger.info("FavoritesService init done $tlog");
       }
       _logger.info("Picker startup init done $tlog");
       initComplete = true;
       _stopHearBeat = true;
       return;
     }
-
-    FavoritesService.instance.initFav().ignore();
 
     _logger.info("LocalSyncService init $tlog");
     await LocalSyncService.instance.init(preferences);

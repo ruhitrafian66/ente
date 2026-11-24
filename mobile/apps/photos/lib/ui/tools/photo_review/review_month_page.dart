@@ -15,7 +15,6 @@ import "package:photos/core/event_bus.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/photo_review/photo_review_models.dart";
-import "package:photos/services/favorites_service.dart";
 import "package:photos/services/photo_review/photo_review_service.dart";
 import "package:photos/ui/tools/photo_review/widgets/review_swipe_stack.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
@@ -495,8 +494,6 @@ class _ReviewMonthPageState extends State<ReviewMonthPage> {
             controller: _stackController,
             onSwiped: _onSwiped,
             onCardTap: (file) => _openViewer(_undecided, file),
-            isFavorite: (file) =>
-                FavoritesService.instance.isFavoriteCache(file),
           ),
         ),
       ],

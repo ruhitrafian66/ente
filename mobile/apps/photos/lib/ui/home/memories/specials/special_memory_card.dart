@@ -116,7 +116,6 @@ class _Cover extends StatelessWidget {
     return ThumbnailWidget(
       file,
       shouldShowSyncStatus: false,
-      shouldShowFavoriteIcon: false,
       shouldShowVideoOverlayIcon: false,
       thumbnailSize: thumbnailLargeSize,
       key: Key("special-memory-${file.tag}"),

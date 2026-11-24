@@ -1,5 +1,4 @@
 import "package:ente_components/hugeicons.dart";
-import "package:ente_components/theme/theme.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
@@ -14,7 +13,6 @@ import "package:photos/services/machine_learning/face_ml/face_filtering/face_fil
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/search_service.dart";
-import "package:photos/ui/collections/collection_action_sheet.dart";
 import "package:photos/ui/components/bottom_action_bar/selection_action_sheet.dart";
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/viewer/people/merge_clusters_to_person_sheet.dart";
@@ -158,11 +156,6 @@ class _PeopleSelectionActionWidgetState
             ? false
             : onlyOnePerson;
         final bool showShowPersonAction = onlyIgnoredPersonsSelected;
-        // Offline fork: auto-add needs Ente albums, so it never shows.
-        final bool showAutoAddAction =
-            onlyIgnoredPersonsSelected || kOfflineFork
-            ? false
-            : onlyPersonSelected;
         final bool showPinAction = onlyIgnoredPersonsSelected
             ? false
             : onlyPersonSelected &&
@@ -207,8 +200,7 @@ class _PeopleSelectionActionWidgetState
             showPinAction ||
             showUnpinAction ||
             showHideFromMemoriesAction ||
-            showShowInMemoriesAction ||
-            showAutoAddAction;
+            showShowInMemoriesAction;
 
         if (!hasVisibleAction) {
           return controls;
@@ -294,19 +286,6 @@ class _PeopleSelectionActionWidgetState
             shouldShow: showShowInMemoriesAction,
           ),
         );
-        items.add(
-          SelectionSheetAction(
-            labelText: context.strings.autoAddToAlbum,
-            iconWidget: Image.asset(
-              "assets/auto-add-people.png",
-              width: 22,
-              height: 22,
-              color: context.componentColors.textBase,
-            ),
-            onTap: _autoAddToAlbum,
-            shouldShow: showAutoAddAction,
-          ),
-        );
 
         return SelectionActionSheet(
           actions: items,
@@ -349,19 +328,6 @@ class _PeopleSelectionActionWidgetState
     if (!mounted) return;
     await routeToPage(context, PersonReviewClusterSuggestion(person));
     widget.selectedPeople.clearAll();
-  }
-
-  Future<void> _autoAddToAlbum() async {
-    final personMap = await personEntitiesMapFuture;
-    final selectedPersonIds = _getSelectedPersonIds(personMap);
-    if (selectedPersonIds.isEmpty) return;
-    if (!mounted) return;
-    widget.selectedPeople.clearAll();
-    await showCollectionActionSheet(
-      context,
-      selectedPeople: selectedPersonIds,
-      actionType: CollectionActionType.autoAddPeople,
-    );
   }
 
   Future<void> _updatePinState(bool shouldPin) async {

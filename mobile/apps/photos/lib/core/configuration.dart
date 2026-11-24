@@ -28,8 +28,6 @@ import 'package:photos/gateways/users/models/key_attributes.dart';
 import "package:photos/offline_fork.dart";
 import 'package:photos/service_locator.dart';
 import 'package:photos/services/authenticated_session.dart';
-import 'package:photos/services/collections_service.dart';
-import 'package:photos/services/favorites_service.dart';
 import "package:photos/services/home_widget_service.dart";
 import 'package:photos/services/ignored_files_service.dart';
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
@@ -294,15 +292,8 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
 
     if (!autoLogout) {
       // Auto logout can run before these services are initialized.
-      CollectionsService.instance.clearCache();
-      FavoritesService.instance.clearCache();
       SearchService.instance.clearCache();
       PersonService.instance.clearCache();
-      try {
-        smartAlbumsService.clearCache();
-      } catch (e) {
-        _logger.info("SmartAlbumsService not initialized", e);
-      }
       Bus.instance.fire(UserLoggedOutEvent());
     } else {
       await _preferences.setBool("auto_logout", true);

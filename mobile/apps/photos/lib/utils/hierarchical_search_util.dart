@@ -21,7 +21,6 @@ import "package:photos/models/search/hierarchical/only_them_filter.dart";
 import "package:photos/models/search/hierarchical/top_level_generic_filter.dart";
 import "package:photos/models/search/hierarchical/uploader_filter.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/filter/db_filters.dart";
 import "package:photos/services/location_service.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
@@ -228,8 +227,6 @@ Future<List<EnteFile>> getFilteredFiles(
       filteredFiles = await FilesDB.instance.getFilesFromIDs(
         filteredUploadedIDs.toList(),
         dedupeByUploadId: true,
-        collectionsToIgnore: CollectionsService.instance
-            .getHiddenCollectionIds(),
       );
     }
   } catch (e) {
@@ -256,7 +253,6 @@ Future<void> curateFilters(
       return;
     }
 
-    final albumFilters = await _curateAlbumFilters(files);
     final fileTypeFilters = _curateFileTypeFilters(files, l10n);
     final locationFilters = await _curateLocationFilters(files);
     final uploaderFilters = _curateUploaderFilter(files);
@@ -272,7 +268,6 @@ Future<void> curateFilters(
       ...fileTypeFilters,
       ...uploaderFilters,
       ...cameraFilters,
-      ...albumFilters,
       ...locationFilters,
     ]);
   } catch (e) {
@@ -310,39 +305,6 @@ List<OnlyThemFilter> getOnlyThemFilter(
     );
     return [onlyThemFilter];
   }
-}
-
-Future<List<AlbumFilter>> _curateAlbumFilters(List<EnteFile> files) async {
-  final albumFilters = <AlbumFilter>[];
-  final idToOccurrence = <int, int>{};
-  final uploadedIDs = <int>[];
-  for (EnteFile file in files) {
-    if (file.uploadedFileID != null && file.uploadedFileID != -1) {
-      uploadedIDs.add(file.uploadedFileID!);
-    }
-  }
-  final collectionIDsOfFiles = await FilesDB.instance
-      .getAllCollectionIDsOfFiles(uploadedIDs);
-
-  for (int collectionID in collectionIDsOfFiles) {
-    idToOccurrence[collectionID] = (idToOccurrence[collectionID] ?? 0) + 1;
-  }
-
-  for (int id in idToOccurrence.keys) {
-    final collection = CollectionsService.instance.getCollectionByID(id);
-    if (collection == null) {
-      continue;
-    }
-    albumFilters.add(
-      AlbumFilter(
-        collectionID: id,
-        albumName: collection.displayName,
-        occurrence: idToOccurrence[id]!,
-      ),
-    );
-  }
-
-  return albumFilters;
 }
 
 List<FileTypeFilter> _curateFileTypeFilters(

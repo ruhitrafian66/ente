@@ -16,8 +16,6 @@ import 'package:photos/db/files_db.dart';
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
 import 'package:photos/events/local_photos_updated_event.dart';
-import 'package:photos/models/collection/collection.dart';
-import 'package:photos/models/collection/collection_items.dart';
 import 'package:photos/models/device_collection.dart';
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
@@ -28,7 +26,6 @@ import "package:photos/models/memories/memories_cache.dart";
 import "package:photos/models/memories/memory.dart";
 import "package:photos/models/memories/smart_memory.dart";
 import "package:photos/models/ml/face/person.dart";
-import 'package:photos/models/search/album_search_result.dart';
 import 'package:photos/models/search/device_album_search_result.dart';
 import 'package:photos/models/search/generic_search_result.dart';
 import "package:photos/models/search/hierarchical/camera_filter.dart";
@@ -43,7 +40,6 @@ import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/search/search_types.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
-import 'package:photos/services/collections_service.dart';
 import "package:photos/services/date_parse_service.dart";
 import "package:photos/services/filter/db_filters.dart";
 import "package:photos/services/location_service.dart";
@@ -65,10 +61,8 @@ class SearchService {
   Future<List<EnteFile>>? _cachedFilesForHierarchicalSearch;
   Future<List<EnteFile>>? _cachedFilesForGenericGallery;
   Future<List<EnteFile>>? _cachedFilesForOfflineGallery;
-  Future<List<EnteFile>>? _cachedHiddenFilesFuture;
   Future<Map<int, EnteFile>>? _cachedFilesByUploadedID;
   final _logger = Logger((SearchService).toString());
-  final _collectionService = CollectionsService.instance;
   static const _maximumResultsLimit = 20;
   late final mlDataDB = MLDataDB.instance;
   StreamSubscription<LocalPhotosUpdatedEvent>? _localPhotosUpdatedSubscription;
@@ -93,12 +87,7 @@ class SearchService {
     _cachedFilesForHierarchicalSearch = null;
     _cachedFilesForGenericGallery = null;
     _cachedFilesForOfflineGallery = null;
-    _cachedHiddenFilesFuture = null;
     _cachedFilesByUploadedID = null;
-  }
-
-  Set<int> ignoreCollections() {
-    return CollectionsService.instance.getHiddenCollectionIds();
   }
 
   Future<List<EnteFile>> getAllFilesForSearch() async {
@@ -109,7 +98,7 @@ class SearchService {
     if (_cachedFilesFuture == null) {
       _logger.info("Reading all files from db");
       _cachedFilesFuture = FilesDB.instance.getAllFilesFromDB(
-        ignoreCollections(),
+        const <int>{},
         dedupeByUploadId: false,
       );
     }
@@ -192,7 +181,6 @@ class SearchService {
       final files = await FilesDB.instance.getFilesFromIDs(
         uploadedFileIDs.toList(),
         dedupeByUploadId: true,
-        collectionsToIgnore: ignoreCollections(),
       );
       if (files.isEmpty) {
         return [];
@@ -262,7 +250,7 @@ class SearchService {
     if (_cachedFilesFuture == null) {
       _logger.info("Reading all files from db");
       _cachedFilesFuture = FilesDB.instance.getAllFilesFromDB(
-        ignoreCollections(),
+        const <int>{},
         dedupeByUploadId: false,
       );
     }
@@ -292,7 +280,7 @@ class SearchService {
     if (_cachedFilesFuture == null) {
       _logger.info("Reading all files from db");
       _cachedFilesFuture = FilesDB.instance.getAllFilesFromDB(
-        ignoreCollections(),
+        const <int>{},
         dedupeByUploadId: false,
       );
     }
@@ -316,100 +304,14 @@ class SearchService {
     }
   }
 
-  Future<List<EnteFile>> getAllFilesForContactPhotoPicker() async {
-    final files = await getAllFilesForSearch();
-    final archivedCollectionIds =
-        (await _collectionService.getArchivedCollection())
-            .map((collection) => collection.id)
-            .toSet();
-    if (archivedCollectionIds.isEmpty) {
-      return files;
-    }
-    return files
-        .where((file) => !archivedCollectionIds.contains(file.collectionID))
-        .toList();
-  }
-
+  /// Offline fork: hidden albums do not exist, so no file is hidden.
   Future<List<EnteFile>> getHiddenFiles() async {
-    if (_cachedHiddenFilesFuture != null) {
-      return _cachedHiddenFilesFuture!;
-    }
-    _logger.info("Reading hidden files from db");
-    final hiddenCollections = CollectionsService.instance
-        .getHiddenCollectionIds();
-    _cachedHiddenFilesFuture = FilesDB.instance.getAllFilesFromCollections(
-      hiddenCollections,
-    );
-    return _cachedHiddenFilesFuture!;
+    return <EnteFile>[];
   }
 
   void clearCache() {
     invalidateFileCaches();
     unawaited(memoriesCacheService.clearMemoriesCache());
-  }
-
-  Future<List<AlbumSearchResult>> getCollectionSearchResults(
-    String query, {
-    bool Function(Collection)? collectionFilter,
-  }) async {
-    if (isLocalGalleryMode) {
-      return <AlbumSearchResult>[];
-    }
-    final List<Collection> collections = _collectionService.getCollectionsForUI(
-      includedShared: true,
-    );
-
-    final List<AlbumSearchResult> collectionSearchResults = [];
-
-    for (var c in collections) {
-      if (collectionSearchResults.length >= _maximumResultsLimit) {
-        break;
-      }
-
-      if (!c.isHidden() &&
-          c.type != CollectionType.uncategorized &&
-          (collectionFilter?.call(c) ?? true) &&
-          c.displayName.toLowerCase().contains(query.toLowerCase())) {
-        final EnteFile? thumbnail = await _collectionService.getCover(c);
-        collectionSearchResults.add(
-          AlbumSearchResult(CollectionWithThumbnail(c, thumbnail)),
-        );
-      }
-    }
-
-    return collectionSearchResults;
-  }
-
-  Future<List<AlbumSearchResult>> getAllCollectionSearchResults(
-    int? limit,
-  ) async {
-    try {
-      if (isLocalGalleryMode) {
-        return <AlbumSearchResult>[];
-      }
-      final List<Collection> collections = _collectionService
-          .getCollectionsForUI(includedShared: true);
-
-      final List<AlbumSearchResult> collectionSearchResults = [];
-
-      for (var c in collections) {
-        if (limit != null && collectionSearchResults.length >= limit) {
-          break;
-        }
-
-        if (!c.isHidden() && c.type != CollectionType.uncategorized) {
-          final EnteFile? thumbnail = await _collectionService.getCover(c);
-          collectionSearchResults.add(
-            AlbumSearchResult(CollectionWithThumbnail(c, thumbnail)),
-          );
-        }
-      }
-
-      return collectionSearchResults;
-    } catch (e) {
-      _logger.severe("error gettin allCollectionSearchResults", e);
-      return [];
-    }
   }
 
   Future<List<DeviceAlbumSearchResult>> getDeviceCollectionSearchResults(

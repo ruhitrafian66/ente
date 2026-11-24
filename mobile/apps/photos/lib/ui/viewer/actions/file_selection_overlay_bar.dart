@@ -26,6 +26,7 @@ import "package:photos/ui/viewer/gallery/state/selection_state.dart";
 class FileSelectionOverlayBar extends StatefulWidget {
   final GalleryType galleryType;
   final SelectedFiles selectedFiles;
+  // Offline fork: no server album exists; the value is kept for the callers.
   final Collection? collection;
   final Color? backgroundColor;
   final PersonEntity? person;
@@ -158,7 +159,6 @@ class _FileSelectionOverlayBarState extends State<FileSelectionOverlayBar>
               child: FileSelectionActionsWidget(
                 _galleryType,
                 widget.selectedFiles,
-                collection: widget.collection,
                 person: widget.person,
                 clusterID: widget.clusterID,
                 selectionControls: SafeArea(

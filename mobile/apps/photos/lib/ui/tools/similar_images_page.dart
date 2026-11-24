@@ -8,14 +8,11 @@ import 'package:flutter/material.dart';
 import "package:flutter_svg/svg.dart";
 import "package:intl/intl.dart";
 import 'package:logging/logging.dart';
-import "package:photos/core/configuration.dart";
 import 'package:photos/core/constants.dart';
 import "package:photos/models/file/file.dart";
 import "package:photos/models/selected_files.dart";
 import "package:photos/models/similar_files.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
-import "package:photos/services/favorites_service.dart";
 import "package:photos/services/machine_learning/similar_images_service.dart";
 import "package:photos/theme/colors.dart";
 import 'package:photos/theme/ente_theme.dart';
@@ -449,9 +446,7 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
       final newSelection = <EnteFile>{};
       for (final group in _filteredGroups) {
         for (int i = 1; i < group.files.length; i++) {
-          final file = group.files[i];
-          if (FavoritesService.instance.isFavoriteCache(file)) continue;
-          newSelection.add(file);
+          newSelection.add(group.files[i]);
         }
       }
       _selectedFiles.clearAll();
@@ -469,7 +464,7 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
           for (int i = 0; i < group.files.length; i++) {
             final file = group.files[i];
             eligibleFilteredFiles.add(file);
-            if (i != 0 && !FavoritesService.instance.isFavoriteCache(file)) {
+            if (i != 0) {
               autoSelectCount++;
             }
           }
@@ -577,9 +572,7 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
     final autoSelectFiles = <EnteFile>{};
     for (final group in _filteredGroups) {
       for (int i = 1; i < group.files.length; i++) {
-        final file = group.files[i];
-        if (FavoritesService.instance.isFavoriteCache(file)) continue;
-        autoSelectFiles.add(file);
+        autoSelectFiles.add(group.files[i]);
       }
     }
 
@@ -647,9 +640,7 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
       for (final group in _similarFilesList) {
         if (group.files.length > 1) {
           for (int i = 1; i < group.files.length; i++) {
-            final file = group.files[i];
-            if (FavoritesService.instance.isFavoriteCache(file)) continue;
-            _selectedFiles.toggleSelection(file);
+            _selectedFiles.toggleSelection(group.files[i]);
           }
         }
       }
@@ -954,7 +945,6 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
           try {
             await _deleteFilesLogic(
               filesToDelete,
-              true,
               showUIFeedback: showUIFeedback,
               maintainScrollAnchor: maintainScrollAnchor,
             );
@@ -969,7 +959,6 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
       try {
         await _deleteFilesLogic(
           filesToDelete,
-          true,
           showUIFeedback: showUIFeedback,
           maintainScrollAnchor: maintainScrollAnchor,
         );
@@ -983,8 +972,7 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
   }
 
   Future<void> _deleteFilesLogic(
-    Set<EnteFile> filesToDelete,
-    bool createSymlink, {
+    Set<EnteFile> filesToDelete, {
     bool showUIFeedback = true,
     bool maintainScrollAnchor = true,
   }) async {
@@ -1041,7 +1029,6 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
         }
       }
     }
-    final Map<int, Set<EnteFile>> collectionToFilesToAddMap = {};
     final allDeleteFiles = <EnteFile>{};
     final groupsToRemove = <SimilarFiles>{};
     for (final similarGroup in _similarFilesList) {
@@ -1062,59 +1049,11 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
       if (groupDeleteFiles.isNotEmpty) {
         filesToDelete.removeAll(groupDeleteFiles);
       }
-      if (!similarGroup.isEmpty && createSymlink) {
-        final filesToKeep = similarGroup.files;
-        final collectionIDs = filesToKeep
-            .map((file) => file.collectionID)
-            .toSet();
-        for (final deletedFile in groupDeleteFiles) {
-          final collectionID = deletedFile.collectionID;
-          if (collectionIDs.contains(collectionID) || collectionID == null) {
-            continue;
-          }
-          if (!collectionToFilesToAddMap.containsKey(collectionID)) {
-            collectionToFilesToAddMap[collectionID] = {};
-          }
-          collectionToFilesToAddMap[collectionID]!.addAll(filesToKeep);
-        }
-      }
     }
     for (final group in groupsToRemove) {
       _similarFilesList.remove(group);
     }
     _sortSimilarFiles(updateState: false);
-
-    final int collectionCnt = collectionToFilesToAddMap.keys.length;
-    if (createSymlink) {
-      final userID = Configuration.instance.getUserID();
-      int progress = 0;
-      for (final collectionID in collectionToFilesToAddMap.keys) {
-        if (!mounted) {
-          return;
-        }
-        final collection = CollectionsService.instance.getCollectionByID(
-          collectionID,
-        );
-        if (collection != null && collection.canAutoAdd(userID!)) {
-          await CollectionsService.instance.addSilentlyToCollection(
-            collectionID,
-            collectionToFilesToAddMap[collectionID]!.toList(),
-          );
-        } else {
-          _logger.warning(
-            "Skipping adding symlinks to collection $collectionID due to missing permissions (${collection?.canAutoAdd(userID!) ?? false}) or collection not found. (${collection == null})",
-          );
-        }
-        if (collectionCnt > 2 && showUIFeedback) {
-          progress++;
-          final int percentage = ((progress * 100) / collectionCnt).round();
-          _deleteProgress.value = '$percentage%';
-        }
-      }
-    }
-    if (collectionCnt > 2 && showUIFeedback) {
-      _deleteProgress.value = "";
-    }
 
     _selectedFiles.unSelectAll(allDeleteFiles);
     setState(() {});

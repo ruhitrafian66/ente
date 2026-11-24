@@ -9,7 +9,6 @@ import "package:ente_ui/components/loading_widget.dart";
 import "package:flutter/material.dart";
 import "package:photos/events/event.dart";
 import "package:photos/models/local_entity_data.dart";
-import "package:photos/models/search/album_search_result.dart";
 import "package:photos/models/search/generic_search_result.dart";
 import "package:photos/models/search/hierarchical/location_filter.dart";
 import "package:photos/models/search/hierarchical/magic_filter.dart";
@@ -17,10 +16,8 @@ import "package:photos/models/search/recent_searches.dart";
 import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/search/search_result.dart";
 import "package:photos/models/search/search_types.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/states/location_screen_state.dart";
 import "package:photos/ui/components/thumbnail_list_item.dart";
-import "package:photos/ui/viewer/gallery/collection_page.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_actions.dart";
 import "package:photos/ui/viewer/location/location_screen.dart";
 import "package:photos/ui/viewer/search/result/magic_result_screen.dart";
@@ -210,26 +207,6 @@ class _SearchSectionAllPageState extends State<SearchSectionAllPage> {
                     }
                     final adjustedIndex = showCTA ? itemIndex - 1 : itemIndex;
                     final result = filteredResults[adjustedIndex];
-                    if (result is AlbumSearchResult) {
-                      return SearchableItemWidget(
-                        result,
-                        resultCount: CollectionsService.instance.getFileCount(
-                          result.collectionWithThumbnail.collection,
-                        ),
-                        onResultTap: () {
-                          RecentSearches().add(result.name());
-                          routeToPage(
-                            context,
-                            CollectionPage(
-                              result.collectionWithThumbnail,
-                              tagPrefix: "searchable_item" + result.heroTag(),
-                            ),
-                            useFadeTransition: true,
-                          );
-                        },
-                      );
-                    }
-
                     if (widget.sectionType == SectionType.magic &&
                         result is GenericSearchResult) {
                       return SearchableItemWidget(

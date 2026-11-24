@@ -16,7 +16,6 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/file_load_result.dart";
 import "package:photos/models/photo_review/photo_review_models.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/filter/db_filters.dart";
 import "package:photos/services/ignored_files_service.dart";
 
@@ -37,7 +36,6 @@ class PhotoReviewService {
   final PhotoReviewDB _db = PhotoReviewDB.instance;
   Future<ReviewOverview>? _overviewFuture;
   (int, bool)? _overviewScope;
-  Set<int> _overviewIgnoredCollections = {};
   Set<String> _overviewIgnoredFiles = {};
 
   static String fileKey(EnteFile file) {
@@ -54,20 +52,13 @@ class PhotoReviewService {
       backupPreferenceService.hasSelectedAllFoldersForBackup ||
           isLocalGalleryMode,
     );
-    final ignoredCollections = CollectionsService.instance
-        .archivedOrHiddenCollectionIds();
     if (_overviewScope != scope ||
-        !const SetEquality<int>().equals(
-          _overviewIgnoredCollections,
-          ignoredCollections,
-        ) ||
         !const SetEquality<String>().equals(
           _overviewIgnoredFiles,
           ignoredFiles,
         )) {
       _overviewFuture = null;
       _overviewScope = scope;
-      _overviewIgnoredCollections = ignoredCollections;
       _overviewIgnoredFiles = ignoredFiles;
     }
     final cached = _overviewFuture;
@@ -292,8 +283,6 @@ class PhotoReviewService {
     final filterOptions = DBFilterOptions(
       hideIgnoredForUpload: true,
       dedupeUploadID: true,
-      ignoredCollectionIDs: CollectionsService.instance
-          .archivedOrHiddenCollectionIds(),
       ignoreSavedFiles: true,
       ignoreSharedItems: true,
     );

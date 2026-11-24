@@ -23,7 +23,6 @@ import "package:photos/models/memories/special_memory.dart";
 import "package:photos/models/memory_lane/memory_lane_models.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/memory_lane/memory_lane_cache_service.dart";
 import "package:photos/services/memory_lane/memory_lane_service.dart";
@@ -602,20 +601,9 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     final files = await MemoryLaneService.instance.getTimelineFiles(
       memoryLane.entries.map((entry) => entry.fileId),
     );
-    var shouldHide = memoryLane.entries.any(
+    final shouldHide = memoryLane.entries.any(
       (entry) => !files.containsKey(entry.fileId),
     );
-    if (!shouldHide && !isLocalGalleryMode) {
-      final hiddenCollectionIds = CollectionsService.instance
-          .getHiddenCollectionIds();
-      if (hiddenCollectionIds.isNotEmpty) {
-        final filesByCollection = await FilesDB.instance
-            .getAllFilesGroupByCollectionID(
-              memoryLane.entries.map((entry) => entry.fileId).toList(),
-            );
-        shouldHide = filesByCollection.keys.any(hiddenCollectionIds.contains);
-      }
-    }
     if (!mounted || _memoryLane != memoryLane || !shouldHide) {
       return;
     }

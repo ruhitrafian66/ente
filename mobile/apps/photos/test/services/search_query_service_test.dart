@@ -3,8 +3,6 @@ import "dart:async";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:photos/models/collection/collection.dart";
-import "package:photos/models/search/album_search_result.dart";
 import "package:photos/models/search/device_album_search_result.dart";
 import "package:photos/models/search/generic_search_result.dart";
 import "package:photos/models/search/search_result.dart";
@@ -18,7 +16,6 @@ const _normalProviders = [
   #getFileExtensionResults,
   #getLocationResults,
   #getAllFace,
-  #getCollectionSearchResults,
   #getDeviceCollectionSearchResults,
   #getMonthSearchResults,
   #getDateResults,
@@ -35,7 +32,7 @@ void main() {
     final empty = service.search(context, "");
     expect(await empty.toList(), [<SearchResult>[]]);
     expect(source.calls, isEmpty);
-    expect(await service.search(context, "trip").length, 12);
+    expect(await service.search(context, "trip").length, 11);
   });
 
   test("ID queries preserve parsing and bypass other providers", () async {
@@ -90,7 +87,6 @@ void main() {
         }
       }
     }
-    expect(source.collectionFilter, isNull);
     final batches = <List<SearchResult>>[];
     final done = Completer<void>();
     stream.listen(batches.add, onDone: done.complete);
@@ -114,7 +110,7 @@ void main() {
     );
     source.completeAll();
     await done.future;
-    expect(batches, hasLength(12));
+    expect(batches, hasLength(11));
     expect(batches.expand((batch) => batch), [magic, alex, alexander]);
   });
 
@@ -140,13 +136,13 @@ void main() {
 
     source.completeAll();
     await Future<void>.delayed(Duration.zero);
-    expect(batches, hasLength(11));
+    expect(batches, hasLength(10));
     expect(done.isCompleted, isFalse);
 
     final magic = _Result("magic");
     magicResults.complete([magic]);
     await done.future;
-    expect(batches, hasLength(12));
+    expect(batches, hasLength(11));
     expect(batches.last, [magic]);
   });
 
@@ -159,17 +155,8 @@ void main() {
         ..._normalProviders,
       ]);
       source.completeAll();
-      expect(await stream.length, query == "2024" ? 13 : 12);
+      expect(await stream.length, query == "2024" ? 12 : 11);
     }
-    bool collectionFilter(Collection collection) => true;
-    final source = _SearchService();
-    final stream = SearchQueryService(
-      source,
-    ).search(context, "trip", collectionFilter: collectionFilter);
-    expect(source.providers, _normalProviders);
-    expect(source.collectionFilter, same(collectionFilter));
-    source.completeAll();
-    expect(await stream.length, 12);
   });
 
   test("buffered results survive late listeners and cancellation", () async {
@@ -178,7 +165,7 @@ void main() {
     final early = service.search(context, "first");
     source.completeAll();
     await Future<void>.delayed(Duration.zero);
-    expect(await early.length, 12);
+    expect(await early.length, 11);
 
     final canceled = service.search(context, "second");
     final canceledBatches = <List<SearchResult>>[];
@@ -192,7 +179,7 @@ void main() {
     source.generic[#getMagicSearchResults]![2].complete([result]);
     source.completeAll();
     final batches = await current;
-    expect(batches, hasLength(12));
+    expect(batches, hasLength(11));
     expect(batches.expand((batch) => batch), [result]);
     expect(canceledBatches, isEmpty);
   });
@@ -219,16 +206,9 @@ class _SearchService implements SearchService {
 
   Iterable<Symbol> get providers => calls.map((call) => call.memberName);
 
-  Object? get collectionFilter => calls
-      .singleWhere((call) => call.memberName == #getCollectionSearchResults)
-      .namedArguments[#collectionFilter];
-
   @override
   dynamic noSuchMethod(Invocation invocation) {
     calls.add(invocation);
-    if (invocation.memberName == #getCollectionSearchResults) {
-      return _response<AlbumSearchResult>();
-    }
     if (invocation.memberName == #getDeviceCollectionSearchResults) {
       return _response<DeviceAlbumSearchResult>();
     }

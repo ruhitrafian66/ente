@@ -8,7 +8,6 @@ import "package:photos/events/local_photos_updated_event.dart";
 import "package:photos/models/file_load_result.dart";
 import "package:photos/models/location/location.dart";
 import "package:photos/models/selected_files.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/filter/db_filters.dart";
 import "package:photos/theme/colors.dart";
 import "package:photos/theme/ente_theme.dart";
@@ -80,9 +79,6 @@ class PickCenterPointWidget extends StatelessWidget {
                               limit,
                               asc,
                             }) async {
-                              final collectionsToHide = CollectionsService
-                                  .instance
-                                  .archivedOrHiddenCollectionIds();
                               FileLoadResult result;
                               result = await FilesDB.instance
                                   .fetchAllUploadedAndSharedFilesWithLocation(
@@ -91,7 +87,6 @@ class PickCenterPointWidget extends StatelessWidget {
                                     limit: null,
                                     asc: false,
                                     filterOptions: DBFilterOptions(
-                                      ignoredCollectionIDs: collectionsToHide,
                                       hideIgnoredForUpload: true,
                                     ),
                                   );

@@ -10,7 +10,6 @@ import "package:flutter/rendering.dart";
 import "package:flutter/services.dart";
 import "package:intl/intl.dart";
 import "package:photos/core/constants.dart";
-import "package:photos/models/collection/collection.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/services/app_navigation_service.dart";
@@ -22,7 +21,6 @@ import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart
 class AlbumCoverAppBar extends StatefulWidget {
   const AlbumCoverAppBar({
     super.key,
-    this.collection,
     this.cover,
     this.coverWidget,
     this.subtitle,
@@ -35,7 +33,6 @@ class AlbumCoverAppBar extends StatefulWidget {
     this.bottom,
   }) : assert(cover != null || coverWidget != null);
 
-  final Collection? collection;
   final EnteFile? cover;
   final Widget? coverWidget;
   final String? subtitle;
@@ -108,7 +105,6 @@ class _AlbumCoverAppBarState extends State<AlbumCoverAppBar> with RouteAware {
   Widget build(BuildContext context) {
     final colors = context.componentColors;
     final bottomHeight = widget.bottom?.preferredSize.height ?? 0;
-    final description = widget.collection?.displayDescription;
     final geometry = AlbumCoverAppBar.resolveGeometry(
       context,
       collapsedHeight: widget.collapsedHeight,
@@ -161,21 +157,6 @@ class _AlbumCoverAppBarState extends State<AlbumCoverAppBar> with RouteAware {
                 widget.subtitle!,
                 textAlign: TextAlign.center,
                 style: TextStyles.mini.copyWith(color: colors.specialWhite),
-              ),
-            ],
-            if (description != null) ...[
-              const SizedBox(height: Spacing.sm),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Text(
-                  description,
-                  maxLines: _descriptionMaxLines,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyles.mini.copyWith(
-                    color: colors.specialWhite.withValues(alpha: 0.92),
-                  ),
-                ),
               ),
             ],
             if (widget.coverActions.isNotEmpty) ...[
@@ -1005,7 +986,6 @@ const _headerActionSpacing = 6.0;
 const _pinnedFadeStart = 0.6;
 const _foregroundSwitchStart = 0.4;
 const _foregroundSwitchEnd = 0.6;
-const _descriptionMaxLines = 3;
 const _coverActionSize = 42.0;
 
 const _photoScrimColor = Color.from(alpha: 0.24, red: 0, green: 0, blue: 0);

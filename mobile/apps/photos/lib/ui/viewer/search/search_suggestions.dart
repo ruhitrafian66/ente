@@ -9,17 +9,14 @@ import "package:flutter_animate/flutter_animate.dart";
 import "package:logging/logging.dart";
 import "package:photos/data/months.dart";
 import "package:photos/models/file/file_type.dart";
-import "package:photos/models/search/album_search_result.dart";
 import "package:photos/models/search/device_album_search_result.dart";
 import "package:photos/models/search/generic_search_result.dart";
 import "package:photos/models/search/index_of_indexed_stack.dart";
 import 'package:photos/models/search/search_result.dart';
 import "package:photos/models/search/search_types.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/date_parse_service.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/components/thumbnail_list_item.dart";
-import "package:photos/ui/viewer/gallery/collection_page.dart";
 import "package:photos/ui/viewer/gallery/device/device_folder_page.dart";
 import "package:photos/ui/viewer/search/result/search_result_widget.dart";
 import "package:photos/ui/viewer/search/search_query_utils.dart";
@@ -268,26 +265,7 @@ class SearchResultsWidgetGenerator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (result is AlbumSearchResult) {
-      final AlbumSearchResult albumSearchResult = result as AlbumSearchResult;
-      return SearchResultWidget(
-        result,
-        resultCount: CollectionsService.instance.getFileCount(
-          albumSearchResult.collectionWithThumbnail.collection,
-        ),
-        showTypeLabel: showTypeLabel,
-        onResultTap:
-            onResultTap ??
-            () => routeToPage(
-              context,
-              CollectionPage(
-                albumSearchResult.collectionWithThumbnail,
-                tagPrefix: result.heroTag(),
-              ),
-              useFadeTransition: true,
-            ),
-      );
-    } else if (result is DeviceAlbumSearchResult) {
+    if (result is DeviceAlbumSearchResult) {
       final deviceResult = result as DeviceAlbumSearchResult;
       return SearchResultWidget(
         result,

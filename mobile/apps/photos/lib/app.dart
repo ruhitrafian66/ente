@@ -100,7 +100,6 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
     ) async {
       _changeCallbackDebouncer.run(() async {
         unawaited(PeopleHomeWidgetService.instance.checkPeopleChanged());
-        unawaited(smartAlbumsService.syncSmartAlbums());
       });
     });
   }

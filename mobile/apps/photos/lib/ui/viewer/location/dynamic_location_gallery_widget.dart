@@ -6,7 +6,6 @@ import "package:photos/core/constants.dart";
 import "package:photos/db/files_db.dart";
 import "package:photos/models/file_load_result.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/filter/db_filters.dart";
 import "package:photos/services/location_service.dart";
 import "package:photos/settings/local_settings.dart";
@@ -35,18 +34,13 @@ class _DynamicLocationGalleryWidgetState
 
   @override
   void initState() {
-    final collectionsToHide = CollectionsService.instance
-        .archivedOrHiddenCollectionIds();
     fileLoadResult = FilesDB.instance
         .fetchAllUploadedAndSharedFilesWithLocation(
           galleryLoadStartTime,
           galleryLoadEndTime,
           limit: null,
           asc: false,
-          filterOptions: DBFilterOptions(
-            ignoredCollectionIDs: collectionsToHide,
-            hideIgnoredForUpload: true,
-          ),
+          filterOptions: DBFilterOptions(hideIgnoredForUpload: true),
         );
 
     super.initState();

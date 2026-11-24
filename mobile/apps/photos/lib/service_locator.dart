@@ -10,7 +10,6 @@ import "package:photos/events/ml_consent_changed_event.dart";
 import "package:photos/gateways/entity/entity_gateway.dart";
 import "package:photos/gateways/users/users_gateway.dart";
 import "package:photos/services/backup_preference_service.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/entity_service.dart";
 import "package:photos/services/location_service.dart";
 import "package:photos/services/machine_learning/compute_controller.dart";
@@ -23,7 +22,6 @@ import "package:photos/services/memories/smart_memories_service.dart";
 import "package:photos/services/memories_cache_service.dart";
 import "package:photos/services/permission/service.dart";
 import "package:photos/services/rewind/rewind_service.dart";
-import "package:photos/services/smart_albums_service.dart";
 import "package:photos/services/text_embeddings_cache_service.dart";
 import "package:photos/services/wake_lock_service.dart";
 import "package:photos/settings/backup_settings.dart";
@@ -184,18 +182,6 @@ PermissionService? _permissionService;
 PermissionService get permissionService {
   _permissionService ??= PermissionService(ServiceLocator.instance.prefs);
   return _permissionService!;
-}
-
-SmartAlbumsService? _smartAlbumsService;
-SmartAlbumsService get smartAlbumsService {
-  _smartAlbumsService ??= SmartAlbumsService();
-  return _smartAlbumsService!;
-}
-
-CollectionsService? _collectionsService;
-CollectionsService get collectionsService {
-  _collectionsService ??= CollectionsService.instance;
-  return _collectionsService!;
 }
 
 InstallSourceService? _installSourceService;

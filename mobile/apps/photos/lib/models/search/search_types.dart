@@ -1,9 +1,7 @@
 import "dart:async";
 
-import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
-import "package:logging/logging.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/collection_updated_event.dart";
 import "package:photos/events/contact_relationships_invalidated_event.dart";
@@ -12,17 +10,12 @@ import "package:photos/events/event.dart";
 import "package:photos/events/location_tag_updated_event.dart";
 import "package:photos/events/magic_cache_updated_event.dart";
 import "package:photos/events/people_changed_event.dart";
-import "package:photos/models/collection/collection.dart";
-import "package:photos/models/collection/collection_items.dart";
 import "package:photos/models/search/search_result.dart";
 import "package:photos/models/typedefs.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
 import "package:photos/services/search_service.dart";
-import "package:photos/ui/viewer/gallery/collection_page.dart";
 import "package:photos/ui/viewer/location/add_location_sheet.dart";
 import "package:photos/ui/viewer/location/pick_center_point_widget.dart";
-import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/share_util.dart";
 
 const _kSearchPreviewFallbackClusterSize = 3;
@@ -101,11 +94,11 @@ extension SectionTypeExtensions on SectionType {
       case SectionType.face:
       case SectionType.magic:
       case SectionType.ritual:
+      case SectionType.album:
       case SectionType.fileTypesAndExtension:
         return false;
       case SectionType.location:
       case SectionType.contacts:
-      case SectionType.album:
         return true;
     }
   }
@@ -121,11 +114,11 @@ extension SectionTypeExtensions on SectionType {
       case SectionType.face:
       case SectionType.magic:
       case SectionType.ritual:
+      case SectionType.album:
       case SectionType.fileTypesAndExtension:
         return false;
       case SectionType.location:
       case SectionType.contacts:
-      case SectionType.album:
         return true;
     }
   }
@@ -186,48 +179,6 @@ extension SectionTypeExtensions on SectionType {
         };
       case SectionType.ritual:
         return () async {};
-      case SectionType.album:
-        return () async {
-          final result = await showTextInputDialog(
-            context,
-            title: context.strings.newAlbum,
-            submitButtonLabel: context.strings.create,
-            hintText: context.strings.enterAlbumName,
-            alwaysShowSuccessState: false,
-            initialValue: "",
-            textCapitalization: TextCapitalization.sentences,
-            onSubmit: (String text) async {
-              if (text.trim() == "") {
-                return;
-              }
-              try {
-                final Collection c = await CollectionsService.instance
-                    .createAlbum(text);
-
-                // Close now so it does not flash when returning from the album.
-                if (!context.mounted) return;
-                Navigator.of(context).pop();
-
-                if (!context.mounted) return;
-                // ignore: unawaited_futures
-                await routeToPage(
-                  context,
-                  CollectionPage(CollectionWithThumbnail(c, null)),
-                  useFadeTransition: true,
-                );
-              } catch (e, s) {
-                Logger(
-                  "CreateNewAlbumIcon",
-                ).severe("Failed to create a new album", e, s);
-                rethrow;
-              }
-            },
-          );
-          if (result is Exception) {
-            if (!context.mounted) return;
-            await showGenericErrorDialog(context: context, error: result);
-          }
-        };
       default:
         {
           return () async {};
@@ -262,7 +213,8 @@ extension SectionTypeExtensions on SectionType {
         return SearchService.instance.getAllContactsSearchResults(limit);
 
       case SectionType.album:
-        return SearchService.instance.getAllCollectionSearchResults(limit);
+        // Offline fork: server albums do not exist.
+        return Future.value(const <SearchResult>[]);
 
       case SectionType.fileTypesAndExtension:
         return SearchService.instance.getAllFileTypesAndExtensionsResults(

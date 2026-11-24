@@ -287,7 +287,6 @@ class _MemoryVideoPreviewState extends State<_MemoryVideoPreview> {
             widget.files[_index],
             thumbnailSize: thumbnailLargeSize,
             shouldShowSyncStatus: false,
-            shouldShowFavoriteIcon: false,
             shouldShowVideoOverlayIcon: false,
           ),
         ),

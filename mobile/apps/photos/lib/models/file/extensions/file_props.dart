@@ -4,7 +4,6 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/file/trash_file.dart";
 import "package:photos/service_locator.dart" show isLocalGalleryMode;
-import "package:photos/services/collections_service.dart";
 
 extension FilePropsExtn on EnteFile {
   /// The file ID used as the key in the ML database (face IDs, clusters,
@@ -81,16 +80,6 @@ extension FilePropsExtn on EnteFile {
   }
 
   bool get skipIndex => !isUploaded || fileType == FileType.other;
-
-  bool canReUpload(int userID) =>
-      localID != null &&
-      localID!.isNotEmpty &&
-      isOwner &&
-      collectionID != null &&
-      (CollectionsService.instance
-              .getCollectionByID(collectionID!)
-              ?.isOwner(userID) ??
-          false);
 }
 
 Set<int> filesToUploadedFileIDs(Iterable<EnteFile> files) => files

@@ -1,5 +1,3 @@
-import "dart:async";
-
 import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
@@ -8,17 +6,14 @@ import "package:flutter/foundation.dart" show kDebugMode;
 import "package:flutter/material.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/collections_service.dart";
 import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/exact_duplicates_page.dart";
 import "package:photos/ui/tools/person_folders_page.dart";
 import "package:photos/ui/tools/photo_review/review_old_photos_page.dart";
 import "package:photos/ui/tools/png_to_jpg_page.dart";
 import "package:photos/ui/tools/similar_images_page.dart";
-import "package:photos/ui/viewer/gallery/delete_suggestions_page.dart";
 import "package:photos/ui/viewer/gallery/large_files_page.dart";
 import "package:photos/ui/viewer/gallery/trash_page.dart";
-import "package:photos/utils/dialog_util.dart";
 
 class FreeUpSpaceOptionsScreen extends StatefulWidget {
   const FreeUpSpaceOptionsScreen({super.key});
@@ -136,12 +131,6 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
           await routeToPage(context, LargeFilesPagePage());
         },
       ),
-      _buildFreeSpaceOption(
-        title: l10n.deleteSuggestions,
-        subtitle: l10n.deleteSuggestionsDesc,
-        icon: HugeIcons.strokeRoundedDelete01,
-        onTap: () async => _onDeleteSuggestionsTapped(),
-      ),
     ];
 
     return MenuGroupComponent(items: options);
@@ -161,31 +150,5 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
       onTap: onTap,
       subtitleMaxLines: 2,
     );
-  }
-
-  Future<void> _onDeleteSuggestionsTapped() async {
-    List<int> suggestionFileIDs;
-    try {
-      suggestionFileIDs = await CollectionsService.instance
-          .fetchDeleteSuggestionFileIDs();
-    } catch (e) {
-      if (!mounted) return;
-      await showGenericErrorDialog(context: context, error: e);
-      return;
-    }
-
-    if (suggestionFileIDs.isEmpty) {
-      if (!mounted) return;
-      unawaited(
-        showErrorDialog(
-          context,
-          context.strings.noDeleteSuggestion,
-          context.strings.youHaveNoFileSuggestedForDeletion,
-        ),
-      );
-    } else {
-      if (!mounted) return;
-      await routeToPage(context, DeleteSuggestionsPage());
-    }
   }
 }
