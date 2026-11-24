@@ -1,10 +1,7 @@
 import "dart:io";
 
 import 'package:home_widget/home_widget.dart' as hw;
-import 'package:photos/app_mode.dart';
-import 'package:photos/core/configuration.dart';
 import 'package:photos/core/constants.dart';
-import 'package:photos/offline_fork.dart';
 import 'package:photos/ui/viewer/gallery/component/group/type.dart';
 import "package:photos/utils/ram_check_util.dart";
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,7 +57,6 @@ class LocalSettings {
   static const kGalleryGroupType = "gallery_group_type";
   static const kGalleryLayoutType = "gallery_layout_type";
   static const kPhotoGridSize = "photo_grid_size";
-  static const _kisMLLocalIndexingEnabled = "ls.ml_local_indexing";
   static const _kLocalGalleryMLLocalIndexingEnabled =
       "ls.offline_ml_local_indexing";
   static const kRateUsShownCount = "rate_us_shown_count";
@@ -107,7 +103,6 @@ class LocalSettings {
       "ml_debug.default_clustering_distance";
   static const _kRunMLDuringInteractionOverride =
       "ml_debug.run_ml_during_interaction";
-  static const _kAppMode = "ls.app_mode";
   static const _kShowLocalGalleryModeOption = "ls.show_offline_mode_option";
   static const _kLocalGalleryOnboardingPending =
       "ls.local_gallery_onboarding_pending";
@@ -118,8 +113,6 @@ class LocalSettings {
       "media_management_hint_delete_attempts";
   static const _kMediaManagementHintDismissedAt =
       "media_management_hint_dismissed_at";
-  static const _kIsFromLocalGalleryToEnte =
-      "ls.pending_backup_selection_from_local_import";
 
   static const _kWidgetHideTextFlags = "ls.widget_hide_text_flags";
 
@@ -142,18 +135,8 @@ class LocalSettings {
 
   final SharedPreferences _prefs;
 
-  AppMode? _cachedAppMode;
-
   // Session-only so the get-started banner waits until the next launch.
   bool localGalleryModeEnabledThisSession = false;
-
-  // Carries first-import completion from local-gallery mode into account setup.
-  bool get isFromLocalGalleryToEnte =>
-      _prefs.getBool(_kIsFromLocalGalleryToEnte) ?? false;
-
-  Future<void> setIsFromLocalGalleryToEnte(bool value) async {
-    await _prefs.setBool(_kIsFromLocalGalleryToEnte, value);
-  }
 
   LocalSettings(this._prefs);
 
@@ -296,10 +279,7 @@ class LocalSettings {
         GalleryLayoutType.justified.name,
       );
       await _prefs.remove(kPhotoGridSize);
-    } else if (!_prefs.containsKey(kPhotoGridSize) &&
-        (isAppModeSet ||
-            _prefs.containsKey(Configuration.userIDKey) ||
-            _prefs.containsKey(kGalleryGroupType))) {
+    } else if (!_prefs.containsKey(kPhotoGridSize)) {
       await _prefs.setInt(kPhotoGridSize, 4);
     }
     await _prefs.setBool(migrationKey, true);
@@ -358,26 +338,16 @@ class LocalSettings {
 
   // Offline fork: the map needs network tiles, so the default is off.
   bool get localGalleryMapEnabled =>
-      _prefs.getBool(_kLocalGalleryMapEnabled) ?? !kOfflineFork;
+      _prefs.getBool(_kLocalGalleryMapEnabled) ?? false;
 
   Future<void> setLocalGalleryMapEnabled(bool value) async {
     await _prefs.setBool(_kLocalGalleryMapEnabled, value);
     await _setFlag(LocalGalleryFlag.mapEnabled, value);
   }
 
-  bool get isLocalGalleryMode => appMode == AppMode.localGallery;
-
-  String get _mlLocalIndexingKey => isLocalGalleryMode
-      ? _kLocalGalleryMLLocalIndexingEnabled
-      : _kisMLLocalIndexingEnabled;
-
-  bool get _defaultMLLocalIndexingEnabled => isLocalGalleryMode
-      ? enoughRamForLocalGalleryLocalIndexing
-      : enoughRamForLocalIndexing;
-
   bool get isMLLocalIndexingEnabled {
-    return _prefs.getBool(_mlLocalIndexingKey) ??
-        _defaultMLLocalIndexingEnabled;
+    return _prefs.getBool(_kLocalGalleryMLLocalIndexingEnabled) ??
+        enoughRamForLocalGalleryLocalIndexing;
   }
 
   bool get isSmartMemoriesEnabled =>
@@ -413,7 +383,7 @@ class LocalSettings {
   }
 
   bool get runMLDuringInteractionOverride =>
-      _prefs.getBool(_kRunMLDuringInteractionOverride) ?? isLocalGalleryMode;
+      _prefs.getBool(_kRunMLDuringInteractionOverride) ?? true;
 
   Future<void> setRunMLDuringInteractionOverride(bool value) async {
     await _prefs.setBool(_kRunMLDuringInteractionOverride, value);
@@ -450,9 +420,9 @@ class LocalSettings {
 
   Future<bool> toggleLocalMLIndexing() async {
     final nextValue =
-        !(_prefs.getBool(_mlLocalIndexingKey) ??
-            _defaultMLLocalIndexingEnabled);
-    await _prefs.setBool(_mlLocalIndexingKey, nextValue);
+        !(_prefs.getBool(_kLocalGalleryMLLocalIndexingEnabled) ??
+            enoughRamForLocalGalleryLocalIndexing);
+    await _prefs.setBool(_kLocalGalleryMLLocalIndexingEnabled, nextValue);
     return nextValue;
   }
 
@@ -610,33 +580,6 @@ class LocalSettings {
 
   Future<void> setChristmasBannerEnabled(bool value) async {
     await _prefs.setBool(_kChristmasBannerEnabled, value);
-  }
-
-  AppMode get appMode {
-    // Offline fork: the app is always in local gallery mode.
-    if (kOfflineFork) return AppMode.localGallery;
-    if (_cachedAppMode != null) return _cachedAppMode!;
-
-    final savedIndex = _prefs.getInt(_kAppMode);
-    if (savedIndex != null &&
-        savedIndex >= 0 &&
-        savedIndex < AppMode.values.length) {
-      _cachedAppMode = AppMode.values[savedIndex];
-      return _cachedAppMode!;
-    }
-
-    _cachedAppMode = AppMode.enteGallery;
-    return _cachedAppMode!;
-  }
-
-  // Offline fork: the mode is fixed, so it always counts as set.
-  bool get isAppModeSet => kOfflineFork || _prefs.containsKey(_kAppMode);
-
-  Future<void> setAppMode(AppMode mode) async {
-    // Offline fork: never switch to the account (enteGallery) mode.
-    if (kOfflineFork) mode = AppMode.localGallery;
-    await _prefs.setInt(_kAppMode, mode.index);
-    _cachedAppMode = mode;
   }
 
   bool get showLocalGalleryModeOption =>

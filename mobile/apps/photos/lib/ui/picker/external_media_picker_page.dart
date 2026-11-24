@@ -224,9 +224,6 @@ class _ExternalMediaPickerPageState extends State<ExternalMediaPickerPage> {
     int? limit,
     bool? asc,
   }) async {
-    if (!isLocalGalleryMode && !Configuration.instance.hasConfiguredAccount()) {
-      return FileLoadResult(<EnteFile>[], false);
-    }
     final searchResult = _searchResult;
     final ownerID = Configuration.instance.getUserIDV2();
     final filterOptions = DBFilterOptions(

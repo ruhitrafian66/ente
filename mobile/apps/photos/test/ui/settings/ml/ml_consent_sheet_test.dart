@@ -4,7 +4,6 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
-import "package:photos/app_mode.dart";
 import "package:photos/ente_theme_data.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/app_navigation_service.dart";
@@ -34,7 +33,6 @@ void main() {
         buildNumber: "1",
       ),
     );
-    await localSettings.setAppMode(AppMode.localGallery);
   });
 
   testWidgets("enable stays disabled until the acknowledgement is ticked", (

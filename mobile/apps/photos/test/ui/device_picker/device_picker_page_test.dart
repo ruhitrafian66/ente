@@ -10,7 +10,6 @@ import "package:flutter_easyloading/flutter_easyloading.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:photo_manager/photo_manager.dart";
-import "package:photos/app_mode.dart";
 import "package:photos/core/cache/image_cache.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/core/constants.dart";
@@ -92,7 +91,6 @@ void main() {
   setUp(() async {
     await localSettings.setGalleryLayoutType(GalleryLayoutType.grid);
     await localSettings.setPhotoGridSize(5);
-    await localSettings.setAppMode(AppMode.localGallery);
     library = FakeDeviceLibrary()
       ..items = List.generate(160, (index) => media('$index'));
   });

@@ -13,7 +13,6 @@ import "package:ente_lock_screen/ui/lock_screen.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:ente_ui/theme/theme_config.dart" as ente_ui;
-import 'package:flutter/foundation.dart';
 import "package:flutter/gestures.dart";
 import 'package:flutter/material.dart';
 import "package:flutter/rendering.dart";
@@ -27,7 +26,6 @@ import "package:package_info_plus/package_info_plus.dart";
 import 'package:path_provider/path_provider.dart';
 import 'package:photos/app.dart';
 import 'package:photos/core/configuration.dart';
-import 'package:photos/core/constants.dart';
 import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/errors.dart';
 import 'package:photos/core/event_bus.dart';
@@ -40,7 +38,6 @@ import 'package:photos/events/guest_view_event.dart';
 import "package:photos/locale.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/account/user_service.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
 import 'package:photos/services/home_widget_service.dart';
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
@@ -60,7 +57,6 @@ import "package:photos/src/rust/frb_generated.dart";
 import 'package:photos/ui/wallpaper/wallpaper_page.dart';
 import "package:photos/utils/bg_task_utils.dart";
 import "package:photos/utils/device_info.dart";
-import "package:photos/utils/email_util.dart";
 import "package:photos/utils/intent_util.dart";
 import "package:photos/utils/photos_crypto_api_adapter.dart";
 import 'package:rive/rive.dart' as rive;
@@ -163,7 +159,9 @@ Future<void> _runInForeground(
           Configuration.instance,
           authReasonBuilder: (context) =>
               context.strings.authToViewYourMemories,
-          onLogout: (context) => UserService.instance.logout(context),
+          // Offline fork: there is no account. The lock screen shows its
+          // logout button only when logged in, so this is never called.
+          onLogout: (context) async {},
         ),
         enabled:
             await LockScreenSettings.instance.shouldShowLockScreen(
@@ -306,9 +304,7 @@ Future<void> _runMinimally(
       packageInfo,
     );
     // Offline fork: warm the offline int-ID cache before any service reads it.
-    if (kOfflineFork) {
-      await OfflineFilesDB.instance.refreshIntIdCache();
-    }
+    await OfflineFilesDB.instance.refreshIntIdCache();
     MLDataDB.initialize(preferRust: kOfflineRustMlDb);
     NotificationService.instance.init(prefs);
 
@@ -331,7 +327,6 @@ Future<void> _runMinimally(
     await LocalSyncService.instance.init(prefs);
     await SyncService.instance.init(prefs);
 
-    await UserService.instance.init();
     await NotificationService.instance.initializeForBackground();
 
     if (shouldStop?.call() ?? false) return;
@@ -396,13 +391,6 @@ Future<void> _init(
     Future.delayed(const Duration(seconds: 15), () {
       if (!initComplete && !isBackground) {
         _logger.severe("Stuck on splash screen for >= 15 seconds");
-        // Offline fork: do not open the "send logs to support" flow.
-        if (kOfflineFork) return;
-        triggerSendLogs(
-          "support@ente.com",
-          "Stuck on splash screen for >= 15 seconds on ${Platform.operatingSystem}",
-          null,
-        );
       }
     });
     if (!isBackground) _heartBeatOnInit(0);
@@ -441,9 +429,7 @@ Future<void> _init(
     );
 
     // Offline fork: warm the offline int-ID cache before any service reads it.
-    if (kOfflineFork) {
-      await OfflineFilesDB.instance.refreshIntIdCache();
-    }
+    await OfflineFilesDB.instance.refreshIntIdCache();
 
     if (!isBackground) {
       await localSettings.migrateGalleryLayoutPreferences();
@@ -459,24 +445,15 @@ Future<void> _init(
     await LockScreenSettings.instance.init(
       Configuration.instance,
       useLegacyHashFallback: true,
-      hasOptedForOfflineMode: isLocalGalleryMode,
+      hasOptedForOfflineMode: true,
       appLogoAsset: 'assets/ente-branding.svg',
       appLogoHeight: 18,
     );
     AccountDeletionSettings.instance.init(host: Configuration.instance);
 
-    _logger.info("UserService init $tlog");
-    await UserService.instance.init();
-    _logger.info("UserService init done $tlog");
-
     SearchService.instance.init();
 
     if (isPickerStartup) {
-      if (Configuration.instance.hasConfiguredAccount()) {
-        _logger.info("Minor inits for logged in state $tlog");
-        PersonService.init(entityService, MLDataDB.instance, preferences);
-        _logger.info("PersonService init for picker startup done $tlog");
-      }
       _logger.info("Picker startup init done $tlog");
       initComplete = true;
       _stopHearBeat = true;
@@ -490,7 +467,7 @@ Future<void> _init(
     PersonService.init(entityService, MLDataDB.instance, preferences);
     // Offline fork: person folders tool. Foreground only: a move needs an
     // Activity.
-    if (kOfflineFork && !isBackground) {
+    if (!isBackground) {
       PersonFolderService.instance.init(preferences);
     }
     _logger.info("SyncService init $tlog");
@@ -616,10 +593,6 @@ Future runWithLogs(
       logDirPath: (await getApplicationSupportDirectory()).path + "/logs",
       maxLogFiles: 5,
       // Offline fork: no Sentry DSN and no tunnel, so no crash report upload.
-      sentryDsn: kOfflineFork
-          ? null
-          : (kDebugMode ? sentryDebugDSN : sentryDSN),
-      tunnel: kOfflineFork ? null : sentryTunnel,
       sentryInitTimeout: sentryInitTimeout,
       enableInDebugMode: true,
       prefix: prefix,

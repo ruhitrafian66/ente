@@ -6,7 +6,6 @@ class ClipMemoriesCalculator {
     DateTime currentTime,
     List<ClipShownLog> shownClip, {
     bool surfaceAll = false,
-    required bool isLocalGalleryMode,
     required Map<int, int> seenTimes,
     required Map<int, EmbeddingVector> fileIDToImageEmbedding,
     required Map<ClipMemoryType, Vector> clipMemoryTypeVectors,
@@ -28,10 +27,7 @@ class ClipMemoriesCalculator {
       }
       final scoredFiles = <({EnteFile file, int fileID, double similarity})>[];
       for (final file in allFiles) {
-        final fileID = DartMemoriesComputer._memoryFileId(
-          file,
-          isLocalGalleryMode: isLocalGalleryMode,
-        );
+        final fileID = DartMemoriesComputer._memoryFileId(file);
         if (fileID == null) continue;
         final embedding = fileIDToImageEmbedding[fileID];
         if (embedding == null) continue;

@@ -269,9 +269,7 @@ class _MemoryLanePageV2State extends State<MemoryLanePageV2> {
 
   Future<Uint8List?> _loadEntry(MemoryLaneEntry entry, EnteFile file) async {
     try {
-      final mlDataDB = isLocalGalleryMode
-          ? MLDataDB.localGalleryInstance
-          : MLDataDB.instance;
+      final mlDataDB = MLDataDB.localGalleryInstance;
       final List<FaceWithoutEmbedding>? faces = await mlDataDB
           .getFacesForGivenFileID(entry.fileId);
       final face = faces?.firstWhereOrNull(

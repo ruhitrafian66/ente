@@ -8,7 +8,6 @@ import "package:flutter/widgets.dart" show AppLifecycleState, WidgetsBinding;
 import "package:logging/logging.dart";
 import "package:permission_handler/permission_handler.dart";
 import "package:photos/main.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/process_activity.dart";
 import "package:photos/utils/background_tasks.dart";
 import "package:shared_preferences/shared_preferences.dart";
@@ -289,9 +288,7 @@ class BgTaskUtils {
       androidPushRefreshTask,
       constraints: workmanager.Constraints(
         // Offline fork: run on a device with no network.
-        networkType: kOfflineFork
-            ? workmanager.NetworkType.notRequired
-            : workmanager.NetworkType.connected,
+        networkType: workmanager.NetworkType.notRequired,
       ),
       existingWorkPolicy: workmanager.ExistingWorkPolicy.keep,
     );
@@ -329,9 +326,7 @@ class BgTaskUtils {
         initialDelay: kDebugMode ? Duration.zero : const Duration(minutes: 10),
         constraints: workmanager.Constraints(
           // Offline fork: run on a device with no network.
-          networkType: kOfflineFork
-              ? workmanager.NetworkType.notRequired
-              : workmanager.NetworkType.connected,
+          networkType: workmanager.NetworkType.notRequired,
           requiresCharging: false,
           requiresStorageNotLow: false,
           requiresDeviceIdle: false,
@@ -373,9 +368,7 @@ class BgTaskUtils {
       initialDelay: Duration.zero,
       constraints: workmanager.Constraints(
         // Offline fork: run on a device with no network.
-        networkType: kOfflineFork
-            ? workmanager.NetworkType.notRequired
-            : workmanager.NetworkType.connected,
+        networkType: workmanager.NetworkType.notRequired,
         requiresCharging: true,
         requiresDeviceIdle: true,
       ),
@@ -406,9 +399,7 @@ class BgTaskUtils {
         initialDelay: kDebugMode ? Duration.zero : const Duration(minutes: 30),
         constraints: workmanager.Constraints(
           // Offline fork: run on a device with no network.
-          networkType: kOfflineFork
-              ? workmanager.NetworkType.notRequired
-              : workmanager.NetworkType.connected,
+          networkType: workmanager.NetworkType.notRequired,
           requiresCharging: true,
         ),
       );

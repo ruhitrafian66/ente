@@ -107,7 +107,6 @@ void main() {
         final result = await PhotoSelector.bestSelection(
           memories,
           prefferedSize: 3,
-          isLocalGalleryMode: false,
           mlEnabled: false,
           fileIdToFaces: const {},
           faceIDsToPersonID: const {},
@@ -138,7 +137,6 @@ void main() {
       final faceIDsToPersonID = {'face_0': 'person_1'};
       final result = await PhotoSelector.bestSelection(
         memories,
-        isLocalGalleryMode: false,
         mlEnabled: true,
         fileIdToFaces: fileIdToFaces,
         faceIDsToPersonID: faceIDsToPersonID,
@@ -166,7 +164,6 @@ void main() {
       });
       final result = await PhotoSelector.bestSelection(
         memories,
-        isLocalGalleryMode: false,
         mlEnabled: true,
         fileIdToFaces: {},
         faceIDsToPersonID: {},
@@ -217,7 +214,6 @@ void main() {
 
         final result = await PhotoSelector.bestSelection(
           memories,
-          isLocalGalleryMode: false,
           mlEnabled: true,
           fileIdToFaces: fileIdToFaces,
           faceIDsToPersonID: faceIDsToPersonID,
@@ -263,7 +259,6 @@ void main() {
         }
         final result = await PhotoSelector.bestSelection(
           memories,
-          isLocalGalleryMode: false,
           mlEnabled: true,
           fileIdToFaces: {},
           faceIDsToPersonID: {},
@@ -294,7 +289,6 @@ void main() {
 
         final result = await PhotoSelector.bestSelectionPeople(
           memories,
-          isLocalGalleryMode: false,
           fileIDToImageEmbedding: _embMap(embeddings),
           clipPositiveTextVector: _positiveTextVector,
         );
@@ -337,7 +331,6 @@ void main() {
       }
       final result = await PhotoSelector.bestSelectionPeople(
         memories,
-        isLocalGalleryMode: false,
         fileIDToImageEmbedding: _embMap(embeddings),
         clipPositiveTextVector: _positiveTextVector,
       );
@@ -375,7 +368,6 @@ void main() {
           .toList();
       final result = await PhotoSelector.bestSelectionPeople(
         memories,
-        isLocalGalleryMode: false,
         fileIDToImageEmbedding: _embMap(embeddings),
         clipPositiveTextVector: _positiveTextVector,
       );
@@ -404,7 +396,6 @@ void main() {
           memories,
           SelectionConfig(
             targetSize: 10,
-            isLocalGalleryMode: false,
             fileIDToImageEmbedding: embMap,
             scores: scores,
             distribution: SelectionDistribution.none,
@@ -438,7 +429,6 @@ void main() {
         memories,
         SelectionConfig(
           targetSize: 10,
-          isLocalGalleryMode: false,
           fileIDToImageEmbedding: embMap,
           scores: scores,
           distribution: SelectionDistribution.timeBuckets,
@@ -488,7 +478,6 @@ void main() {
         memories,
         SelectionConfig(
           targetSize: 10,
-          isLocalGalleryMode: false,
           fileIDToImageEmbedding: embMap,
           scores: scores,
           distribution: SelectionDistribution.yearRoundRobin,

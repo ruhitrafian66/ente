@@ -21,7 +21,6 @@ import "package:photos/utils/share_util.dart";
 class FileBottomBar extends StatefulWidget {
   final EnteFile file;
   final Function(EnteFile) onFileRemoved;
-  final int? userID;
   final ValueNotifier<bool> enableFullScreenNotifier;
   final bool isLocalOnlyContext;
 
@@ -29,7 +28,6 @@ class FileBottomBar extends StatefulWidget {
     this.file, {
     required this.onFileRemoved,
     required this.enableFullScreenNotifier,
-    this.userID,
     this.isLocalOnlyContext = false,
     super.key,
   });
@@ -79,32 +77,28 @@ class FileBottomBarState extends State<FileBottomBar> {
   Widget _getBottomBar() {
     final file = widget.file;
     final List<Widget> children = [];
-    final bool isOwnedByUser =
-        widget.file.ownerID == null || widget.file.ownerID == widget.userID;
     if (widget.file.isTrash) {
       _addTrashOptions(children);
     }
 
     if (!widget.file.isTrash) {
-      if (isOwnedByUser) {
-        children.add(
-          Tooltip(
-            message: context.strings.delete,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: IconButton(
-                icon: const HugeIcon(
-                  icon: HugeIcons.strokeRoundedDelete02,
-                  color: Colors.white,
-                ),
-                onPressed: () async {
-                  await _showSingleFileDeleteSheet(widget.file);
-                },
+      children.add(
+        Tooltip(
+          message: context.strings.delete,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: IconButton(
+              icon: const HugeIcon(
+                icon: HugeIcons.strokeRoundedDelete02,
+                color: Colors.white,
               ),
+              onPressed: () async {
+                await _showSingleFileDeleteSheet(widget.file);
+              },
             ),
           ),
-        );
-      }
+        ),
+      );
 
       children.add(
         Padding(

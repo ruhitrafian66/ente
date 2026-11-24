@@ -18,7 +18,6 @@ import "package:photos/models/ml/face/face.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/models/ml/vector.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/ml_process_lock.dart";
 import "package:photos/src/rust/api/ml_db_api.dart" as rust;
@@ -47,10 +46,7 @@ class RustMLDataDB implements IMLDataDB<int> {
   // Offline fork: there is no account database. Every "account" singleton
   // resolves to the local gallery one, so person and feedback code that was
   // written for accounts works on the on-device data.
-  static RustMLDataDB get instance =>
-      kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final RustMLDataDB _accountInstance =
-      RustMLDataDB._privateConstructor();
+  static RustMLDataDB get instance => localGalleryInstance;
   static final RustMLDataDB localGalleryInstance =
       RustMLDataDB._privateConstructor(
         databaseName: "ente.ml.offline.db",

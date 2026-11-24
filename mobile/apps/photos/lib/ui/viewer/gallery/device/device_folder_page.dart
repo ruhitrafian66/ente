@@ -1,6 +1,5 @@
 import "package:collection/collection.dart";
 import "package:flutter/material.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/device_files_db.dart";
 import "package:photos/db/files_db.dart";
@@ -46,11 +45,10 @@ class _DeviceFolderPageState extends State<DeviceFolderPage> {
     int? limit,
     bool? asc,
   }) async {
-    final int? userID = Configuration.instance.getUserID();
     final generation = ++_loadGeneration;
     final result = await FilesDB.instance.getFilesInDeviceCollection(
       widget.deviceCollection,
-      userID,
+      null,
       creationStartTime,
       creationEndTime,
       limit: limit,

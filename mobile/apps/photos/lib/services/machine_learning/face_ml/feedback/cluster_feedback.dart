@@ -14,7 +14,6 @@ import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_averages.dart";
@@ -81,14 +80,6 @@ class ClusterFeedbackService<T> {
     PersonEntity person, {
     bool extremeFilesFirst = true,
   }) async {
-    // Offline fork: persons are local, so suggestions also run in local
-    // gallery mode.
-    if (isLocalGalleryMode && !kOfflineFork) {
-      _logger.info(
-        "Skipping getSuggestionForPerson in local gallery mode because person suggestions require an Ente account",
-      );
-      return [];
-    }
     _logger.info(
       'getSuggestionForPerson ${kDebugMode ? person.data.name : person.remoteID}',
     );
@@ -1419,14 +1410,6 @@ class ClusterFeedbackService<T> {
     double threshold, {
     Set<String>? extraIgnoredClusters,
   }) async {
-    // Offline fork: persons are local, so suggestions also run in local
-    // gallery mode.
-    if (isLocalGalleryMode && !kOfflineFork) {
-      _logger.info(
-        "Skipping _getFastSuggestions in local gallery mode because person suggestions require an Ente account",
-      );
-      return [];
-    }
     final allClusterIdsToCountMap = (await mlDataDB.clusterIdToFaceCount());
     final personignoredClusters = await mlDataDB.getPersonIgnoredClusters(
       person.remoteID,

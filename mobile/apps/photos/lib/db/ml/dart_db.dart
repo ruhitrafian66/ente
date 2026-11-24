@@ -19,7 +19,6 @@ import "package:photos/models/ml/face/face.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/models/ml/vector.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_db_info_for_clustering.dart";
 import 'package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart';
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -51,10 +50,7 @@ class DartMLDataDB
   // Offline fork: there is no account database. Every "account" singleton
   // resolves to the local gallery one, so person and feedback code that was
   // written for accounts works on the on-device data.
-  static DartMLDataDB get instance =>
-      kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final DartMLDataDB _accountInstance =
-      DartMLDataDB._privateConstructor();
+  static DartMLDataDB get instance => localGalleryInstance;
   static final DartMLDataDB localGalleryInstance =
       DartMLDataDB._privateConstructor(
         databaseName: "ente.ml.offline.db",

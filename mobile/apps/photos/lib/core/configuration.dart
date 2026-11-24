@@ -11,7 +11,6 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
-import "package:photos/app_mode.dart";
 import 'package:photos/core/cache/image_cache.dart';
 import 'package:photos/core/cache/thumbnail_in_memory_cache.dart';
 import 'package:photos/core/constants.dart';
@@ -20,11 +19,9 @@ import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/files_db.dart';
 import "package:photos/db/memories_db.dart";
 import "package:photos/db/ml/db.dart";
-import "package:photos/events/app_mode_changed_event.dart";
 import 'package:photos/events/signed_in_event.dart';
 import 'package:photos/events/user_logged_out_event.dart';
 import 'package:photos/gateways/users/models/key_attributes.dart';
-import "package:photos/offline_fork.dart";
 import 'package:photos/service_locator.dart';
 import 'package:photos/services/authenticated_session.dart';
 import "package:photos/services/home_widget_service.dart";
@@ -123,12 +120,10 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
         }
       }
       if (_cachedToken == null) {
-        _logger.info(
-          "(for debugging) Token not found, deleting all secure storage data",
-        );
         // Offline fork: there is never a token. Upstream wipes the secure
         // store here, which would also erase the app lock PIN on each start.
-        if (!kOfflineFork) await _secureStorage.deleteAll();
+        // Do not wipe it.
+        _logger.info("(for debugging) Token not found");
       } else {
         _logger.info(
           "(for debugging) Token found, loading secure storage data",
@@ -353,8 +348,6 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
     await _storeTokenSecurely(token);
     await _preferences.remove(tokenKey);
     _cachedToken = token;
-    await localSettings.setAppMode(AppMode.enteGallery);
-    Bus.instance.fire(AppModeChangedEvent());
     Bus.instance.fire(SignedInEvent());
   }
 

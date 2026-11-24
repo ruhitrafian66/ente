@@ -1,7 +1,6 @@
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/widgets.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/ui/viewer/people/people_page.dart";
@@ -14,21 +13,13 @@ bool contactLinkEmailMatches(String? first, String? second) {
   return normalizedFirst != null && normalizedFirst == normalizedSecond;
 }
 
-bool isCurrentUserContactLinkEmail(String? email) {
-  return contactLinkEmailMatches(email, Configuration.instance.getEmail());
-}
+// Offline fork: there is no account. No email and no user ID belongs to the
+// current user, so these three always give the "not the current user" result.
+bool isCurrentUserContactLinkEmail(String? email) => false;
 
-int? currentUserIDForContactLinkEmail(String? email) {
-  return isCurrentUserContactLinkEmail(email)
-      ? Configuration.instance.getUserID()
-      : null;
-}
+int? currentUserIDForContactLinkEmail(String? email) => null;
 
-bool isCurrentUserContactLink({String? email, int? userID}) {
-  final currentUserID = Configuration.instance.getUserID();
-  return (currentUserID != null && userID == currentUserID) ||
-      isCurrentUserContactLinkEmail(email);
-}
+bool isCurrentUserContactLink({String? email, int? userID}) => false;
 
 Future<PersonEntity?> findPersonLinkedToContact({
   required int contactUserId,

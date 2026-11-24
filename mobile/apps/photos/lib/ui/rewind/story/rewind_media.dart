@@ -10,8 +10,6 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/face/person.dart";
-import "package:photos/service_locator.dart";
-import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/memories/memory_sources.dart";
 import "package:photos/ui/rewind/story/rewind_face.dart";
@@ -70,8 +68,8 @@ class RewindMedia {
     Iterable<PersonEntity> people,
   ) async {
     final files = await getFilesAndMapForMemories(
-      useLocalIntIds: isLocalGalleryMode,
-      requireLocalId: isLocalGalleryMode,
+      useLocalIntIds: true,
+      requireLocalId: true,
     );
     for (final person in people) {
       if (!person.data.hideFromMemories) continue;
@@ -88,9 +86,9 @@ class RewindMedia {
     return files;
   }
 
+  // Local gallery mode: Rewind does not use named persons.
   static Future<Map<String, PersonEntity>> _namedPeople() async {
-    if (isLocalGalleryMode) return const {};
-    return PersonService.instance.getPersonsMap();
+    return const {};
   }
 
   static bool _isShown(PersonEntity person) =>
@@ -108,8 +106,7 @@ class RewindMedia {
   final _blurryFaces = <int, Map<String, FaceWithoutEmbedding>>{};
   final _shownFaces = <String, List<RewindFace>>{};
 
-  IMLDataDB<int> get _ml =>
-      isLocalGalleryMode ? MLDataDB.localGalleryInstance : MLDataDB.instance;
+  IMLDataDB<int> get _ml => MLDataDB.instance;
 
   List<RewindBlurryFaces> get blurryFaces => [
     for (final MapEntry(key: fileId, value: faces) in _blurryFaces.entries)

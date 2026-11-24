@@ -1,7 +1,6 @@
 import "package:logging/logging.dart";
 import "package:photos/db/ml/cluster_centroid_vector_db.dart";
 import "package:photos/db/ml/rust_db.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/src/rust/api/ml_db_api.dart" as rust;
 
 class StoreClusterCentroidVectorDB implements ClusterCentroidVectorDB {
@@ -14,9 +13,7 @@ class StoreClusterCentroidVectorDB implements ClusterCentroidVectorDB {
   // Offline fork: there is no account database. Every "account" singleton
   // resolves to the local gallery one, so person and feedback code that was
   // written for accounts works on the on-device data.
-  static StoreClusterCentroidVectorDB get instance =>
-      kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final StoreClusterCentroidVectorDB _accountInstance = StoreClusterCentroidVectorDB._(RustMLDataDB.instance);
+  static StoreClusterCentroidVectorDB get instance => localGalleryInstance;
   static final localGalleryInstance = StoreClusterCentroidVectorDB._(
     RustMLDataDB.localGalleryInstance,
   );

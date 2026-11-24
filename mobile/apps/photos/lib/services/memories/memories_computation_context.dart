@@ -11,7 +11,6 @@ import "package:photos/services/location_service.dart";
 class MemoriesComputationContext {
   final Map<int, EnteFile> allFileIdsToFile;
   final Set<int> collectionIDsToExclude;
-  final bool isLocalGalleryMode;
   final bool mlEnabled;
   final DateTime now;
   final MemoriesCache oldCache;
@@ -33,7 +32,6 @@ class MemoriesComputationContext {
   const MemoriesComputationContext({
     required this.allFileIdsToFile,
     required this.collectionIDsToExclude,
-    required this.isLocalGalleryMode,
     required this.mlEnabled,
     required this.now,
     required this.oldCache,
@@ -62,7 +60,6 @@ class MemoriesComputationContext {
       ),
       collectionIDsToExclude: (args["collectionIDsToExclude"] as Set)
           .cast<int>(),
-      isLocalGalleryMode: args["isLocalGalleryMode"] ?? false,
       mlEnabled: args["mlEnabled"] ?? false,
       now: args["now"] as DateTime,
       oldCache: args["oldCache"] as MemoriesCache,
@@ -98,7 +95,6 @@ class MemoriesComputationContext {
     return <String, dynamic>{
       "allFileIdsToFile": allFileIdsToFile,
       "collectionIDsToExclude": collectionIDsToExclude,
-      "isLocalGalleryMode": isLocalGalleryMode,
       "mlEnabled": mlEnabled,
       "now": now,
       "oldCache": oldCache,

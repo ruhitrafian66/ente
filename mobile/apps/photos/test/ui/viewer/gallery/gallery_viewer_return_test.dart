@@ -7,7 +7,6 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
-import "package:photos/app_mode.dart";
 import "package:photos/core/cache/thumbnail_in_memory_cache.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/core/constants.dart";
@@ -47,7 +46,6 @@ void main() {
         buildNumber: "1",
       ),
     );
-    await localSettings.setAppMode(AppMode.localGallery);
     try {
       await Configuration.instance.init(preferences);
     } catch (_) {}

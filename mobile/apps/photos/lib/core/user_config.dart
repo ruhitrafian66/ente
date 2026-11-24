@@ -1,12 +1,7 @@
 import "package:photos/core/configuration.dart";
-import "package:photos/service_locator.dart";
 
 extension UserConfig on Configuration {
-  int getUserIDV2() {
-    final int? userID = getUserID();
-    if (userID == null && !isLocalGalleryMode) {
-      throw StateError("Missing user ID in online mode");
-    }
-    return userID ?? -1;
-  }
+  // Offline fork: there is no account, so there is no user ID. Keep -1: the
+  // FilesDB owner filters (`owner_id IS NULL OR owner_id = ?`) depend on it.
+  int getUserIDV2() => -1;
 }

@@ -6,10 +6,8 @@ import "package:collection/collection.dart";
 import 'package:flutter/material.dart';
 import "package:flutter_animate/flutter_animate.dart";
 import "package:photos/core/event_bus.dart";
-import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
-import "package:photos/events/collection_updated_event.dart";
 import "package:photos/events/diff_sync_complete_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/local_photos_updated_event.dart";
@@ -58,8 +56,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
   late StreamSubscription<PeopleChangedEvent> _peopleChangedSubscription;
   late StreamSubscription<LocalPhotosUpdatedEvent>
   _localPhotosUpdatedSubscription;
-  late StreamSubscription<CollectionUpdatedEvent>
-  _collectionUpdatedSubscription;
   late StreamSubscription<DiffSyncCompleteEvent> _diffSyncCompleteSubscription;
   late double _cardWidth;
 
@@ -108,9 +104,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     _localPhotosUpdatedSubscription = Bus.instance
         .on<LocalPhotosUpdatedEvent>()
         .listen(_onLocalPhotosUpdated);
-    _collectionUpdatedSubscription = Bus.instance
-        .on<CollectionUpdatedEvent>()
-        .listen(_onCollectionUpdated);
     _diffSyncCompleteSubscription = Bus.instance
         .on<DiffSyncCompleteEvent>()
         .listen((_) => _hideMemoryLaneIfFilesMissingOrHidden());
@@ -128,7 +121,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     _mlConsentChangedSubscription.cancel();
     _peopleChangedSubscription.cancel();
     _localPhotosUpdatedSubscription.cancel();
-    _collectionUpdatedSubscription.cancel();
     _diffSyncCompleteSubscription.cancel();
     _warmTimer?.cancel();
     _scrollController.dispose();
@@ -478,19 +470,7 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     }
     var shouldHide = false;
     var memoryLanePerson = _memoryLanePerson;
-    if (memoryLane.isCluster) {
-      if (!isLocalGalleryMode) {
-        final assignedClusterIDs = <String>{
-          ...?event.newClusterIDs,
-          ...?event.person?.data.assigned.map((cluster) => cluster.id),
-          ...?event.persons
-              ?.expand((person) => person.data.assigned)
-              .map((cluster) => cluster.id),
-          if (event.type == PeopleEventType.addedClusterToPerson) event.source,
-        };
-        shouldHide = assignedClusterIDs.contains(memoryLane.personId);
-      }
-    } else {
+    if (!memoryLane.isCluster) {
       final person = await PersonService.instance.getPerson(
         memoryLane.personId,
       );
@@ -501,9 +481,7 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
       memoryLanePerson = person;
     }
     if (!shouldHide) {
-      final mlDataDB = isLocalGalleryMode
-          ? MLDataDB.localGalleryInstance
-          : MLDataDB.instance;
+      final mlDataDB = MLDataDB.instance;
       final faceIDs = memoryLane.isCluster
           ? (await mlDataDB.getFaceIDsForCluster(memoryLane.personId)).toSet()
           : await mlDataDB.getFaceIDsForPerson(memoryLane.personId);
@@ -532,34 +510,21 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     }
     if (event.type != EventType.hide &&
         event.type != EventType.deletedFromEverywhere &&
-        event.type !=
-            (isLocalGalleryMode
-                ? EventType.deletedFromDevice
-                : EventType.deletedFromRemote)) {
+        event.type != EventType.deletedFromDevice) {
       return;
     }
     if (event.type != EventType.hide) {
-      if (event.type != EventType.deletedFromRemote ||
-          event.source != "syncDeleteFromRemote") {
-        await _hideMemoryLaneIfFilesMissingOrHidden();
-      }
+      await _hideMemoryLaneIfFilesMissingOrHidden();
       return;
     }
-    final Set<int> updatedFileIds;
-    if (isLocalGalleryMode) {
-      final localIds = event.updatedFiles
-          .map((file) => file.localID)
-          .whereType<String>()
-          .where((id) => id.isNotEmpty);
-      updatedFileIds = (await OfflineFilesDB.instance.getLocalIntIdsForLocalIds(
-        localIds,
-      )).values.toSet();
-    } else {
-      updatedFileIds = event.updatedFiles
-          .map((file) => file.uploadedFileID)
-          .whereType<int>()
-          .toSet();
-    }
+    final localIds = event.updatedFiles
+        .map((file) => file.localID)
+        .whereType<String>()
+        .where((id) => id.isNotEmpty);
+    final updatedFileIds =
+        (await OfflineFilesDB.instance.getLocalIntIdsForLocalIds(
+          localIds,
+        )).values.toSet();
     if (!mounted ||
         _memoryLane != memoryLane ||
         !memoryLane.entries.any(
@@ -568,29 +533,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
       return;
     }
     _hideMemoryLane();
-  }
-
-  // TODO: Recompute the timeline instead of hiding the card.
-  Future<void> _onCollectionUpdated(CollectionUpdatedEvent event) async {
-    final memoryLane = _memoryLane;
-    if (!mounted || memoryLane == null || isLocalGalleryMode) {
-      return;
-    }
-    if (event.type == EventType.hide && event.collectionID != null) {
-      final filesByCollection = await FilesDB.instance
-          .getAllFilesGroupByCollectionID(
-            memoryLane.entries.map((entry) => entry.fileId).toList(),
-          );
-      if (!mounted || _memoryLane != memoryLane) {
-        return;
-      }
-      if (filesByCollection.containsKey(event.collectionID)) {
-        _hideMemoryLane();
-      }
-    } else if (event.type == EventType.deletedFromRemote &&
-        event.updatedFiles.isEmpty) {
-      await _hideMemoryLaneIfFilesMissingOrHidden();
-    }
   }
 
   Future<void> _hideMemoryLaneIfFilesMissingOrHidden() async {

@@ -6,7 +6,6 @@ import "package:logging/logging.dart";
 import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
-import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/ml/face/dimension.dart";
@@ -64,14 +63,9 @@ class FileMLInstruction {
 // Keep these eligibility rules in sync with candidate enumeration below.
 Future<IndexStatus> getIndexStatus() async {
   try {
-    final bool localGallery = isLocalGalleryMode;
-    final mlDataDB = localGallery
-        ? MLDataDB.localGalleryInstance
-        : MLDataDB.instance;
+    final mlDataDB = MLDataDB.localGalleryInstance;
     final bool petActive =
-        kOfflineRunPets &&
-        localSettings.petRecognitionEnabled &&
-        (localGallery || localSettings.isMLLocalIndexingEnabled);
+        kOfflineRunPets && localSettings.petRecognitionEnabled;
     // Offline fork: CLIP does not run, so "fully indexed" (faces AND CLIP)
     // never becomes true. Count a file as done when its faces are indexed.
     final Set<int> indexedFileKeys = kOfflineRunClip
@@ -81,51 +75,33 @@ Future<IndexStatus> getIndexStatus() async {
     final Set<int> seenKeys = {};
     int total = 0;
     int indexed = 0;
-    if (localGallery) {
-      final localIds = <String>[];
-      for (final EnteFile enteFile in enteFiles) {
-        if (enteFile.fileType == FileType.other) {
-          continue;
-        }
-        if ((enteFile.localID ?? '').isEmpty ||
-            (enteFile.uploadedFileID != null &&
-                enteFile.uploadedFileID != -1)) {
-          continue;
-        }
-        localIds.add(enteFile.localID!);
+    final localIds = <String>[];
+    for (final EnteFile enteFile in enteFiles) {
+      if (enteFile.fileType == FileType.other) {
+        continue;
       }
-      final localIdToIntId = await OfflineFilesDB.instance.ensureLocalIntIds(
-        localIds,
-      );
-      for (final localId in localIds) {
-        final localIntId = localIdToIntId[localId];
-        if (localIntId == null || !seenKeys.add(localIntId)) {
-          continue;
-        }
-        total++;
-        if (indexedFileKeys.contains(localIntId)) {
-          indexed++;
-        }
+      if ((enteFile.localID ?? '').isEmpty ||
+          (enteFile.uploadedFileID != null && enteFile.uploadedFileID != -1)) {
+        continue;
       }
-    } else {
-      final hiddenFiles = await SearchService.instance.getHiddenFiles();
-      for (final EnteFile enteFile in enteFiles.followedBy(hiddenFiles)) {
-        if (enteFile.skipIndex) {
-          continue;
-        }
-        final id = enteFile.uploadedFileID;
-        if (id == null || id == -1 || !seenKeys.add(id)) {
-          continue;
-        }
-        total++;
-        if (indexedFileKeys.contains(id)) {
-          indexed++;
-        }
+      localIds.add(enteFile.localID!);
+    }
+    final localIdToIntId = await OfflineFilesDB.instance.ensureLocalIntIds(
+      localIds,
+    );
+    for (final localId in localIds) {
+      final localIntId = localIdToIntId[localId];
+      if (localIntId == null || !seenKeys.add(localIntId)) {
+        continue;
+      }
+      total++;
+      if (indexedFileKeys.contains(localIntId)) {
+        indexed++;
       }
     }
     final hasWifiEnabled = await canUseHighBandwidth();
     _logger.info(
-      "IndexStatus: $indexed indexed of $total total (localGallery: $localGallery, petActive: $petActive, hasWifiEnabled: $hasWifiEnabled)",
+      "IndexStatus: $indexed indexed of $total total (localGallery: true, petActive: $petActive, hasWifiEnabled: $hasWifiEnabled)",
     );
     return IndexStatus(indexed, total - indexed, hasWifiEnabled);
   } catch (e, s) {
@@ -281,9 +257,7 @@ Future<String> getImagePathForML(EnteFile enteFile) async {
   );
 
   if (imagePath == null) {
-    final fileIdentifier = isLocalGalleryMode
-        ? "localID ${enteFile.localID}"
-        : "uploadedFileID ${enteFile.uploadedFileID}";
+    final fileIdentifier = "localID ${enteFile.localID}";
     _logger.severe(
       "Failed to get any data for enteFile with $fileIdentifier and format ${enteFile.displayName.split('.').last} and size ${enteFile.fileSize} since its file path is null (isVideo: $isVideo)",
     );

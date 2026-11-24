@@ -7,8 +7,6 @@ import "package:logging/logging.dart";
 import "package:photos/core/errors.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/models/ml/vector.dart";
-import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/ml_constants.dart";
 import "package:photos/services/machine_learning/ml_exceptions.dart";
 import "package:photos/services/machine_learning/ml_model_download_service.dart";
@@ -17,7 +15,6 @@ import "package:photos/services/machine_learning/webgpu_execution_policy.dart";
 import "package:photos/src/rust/api/ml_indexing_api.dart" as rust_ml;
 import "package:photos/utils/isolate/isolate_operations.dart";
 import "package:photos/utils/isolate/super_isolate.dart";
-import "package:photos/utils/network_util.dart";
 
 @pragma('vm:entry-point')
 class MLComputer extends SuperIsolate {
@@ -81,9 +78,8 @@ class MLComputer extends SuperIsolate {
         assetsDir: assetsDir,
         includeVocab: false,
       );
-      if (!hasModel &&
-          (kOfflineFork ||
-              !(isLocalGalleryMode || await canUseHighBandwidth()))) {
+      // Offline fork: nothing is downloaded, so a missing model is final.
+      if (!hasModel) {
         throw WiFiUnavailableError(
           "Could not download clip text model because high bandwidth "
           "connectivity is unavailable",

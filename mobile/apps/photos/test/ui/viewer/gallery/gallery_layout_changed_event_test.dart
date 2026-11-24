@@ -9,7 +9,6 @@ import "package:package_info_plus/package_info_plus.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/ente_theme_data.dart";
-import "package:photos/events/collection_meta_event.dart";
 import "package:photos/events/event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/gallery_layout_changed_event.dart";
@@ -131,7 +130,7 @@ void main() {
               tagPrefix: "filename_sort",
               groupType: GroupType.day,
               sortOrderFn: () => order,
-              forceReloadEvents: [Bus.instance.on<CollectionMetaEvent>()],
+              forceReloadEvents: [Bus.instance.on<_ReloadEvent>()],
               limitSelectionToOne: true,
               showSelectAll: false,
               asyncLoader: (start, end, {limit, asc}) async {
@@ -154,17 +153,13 @@ void main() {
     final pending = Completer<FileLoadResult>();
     pendingLoad = pending;
     order = FileSortOrder.filenameAscending;
-    Bus.instance.fire(
-      CollectionMetaEvent(1, CollectionMetaEventType.sortChanged),
-    );
+    Bus.instance.fire(_ReloadEvent());
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(pendingLoad, isNull);
 
     order = FileSortOrder.oldestFirst;
-    Bus.instance.fire(
-      CollectionMetaEvent(1, CollectionMetaEventType.sortChanged),
-    );
+    Bus.instance.fire(_ReloadEvent());
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     pending.complete(FileLoadResult(List<EnteFile>.from(files), false));
@@ -180,9 +175,7 @@ void main() {
     await tester.pumpAndSettle();
 
     order = FileSortOrder.filenameDescending;
-    Bus.instance.fire(
-      CollectionMetaEvent(1, CollectionMetaEventType.sortChanged),
-    );
+    Bus.instance.fire(_ReloadEvent());
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(key.currentState!.galleryGroups!.groupType, GroupType.none);
@@ -193,7 +186,6 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
   });
-
 
   testWidgets(
     "zero-size startup recovers date headers without remounting or reloading",
@@ -285,7 +277,7 @@ void main() {
             key: galleryKey,
             tagPrefix: "retain_header_cache",
             groupType: GroupType.day,
-            forceReloadEvents: [Bus.instance.on<CollectionMetaEvent>()],
+            forceReloadEvents: [Bus.instance.on<_ReloadEvent>()],
             asyncLoader: (start, end, {limit, asc}) async {
               loads++;
               return FileLoadResult(files, false);
@@ -312,9 +304,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       files = List<EnteFile>.generate(8, _justifiedTestFile);
-      Bus.instance.fire(
-        CollectionMetaEvent(1, CollectionMetaEventType.sortChanged),
-      );
+      Bus.instance.fire(_ReloadEvent());
       await tester.pumpAndSettle();
       expect(originalState.groupHeaderExtent, headerExtent);
       expect(originalState.galleryGroups!.allFiles, orderedEquals(files));
@@ -1403,3 +1393,5 @@ DummyFile _justifiedTestFile(int index) {
     ..fileType = FileType.image
     ..pubMagicMetadata = PubMagicMetadata(w: dimensions.w, h: dimensions.h);
 }
+
+class _ReloadEvent extends Event {}

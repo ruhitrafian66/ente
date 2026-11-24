@@ -2,7 +2,6 @@ import "dart:async";
 
 import 'package:ente_ui/components/loading_widget.dart';
 import 'package:flutter/material.dart';
-import "package:photos/core/configuration.dart";
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/events/files_updated_event.dart';
 import 'package:photos/events/local_photos_updated_event.dart';
@@ -10,7 +9,6 @@ import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file_load_result.dart';
 import 'package:photos/models/gallery_type.dart';
 import 'package:photos/models/selected_files.dart';
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import 'package:photos/services/search_service.dart';
 import "package:photos/theme/ente_theme.dart";
 import 'package:photos/ui/viewer/actions/file_selection_overlay_bar.dart';
@@ -73,10 +71,8 @@ class _JumpToDateGalleryState extends State<JumpToDateGallery> {
 
   Future<void> _loadFiles() async {
     final startTime = DateTime.now();
-    final onlyUploadedFiles =
-        !(isLocalGalleryMode && !Configuration.instance.hasConfiguredAccount());
     final allFiles = await SearchService.instance.getAllFilesForGenericGallery(
-      onlyUploadedFiles: onlyUploadedFiles,
+      onlyUploadedFiles: false,
     );
 
     // Ensure minimum loading duration to mask Gallery initialization jank

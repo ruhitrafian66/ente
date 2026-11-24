@@ -9,7 +9,6 @@ import 'package:photos/services/app_navigation_service.dart';
 import 'package:photos/services/home_widget_service.dart';
 import 'package:photos/services/machine_learning/face_ml/person/person_service.dart';
 import 'package:photos/services/search_service.dart';
-import 'package:photos/services/sync/local_sync_service.dart';
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/people/people_page.dart";
 import 'package:shared_preferences/shared_preferences.dart';
@@ -204,32 +203,9 @@ class PeopleHomeWidgetService {
     return await entityService.getHashForIds(peopleIds);
   }
 
-  Future<bool> _hasAnyBlockers() async {
-    if (await countHomeWidgets() == 0) {
-      return true;
-    }
-
-    final hasCompletedFirstImport = LocalSyncService.instance
-        .hasCompletedFirstImportOrBypassed();
-    if (!hasCompletedFirstImport) {
-      return true;
-    }
-
-    if (isLocalGalleryMode || !hasGrantedMLConsent) {
-      return true;
-    }
-
-    final peopleIds = await _getEffectiveSelections();
-    final hash = await _calculateHash(peopleIds);
-
-    final noSelectionOrHashEmpty = peopleIds.isEmpty || hash.isEmpty;
-    if (noSelectionOrHashEmpty) {
-      _logger.info("No selected people or hash empty, cannot update widget");
-      return true;
-    }
-
-    return false;
-  }
+  // Offline fork: upstream blocks the People widget in local gallery mode,
+  // which is the only mode here. The widget stays blocked (always cleared).
+  Future<bool> _hasAnyBlockers() async => true;
 
   Future<void> _refreshPeopleWidget() async {
     if (await countHomeWidgets() == 0) return;

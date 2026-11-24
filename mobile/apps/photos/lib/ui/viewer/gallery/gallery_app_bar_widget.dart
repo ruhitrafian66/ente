@@ -3,7 +3,6 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:photos/core/configuration.dart';
 import "package:photos/core/constants.dart";
 import 'package:photos/core/event_bus.dart';
 import "package:photos/db/device_files_db.dart";
@@ -22,8 +21,6 @@ import "package:photos/ui/viewer/gallery/component/album_cover_app_bar.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_actions.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_config.dart";
 import "package:photos/ui/viewer/gallery/hooks/album_sort_sheet.dart";
-import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
-import "package:photos/ui/viewer/hierarchical_search/app_bar_filter_chips.dart";
 import "package:photos/ui/viewer/location/edit_location_sheet.dart";
 import 'package:photos/utils/dialog_util.dart';
 
@@ -87,26 +84,11 @@ class GalleryAppBarWidget extends StatefulWidget {
     double? bottomHeight,
     required bool hasCover,
   }) {
-    final inheritedSearchFilterData = InheritedSearchFilterData.maybeOf(
-      context,
-    );
-    final isHierarchicalSearchable =
-        inheritedSearchFilterData?.isHierarchicalSearchable ?? false;
     final hasCustomBottom = bottomHeight != null;
-    bottomHeight ??= isHierarchicalSearchable
-        ? AppBarFilterChips.preferredHeight(context)
-        : 0.0;
-    final isSearching =
-        isHierarchicalSearchable &&
-        (inheritedSearchFilterData
-                ?.searchFilterDataProvider
-                ?.isSearchingNotifier
-                .value ??
-            false);
+    bottomHeight ??= 0.0;
     if (_usesCoverHeader(
       hasCover: hasCover,
       hasCustomBottom: hasCustomBottom,
-      isSearching: isSearching,
     )) {
       return AlbumCoverAppBar.resolveGeometry(
         context,
@@ -127,8 +109,7 @@ class GalleryAppBarWidget extends StatefulWidget {
   static bool _usesCoverHeader({
     required bool hasCover,
     required bool hasCustomBottom,
-    required bool isSearching,
-  }) => hasCover && !hasCustomBottom && !isSearching;
+  }) => hasCover && !hasCustomBottom;
 
   final GalleryType type;
   final String? title;
@@ -205,54 +186,21 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final inheritedSearchFilterData = InheritedSearchFilterData.maybeOf(
-      context,
-    );
-    final isHierarchicalSearchable =
-        inheritedSearchFilterData?.isHierarchicalSearchable ?? false;
-
     if (galleryType == GalleryType.homepage) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
 
-    if (widget.bottom != null || !isHierarchicalSearchable) {
-      return _buildHeader(bottom: widget.bottom);
-    }
-
-    return ValueListenableBuilder(
-      valueListenable: inheritedSearchFilterData!
-          .searchFilterDataProvider!
-          .isSearchingNotifier,
-      child: PreferredSize(
-        preferredSize: Size.fromHeight(
-          AppBarFilterChips.preferredHeight(context),
-        ),
-        child: AppBarFilterChips(
-          animateRecommendations:
-              widget.cover != null || widget.coverWidget != null,
-        ),
-      ),
-      builder: (context, isSearching, child) => _buildHeader(
-        bottom: child as PreferredSizeWidget,
-        isSearching: isSearching,
-      ),
-    );
-  }
-
-  Widget _buildHeader({PreferredSizeWidget? bottom, bool isSearching = false}) {
+    final bottom = widget.bottom;
     if (GalleryAppBarWidget._usesCoverHeader(
       hasCover: widget.cover != null || widget.coverWidget != null,
-      hasCustomBottom: widget.bottom != null,
-      isSearching: isSearching,
+      hasCustomBottom: bottom != null,
     )) {
       return _albumCoverAppBar(bottom: bottom);
     }
     return _GallerySliverAppBar(
       title: _appBarTitle,
       subtitle: widget.subtitle,
-      actions: isSearching
-          ? const []
-          : _getDefaultActions(context, onCover: false),
+      actions: _getDefaultActions(context, onCover: false),
       bottom: bottom,
     );
   }
@@ -333,12 +281,9 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
       );
     }
 
-    // Offline fork: the album menu entries are removed. The location entries
-    // keep their upstream account condition, so they do not show today.
-    // Stage 4 of the removal decides about them.
-    final hasLocationMenu =
-        Configuration.instance.hasConfiguredAccount() &&
-        galleryType == GalleryType.locationTag;
+    // Offline fork: the album menu entries are removed. Location tags are
+    // local data, so their edit and delete entries show without an account.
+    final hasLocationMenu = galleryType == GalleryType.locationTag;
     final hasSlideshowMenu = !onCover && widget.deviceCollection != null;
     if (!widget.showOverflowMenu || !(hasLocationMenu || hasSlideshowMenu)) {
       return actions;
@@ -451,8 +396,7 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
       files: galleryFiles,
       title: widget.deviceCollection?.name ?? _appBarTitle,
       includeBackupExcludedFiles:
-          widget.deviceCollection != null ||
-          (galleryType == GalleryType.cluster && isLocalGalleryMode),
+          widget.deviceCollection != null || galleryType == GalleryType.cluster,
     );
   }
 
@@ -467,7 +411,7 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
     }
     final filesResult = await FilesDB.instance.getFilesInDeviceCollection(
       deviceCollection,
-      Configuration.instance.getUserID(),
+      null,
       galleryLoadStartTime,
       galleryLoadEndTime,
     );

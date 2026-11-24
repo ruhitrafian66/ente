@@ -8,7 +8,6 @@ import "package:photos/events/people_changed_event.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/selected_people.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
@@ -147,7 +146,6 @@ class _PeopleSelectionActionWidgetState
         // Offline fork: merge is also available for two or more named
         // persons (person-to-person merge).
         final bool canMergeNamedPersons =
-            kOfflineFork &&
             _getNamedSelectedPersonIds(selectedPersonIds, personMap).length > 1;
         final bool showMergeAction = onlyIgnoredPersonsSelected
             ? false
@@ -571,7 +569,7 @@ class _PeopleSelectionActionWidgetState
       personMap,
     );
     // Offline fork: two or more named persons use the person-to-person merge.
-    if (kOfflineFork && namedSelectedPersonIds.length > 1) {
+    if (namedSelectedPersonIds.length > 1) {
       await _mergeNamedPersons(
         personMap: personMap,
         namedPersonIds: namedSelectedPersonIds,

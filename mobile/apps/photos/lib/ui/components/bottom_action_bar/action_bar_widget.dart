@@ -3,7 +3,6 @@ import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/models/selected_files.dart";
 
 class ActionBarWidget extends StatelessWidget {
@@ -21,18 +20,10 @@ class ActionBarWidget extends StatelessWidget {
     return ListenableBuilder(
       listenable: selectedFiles,
       builder: (context, _) {
-        final currentUserID = Configuration.instance.getUserID() ?? -1;
-        final ownedCount = selectedFiles.files
-            .where(
-              (file) => file.ownerID == null || file.ownerID == currentUserID,
-            )
-            .length;
-        final summary = ownedCount == selectedFiles.files.length
-            ? context.strings.selectedPhotos(count: selectedFiles.files.length)
-            : context.strings.selectedPhotosWithYours(
-                count: selectedFiles.files.length,
-                yourCount: ownedCount,
-              );
+        // Offline fork: every file is a device file of the owner.
+        final summary = context.strings.selectedPhotos(
+          count: selectedFiles.files.length,
+        );
         return SelectionControlChip(
           label: selectedFiles.files.length.toString(),
           semanticLabel: "${context.strings.cancel}, $summary",

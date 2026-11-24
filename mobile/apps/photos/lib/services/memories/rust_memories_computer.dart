@@ -1,9 +1,7 @@
 import "dart:math" show Random;
 
-import "package:collection/collection.dart";
 import "package:flutter_rust_bridge/flutter_rust_bridge.dart" show Int64List;
 import "package:logging/logging.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/db/ml/rust_db.dart";
 import "package:photos/models/base_location.dart";
 import "package:photos/models/file/file.dart";
@@ -20,7 +18,6 @@ import "package:photos/models/memories/time_memory.dart";
 import "package:photos/models/memories/trip_memory.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/memories/memories_computer.dart";
 import "package:photos/services/memories/memory_sources.dart";
 import "package:photos/src/rust/api/memories_api.dart" as rust;
@@ -30,9 +27,7 @@ class RustMemoriesComputer implements MemoriesComputer {
 
   static const _minimumClipIndexedFiles = 5;
 
-  RustMLDataDB get _mlDataDB => isLocalGalleryMode
-      ? RustMLDataDB.localGalleryInstance
-      : RustMLDataDB.instance;
+  RustMLDataDB get _mlDataDB => RustMLDataDB.localGalleryInstance;
 
   @override
   Future<bool> isMlReady() async {
@@ -163,32 +158,21 @@ class RustMemoriesComputer implements MemoriesComputer {
     required bool surfaceAll,
   }) async {
     final files = await getFilesAndMapForMemories(
-      useLocalIntIds: isLocalGalleryMode,
-      requireLocalId: isLocalGalleryMode,
+      useLocalIntIds: true,
+      requireLocalId: true,
     );
     final collectionIDsToExclude = await getCollectionIDsToExclude();
     final seenTimes = await memoriesDB.getSeenTimes();
-    final allPersons = (!mlEnabled || isLocalGalleryMode)
-        ? const <PersonEntity>[]
-        : await PersonService.instance.getPersons();
+    // Offline fork: upstream loads no persons for memories in local gallery
+    // mode, which is the only mode here. There is no account, so no person
+    // is "me" and no file is shared.
+    const allPersons = <PersonEntity>[];
     final persons = allPersons
         .where((person) => !person.data.hideFromMemories)
         .toList();
-    final currentUserEmail = isLocalGalleryMode
-        ? null
-        : Configuration.instance.getEmail();
-    final me = currentUserEmail == null
-        ? null
-        : persons.firstWhereOrNull(
-            (person) => person.data.email == currentUserEmail,
-          );
-    final currentUserID = isLocalGalleryMode
-        ? null
-        : Configuration.instance.getUserID();
     final request = rust.MemoriesRequest(
       files: [
-        for (final entry in files.entries)
-          _memoryFile(entry.key, entry.value, currentUserID),
+        for (final entry in files.entries) _memoryFile(entry.key, entry.value),
       ],
       excludedCollectionIds: Int64List.fromList(
         collectionIDsToExclude.toList(),
@@ -198,7 +182,7 @@ class RustMemoriesComputer implements MemoriesComputer {
         for (final person in allPersons)
           if (person.data.hideFromMemories) person.remoteID,
       ],
-      mePersonId: me?.remoteID,
+      mePersonId: null,
       showsUnnamedPeople: mlEnabled && localSettings.showLocalGalleryModeOption,
       shownPeople: [
         for (final log in oldCache?.peopleShownLogs ?? <PeopleShownLog>[])
@@ -240,7 +224,7 @@ class RustMemoriesComputer implements MemoriesComputer {
       ],
       showsSpecials: false, // Offline fork: former `newMemories` flag.
       surfaceAll: surfaceAll,
-      localGalleryMode: isLocalGalleryMode,
+      localGalleryMode: true,
       seed: _seed(),
     );
     return _Inputs(
@@ -251,11 +235,7 @@ class RustMemoriesComputer implements MemoriesComputer {
     );
   }
 
-  static rust.MemoryFile _memoryFile(
-    int id,
-    EnteFile file,
-    int? currentUserID,
-  ) {
+  static rust.MemoryFile _memoryFile(int id, EnteFile file) {
     final creationTime = file.creationTime!;
     return rust.MemoryFile(
       id: id,
@@ -266,10 +246,7 @@ class RustMemoriesComputer implements MemoriesComputer {
       ).timeZoneOffset.inSeconds,
       collectionId: file.collectionID,
       location: file.hasLocation ? _coordinate(file.location!) : null,
-      shared:
-          currentUserID != null &&
-          file.ownerID != null &&
-          file.ownerID != currentUserID,
+      shared: false,
     );
   }
 

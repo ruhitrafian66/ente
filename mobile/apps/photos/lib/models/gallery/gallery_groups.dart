@@ -5,7 +5,6 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/constants.dart";
 import "package:photos/models/file/dummy_file.dart";
 import "package:photos/models/file/file.dart";
@@ -135,7 +134,8 @@ class GalleryGroups {
   final Map<String, double> _groupIdToScrollOffsetMap = {};
   final List<double> _groupScrollOffsets = [];
   final List<({String groupID, String title})> _scrollbarDivisions = [];
-  final currentUserID = Configuration.instance.getUserID();
+  // Offline fork: there is no account, so there is no current user ID.
+  int? get currentUserID => null;
   final _uuid = const Uuid();
 
   List<String> get groupIDs => _groupIds;

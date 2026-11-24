@@ -12,7 +12,6 @@ enum TabChangedEventSource {
   pageView,
   collectionsPage,
   backButton,
-  appMode,
   mlConsent,
 }
 

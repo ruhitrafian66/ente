@@ -6,7 +6,6 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/cache/lru_map.dart";
-import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
 import "package:photos/models/file/extensions/file_props.dart";
@@ -16,7 +15,6 @@ import "package:photos/models/ml/face/box.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/module/download/file.dart";
 import "package:photos/module/download/thumbnail.dart";
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_thumbnail_generator.dart";
 import "package:photos/services/search_service.dart";
 
@@ -41,17 +39,13 @@ TaskQueue _queueThumbnailFaceGenerations = TaskQueue<String>(
 
 /// Offline fork: resolves ML file IDs (see `EnteFile.mlFileID`) to files.
 ///
-/// Account mode: the ML file ID is the uploaded file ID, so `FilesDB` gives
-/// the files. Local gallery mode: the ML file ID is the int that
-/// `OfflineFilesDB` assigns to a device `localID`, so the files come from the
-/// search file list. People UI code must use this function and not
-/// `FilesDB.getAnyUploadedFile` / `getFileIDToFileFromIDs`.
+/// The ML file ID is the int that `OfflineFilesDB` assigns to a device
+/// `localID`, so the files come from the search file list. People UI code
+/// must use this function and not `FilesDB.getAnyUploadedFile` /
+/// `getFileIDToFileFromIDs`.
 Future<Map<int, EnteFile>> getFilesForMlFileIDs(Iterable<int> mlFileIDs) async {
   final ids = mlFileIDs.toSet();
   if (ids.isEmpty) return {};
-  if (!isLocalGalleryMode) {
-    return FilesDB.instance.getFileIDToFileFromIDs(ids.toList());
-  }
   final intIdToLocalId = await OfflineFilesDB.instance.getLocalIdsForIntIds(
     ids,
   );
@@ -123,9 +117,7 @@ Future<String?> checkUsedFaceIDForPersonOrClusterId(
     personOrClusterID,
   );
   if (cachedFaceID != null) return cachedFaceID;
-  final mlDataDB = isLocalGalleryMode
-      ? MLDataDB.localGalleryInstance
-      : MLDataDB.instance;
+  final mlDataDB = MLDataDB.localGalleryInstance;
   final String? faceIDFromDB = await mlDataDB.getFaceIdUsedForPersonOrCluster(
     personOrClusterID,
   );
@@ -139,9 +131,7 @@ Future<void> putFaceIdCachedForPersonOrCluster(
   String personOrClusterID,
   String faceID,
 ) async {
-  final mlDataDB = isLocalGalleryMode
-      ? MLDataDB.localGalleryInstance
-      : MLDataDB.instance;
+  final mlDataDB = MLDataDB.localGalleryInstance;
   await mlDataDB.putFaceIdCachedForPersonOrCluster(personOrClusterID, faceID);
   _personOrClusterIdToCachedFaceID.put(personOrClusterID, faceID);
 }
@@ -160,9 +150,7 @@ Future<void> _putCachedCropForFaceID(
 Future<void> checkRemoveCachedFaceIDForPersonOrClusterId(
   String personOrClusterID,
 ) async {
-  final mlDataDB = isLocalGalleryMode
-      ? MLDataDB.localGalleryInstance
-      : MLDataDB.instance;
+  final mlDataDB = MLDataDB.localGalleryInstance;
   final String? cachedFaceID = await mlDataDB.getFaceIdUsedForPersonOrCluster(
     personOrClusterID,
   );
@@ -405,22 +393,14 @@ Future<String> _faceCropTaskId(
   required bool useFullFile,
 }) async {
   final suffix = useFullFile ? "-full" : "-thumbnail";
-  if (isLocalGalleryMode) {
-    final localId = file.localID;
-    if (localId != null && localId.isNotEmpty) {
-      final localIntId = await OfflineFilesDB.instance.getOrCreateLocalIntId(
-        localId,
-      );
-      return "$localIntId$suffix";
-    }
-    return "${file.hashCode}$suffix";
+  final localId = file.localID;
+  if (localId != null && localId.isNotEmpty) {
+    final localIntId = await OfflineFilesDB.instance.getOrCreateLocalIntId(
+      localId,
+    );
+    return "$localIntId$suffix";
   }
-  final baseId =
-      file.uploadedFileID?.toString() ??
-      file.generatedID?.toString() ??
-      file.localID ??
-      file.hashCode.toString();
-  return "$baseId${useFullFile ? "-full" : "-thumbnail"}";
+  return "${file.hashCode}$suffix";
 }
 
 Future<Map<String, Uint8List>?> _getFaceCrops(

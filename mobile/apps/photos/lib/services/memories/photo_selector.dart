@@ -18,7 +18,6 @@ enum SelectionSort { chronological, reverseChronological }
 
 class SelectionConfig {
   final int targetSize;
-  final bool isLocalGalleryMode;
   final Map<int, EmbeddingVector> fileIDToImageEmbedding;
 
   final Map<int, double> scores;
@@ -34,7 +33,6 @@ class SelectionConfig {
 
   const SelectionConfig({
     required this.targetSize,
-    required this.isLocalGalleryMode,
     required this.fileIDToImageEmbedding,
     required this.scores,
     required this.distribution,
@@ -78,14 +76,8 @@ class PhotoSelector {
   ) {
     final fileCount = memories.length;
     memories.sort((a, b) {
-      final aID = memoryFileIdFromMemory(
-        a,
-        isLocalGalleryMode: config.isLocalGalleryMode,
-      );
-      final bID = memoryFileIdFromMemory(
-        b,
-        isLocalGalleryMode: config.isLocalGalleryMode,
-      );
+      final aID = memoryFileIdFromMemory(a);
+      final bID = memoryFileIdFromMemory(b);
       return (config.scores[bID] ?? 0.0).compareTo(config.scores[aID] ?? 0.0);
     });
 
@@ -155,12 +147,7 @@ class PhotoSelector {
     final finalSelection = <Memory>[];
     for (final bucket in buckets) {
       final bucketFileIDs = bucket
-          .map(
-            (m) => memoryFileIdFromMemory(
-              m,
-              isLocalGalleryMode: config.isLocalGalleryMode,
-            ),
-          )
+          .map((m) => memoryFileIdFromMemory(m))
           .whereType<int>()
           .toSet();
       final bucketVectors = getEmbeddingsForFileIDs(
@@ -171,14 +158,8 @@ class PhotoSelector {
       final bool littleEmbeddings = bucketVectors.length < bucket.length * 0.5;
 
       bucket.sort((a, b) {
-        final aID = memoryFileIdFromMemory(
-          a,
-          isLocalGalleryMode: config.isLocalGalleryMode,
-        );
-        final bID = memoryFileIdFromMemory(
-          b,
-          isLocalGalleryMode: config.isLocalGalleryMode,
-        );
+        final aID = memoryFileIdFromMemory(a);
+        final bID = memoryFileIdFromMemory(b);
         return (config.scores[bID] ?? 0.0).compareTo(config.scores[aID] ?? 0.0);
       });
 
@@ -203,7 +184,6 @@ class PhotoSelector {
           candidates,
           finalSelection,
           config.fileIDToImageEmbedding,
-          isLocalGalleryMode: config.isLocalGalleryMode,
         );
         if (filteredCandidates.isNotEmpty) {
           candidates = filteredCandidates;
@@ -221,30 +201,16 @@ class PhotoSelector {
     }
 
     final selectedFileIDs = finalSelection
-        .map(
-          (mem) => memoryFileIdFromMemory(
-            mem,
-            isLocalGalleryMode: config.isLocalGalleryMode,
-          ),
-        )
+        .map((mem) => memoryFileIdFromMemory(mem))
         .whereType<int>()
         .toSet();
     final remaining =
         sorted.where((mem) {
-          final fileID = memoryFileIdFromMemory(
-            mem,
-            isLocalGalleryMode: config.isLocalGalleryMode,
-          );
+          final fileID = memoryFileIdFromMemory(mem);
           return fileID == null || !selectedFileIDs.contains(fileID);
         }).toList()..sort((a, b) {
-          final aID = memoryFileIdFromMemory(
-            a,
-            isLocalGalleryMode: config.isLocalGalleryMode,
-          );
-          final bID = memoryFileIdFromMemory(
-            b,
-            isLocalGalleryMode: config.isLocalGalleryMode,
-          );
+          final aID = memoryFileIdFromMemory(a);
+          final bID = memoryFileIdFromMemory(b);
           return (config.scores[bID] ?? 0.0).compareTo(
             config.scores[aID] ?? 0.0,
           );
@@ -256,7 +222,6 @@ class PhotoSelector {
         [candidate],
         finalSelection,
         config.fileIDToImageEmbedding,
-        isLocalGalleryMode: config.isLocalGalleryMode,
       );
       if (filteredCandidates.isEmpty) continue;
       final timeFiltered = excludeTooCloseInTime(
@@ -286,14 +251,8 @@ class PhotoSelector {
 
     for (final yearFiles in yearToFiles.values) {
       yearFiles.sort((a, b) {
-        final aID = memoryFileIdFromMemory(
-          a,
-          isLocalGalleryMode: config.isLocalGalleryMode,
-        );
-        final bID = memoryFileIdFromMemory(
-          b,
-          isLocalGalleryMode: config.isLocalGalleryMode,
-        );
+        final aID = memoryFileIdFromMemory(a);
+        final bID = memoryFileIdFromMemory(b);
         return (config.scores[bID] ?? 0.0).compareTo(config.scores[aID] ?? 0.0);
       });
     }
@@ -325,20 +284,14 @@ class PhotoSelector {
         final bool checkDuplicates =
             !(config.skipDuplicateCheckOnFirstRound && round == 0);
         if (checkDuplicates && (fileCount - skipped) > config.targetSize) {
-          final candID = memoryFileIdFromMemory(
-            candidate,
-            isLocalGalleryMode: config.isLocalGalleryMode,
-          );
+          final candID = memoryFileIdFromMemory(candidate);
           final clip = candID == null
               ? null
               : config.fileIDToImageEmbedding[candID];
           if (clip != null) {
             bool isDuplicate = false;
             for (final sel in selected) {
-              final selID = memoryFileIdFromMemory(
-                sel,
-                isLocalGalleryMode: config.isLocalGalleryMode,
-              );
+              final selID = memoryFileIdFromMemory(sel);
               final selClip = selID == null
                   ? null
                   : config.fileIDToImageEmbedding[selID];
@@ -424,19 +377,13 @@ class PhotoSelector {
     if (isTooCloseInTime(creationTime, selectedCreationTimes)) {
       return false;
     }
-    final memFileID = memoryFileIdFromMemory(
-      mem,
-      isLocalGalleryMode: config.isLocalGalleryMode,
-    );
+    final memFileID = memoryFileIdFromMemory(mem);
     final clip = memFileID == null
         ? null
         : config.fileIDToImageEmbedding[memFileID];
     if (clip != null && (fileCount - skipped) > config.targetSize) {
       for (final selMem in selected) {
-        final selID = memoryFileIdFromMemory(
-          selMem,
-          isLocalGalleryMode: config.isLocalGalleryMode,
-        );
+        final selID = memoryFileIdFromMemory(selMem);
         final selClip = selID == null
             ? null
             : config.fileIDToImageEmbedding[selID];
@@ -466,7 +413,6 @@ class PhotoSelector {
   static Future<List<Memory>> bestSelectionPeople(
     List<Memory> memories, {
     int? prefferedSize,
-    required bool isLocalGalleryMode,
     required Map<int, EmbeddingVector> fileIDToImageEmbedding,
     required Vector clipPositiveTextVector,
   }) async {
@@ -476,10 +422,7 @@ class PhotoSelector {
 
       final Map<int, double> scores = {};
       for (final mem in memories) {
-        final fileID = memoryFileIdFromMemory(
-          mem,
-          isLocalGalleryMode: isLocalGalleryMode,
-        );
+        final fileID = memoryFileIdFromMemory(mem);
         if (fileID == null) continue;
 
         final embedding = fileIDToImageEmbedding[fileID];
@@ -492,7 +435,6 @@ class PhotoSelector {
         memories,
         SelectionConfig(
           targetSize: targetSize,
-          isLocalGalleryMode: isLocalGalleryMode,
           fileIDToImageEmbedding: fileIDToImageEmbedding,
           scores: scores,
           distribution: SelectionDistribution.timeBuckets,
@@ -517,7 +459,6 @@ class PhotoSelector {
     List<Memory> memories, {
     int? prefferedSize,
     SelectionDistribution? distributionOverride,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
     required Map<String, String> faceIDsToPersonID,
@@ -534,7 +475,6 @@ class PhotoSelector {
       return _bestSelectionNoMl(
         memories,
         targetSize: targetSize,
-        isLocalGalleryMode: isLocalGalleryMode,
         distributionOverride: distributionOverride,
       );
     }
@@ -544,10 +484,7 @@ class PhotoSelector {
     // CLIP secondary) as a single numeric score.
     final Map<int, double> scores = {};
     for (final mem in memories) {
-      final fileID = memoryFileIdFromMemory(
-        mem,
-        isLocalGalleryMode: isLocalGalleryMode,
-      );
+      final fileID = memoryFileIdFromMemory(mem);
       if (fileID == null) continue;
 
       final embedding = fileIDToImageEmbedding[fileID];
@@ -575,7 +512,6 @@ class PhotoSelector {
         memories,
         SelectionConfig(
           targetSize: targetSize,
-          isLocalGalleryMode: isLocalGalleryMode,
           fileIDToImageEmbedding: fileIDToImageEmbedding,
           scores: scores,
           distribution: distributionOverride,
@@ -594,7 +530,6 @@ class PhotoSelector {
         memories,
         SelectionConfig(
           targetSize: targetSize,
-          isLocalGalleryMode: isLocalGalleryMode,
           fileIDToImageEmbedding: fileIDToImageEmbedding,
           scores: scores,
           distribution: SelectionDistribution.none,
@@ -614,7 +549,6 @@ class PhotoSelector {
         memories,
         SelectionConfig(
           targetSize: targetSize,
-          isLocalGalleryMode: isLocalGalleryMode,
           fileIDToImageEmbedding: fileIDToImageEmbedding,
           scores: scores,
           distribution: SelectionDistribution.yearRoundRobin,
@@ -629,7 +563,6 @@ class PhotoSelector {
   static List<Memory> _bestSelectionNoMl(
     List<Memory> memories, {
     required int targetSize,
-    required bool isLocalGalleryMode,
     SelectionDistribution? distributionOverride,
   }) {
     final withCreationTime = memories
@@ -814,15 +747,12 @@ class PhotoSelector {
     return false;
   }
 
-  static int? memoryFileId(EnteFile file, {required bool isLocalGalleryMode}) {
-    return isLocalGalleryMode ? file.generatedID : file.uploadedFileID;
+  static int? memoryFileId(EnteFile file) {
+    return file.generatedID;
   }
 
-  static int? memoryFileIdFromMemory(
-    Memory memory, {
-    required bool isLocalGalleryMode,
-  }) {
-    return memoryFileId(memory.file, isLocalGalleryMode: isLocalGalleryMode);
+  static int? memoryFileIdFromMemory(Memory memory) {
+    return memoryFileId(memory.file);
   }
 
   static bool isTooCloseInTime(
@@ -844,7 +774,6 @@ class PhotoSelector {
     List<Memory> memories,
     Map<int, EmbeddingVector> fileIDToImageEmbedding, {
     int? minKeep,
-    required bool isLocalGalleryMode,
     double similarityThreshold = clipSimilarImageThreshold,
   }) {
     if (memories.length < 2) return memories;
@@ -853,10 +782,7 @@ class PhotoSelector {
     int skipped = 0;
     final total = memories.length;
     for (final mem in memories) {
-      final fileID = memoryFileIdFromMemory(
-        mem,
-        isLocalGalleryMode: isLocalGalleryMode,
-      );
+      final fileID = memoryFileIdFromMemory(mem);
       final bool shouldSkip =
           fileID != null &&
           isNearDuplicate(
@@ -882,26 +808,17 @@ class PhotoSelector {
     List<Memory> candidates,
     List<Memory> selected,
     Map<int, EmbeddingVector> fileIDToImageEmbedding, {
-    required bool isLocalGalleryMode,
     double similarityThreshold = clipSimilarImageThreshold,
   }) {
     if (selected.isEmpty || candidates.isEmpty) return candidates;
     final selectedFileIDs = selected
-        .map(
-          (mem) => memoryFileIdFromMemory(
-            mem,
-            isLocalGalleryMode: isLocalGalleryMode,
-          ),
-        )
+        .map((mem) => memoryFileIdFromMemory(mem))
         .whereType<int>()
         .toList(growable: false);
     if (selectedFileIDs.isEmpty) return candidates;
     final filtered = <Memory>[];
     for (final candidate in candidates) {
-      final fileID = memoryFileIdFromMemory(
-        candidate,
-        isLocalGalleryMode: isLocalGalleryMode,
-      );
+      final fileID = memoryFileIdFromMemory(candidate);
       if (fileID == null ||
           !isNearDuplicate(
             fileID,

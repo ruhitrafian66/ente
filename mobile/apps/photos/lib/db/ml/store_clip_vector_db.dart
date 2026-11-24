@@ -2,7 +2,6 @@ import "package:collection/collection.dart";
 import "package:logging/logging.dart";
 import "package:photos/db/ml/clip_vector_db.dart";
 import "package:photos/db/ml/rust_db.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/semantic_search/query_result.dart";
 import "package:photos/src/rust/api/ml_db_api.dart" as rust;
 
@@ -17,9 +16,7 @@ class StoreClipVectorDB implements ClipVectorDB {
   // Offline fork: there is no account database. Every "account" singleton
   // resolves to the local gallery one, so person and feedback code that was
   // written for accounts works on the on-device data.
-  static StoreClipVectorDB get instance =>
-      kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final StoreClipVectorDB _accountInstance = StoreClipVectorDB._(RustMLDataDB.instance);
+  static StoreClipVectorDB get instance => localGalleryInstance;
   static final localGalleryInstance = StoreClipVectorDB._(
     RustMLDataDB.localGalleryInstance,
   );

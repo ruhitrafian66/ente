@@ -1,5 +1,4 @@
 import "package:flutter/material.dart";
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/ui/viewer/gallery/state/search_filter_data_provider.dart";
 
 class InheritedSearchFilterDataWrapper extends StatefulWidget {
@@ -43,9 +42,6 @@ class InheritedSearchFilterData extends InheritedWidget {
   });
 
   final SearchFilterDataProvider? searchFilterDataProvider;
-
-  bool get isHierarchicalSearchable =>
-      searchFilterDataProvider != null && !isLocalGalleryMode;
 
   static InheritedSearchFilterData? maybeOf(BuildContext context) {
     return context

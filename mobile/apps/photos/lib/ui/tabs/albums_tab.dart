@@ -8,7 +8,6 @@ import "package:flutter/material.dart";
 import "package:photos/core/constants.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/album_sort_order_change_event.dart";
-import "package:photos/events/app_mode_changed_event.dart";
 import "package:photos/events/backup_folders_updated_event.dart";
 import "package:photos/events/tab_changed_event.dart";
 import "package:photos/service_locator.dart";
@@ -70,7 +69,6 @@ class _AlbumsTabState extends State<AlbumsTab>
   _albumSortOrderChangeEvent;
   late final StreamSubscription<BackupFoldersUpdatedEvent>
   _backupFoldersUpdatedEvent;
-  late final StreamSubscription<AppModeChangedEvent> _appModeChangedEvent;
   late final StreamSubscription<TabChangedEvent> _tabChangedEvent;
 
   @override
@@ -88,11 +86,6 @@ class _AlbumsTabState extends State<AlbumsTab>
             setState(() {});
           }
         });
-    _appModeChangedEvent = Bus.instance.on<AppModeChangedEvent>().listen((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
     _tabChangedEvent = Bus.instance.on<TabChangedEvent>().listen(
       _handleTabChanged,
     );
@@ -386,7 +379,6 @@ class _AlbumsTabState extends State<AlbumsTab>
   void dispose() {
     _albumSortOrderChangeEvent.cancel();
     _backupFoldersUpdatedEvent.cancel();
-    _appModeChangedEvent.cancel();
     _tabChangedEvent.cancel();
     widget.isSearchActiveNotifier?.removeListener(_handleSearchStateChanged);
     _syncSearchBackNotifier(false);
@@ -516,10 +508,9 @@ class _AlbumsTabState extends State<AlbumsTab>
                           ),
                           const SizedBox(width: 6),
                           albumsOptionsButton,
-                          if (isLocalGalleryMode)
-                            const _LocalGalleryTrashButton(
-                              before: SizedBox(width: 6),
-                            ),
+                          const _LocalGalleryTrashButton(
+                            before: SizedBox(width: 6),
+                          ),
                         ],
                       ),
               ),

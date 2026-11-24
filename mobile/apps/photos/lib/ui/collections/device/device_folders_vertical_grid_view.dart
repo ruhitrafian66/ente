@@ -7,7 +7,6 @@ import "package:ente_strings/ente_strings.dart";
 import 'package:ente_ui/components/loading_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/device_files_db.dart';
 import 'package:photos/db/files_db.dart';
@@ -106,7 +105,6 @@ class DeviceFolderVerticalGridSliver extends StatefulWidget {
 class _DeviceFolderVerticalGridViewBodyState
     extends State<DeviceFolderVerticalGridSliver> {
   static List<DeviceCollection>? _cachedDeviceCollections;
-  static int? _cachedUserID;
 
   StreamSubscription<BackupFoldersUpdatedEvent>? _backupFoldersUpdatedEvent;
   StreamSubscription<LocalPhotosUpdatedEvent>? _localFilesSubscription;
@@ -142,12 +140,10 @@ class _DeviceFolderVerticalGridViewBodyState
   }
 
   Future<List<DeviceCollection>> _loadDeviceCollections() async {
-    final userID = Configuration.instance.getUserID();
     final deviceCollections = await FilesDB.instance.getDeviceCollections(
       includeCoverThumbnail: true,
     );
     _cachedDeviceCollections = deviceCollections;
-    _cachedUserID = userID;
     return deviceCollections;
   }
 
@@ -179,9 +175,7 @@ class _DeviceFolderVerticalGridViewBodyState
 
     return FutureBuilder<List<DeviceCollection>>(
       future: _deviceCollectionsFuture,
-      initialData: _cachedUserID == Configuration.instance.getUserID()
-          ? _cachedDeviceCollections
-          : null,
+      initialData: _cachedDeviceCollections,
       builder: (context, snapshot) {
         if (snapshot.hasData) {
           List<DeviceCollection> deviceCollections = snapshot.data!.toList();

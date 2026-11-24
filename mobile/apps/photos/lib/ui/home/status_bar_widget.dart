@@ -40,9 +40,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
   bool _showStatus = false;
   bool _showErrorBanner = false;
   bool _showMlBanner =
-      !hasGrantedMLConsent &&
-      isLocalGalleryMode &&
-      !localSettings.hasSeenMLEnablingBanner;
+      !hasGrantedMLConsent && !localSettings.hasSeenMLEnablingBanner;
   Error? _syncError;
 
   @override

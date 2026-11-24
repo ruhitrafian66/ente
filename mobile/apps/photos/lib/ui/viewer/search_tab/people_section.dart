@@ -13,8 +13,6 @@ import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/search/search_result.dart";
 import "package:photos/models/search/search_types.dart";
 import "package:photos/models/selected_people.dart";
-import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/components/collection_share_badge.dart";
 import "package:photos/ui/settings/ml/machine_learning_settings_page.dart";
@@ -293,54 +291,43 @@ class PersonSearchExample extends StatelessWidget {
                 ],
               ),
               isCluster
-                  // Offline fork: "Add name" also shows in local gallery mode.
-                  ? isLocalGalleryMode && !kOfflineFork
-                        ? const SizedBox.shrink()
-                        : GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTap: () async {
-                              final clusterId =
-                                  searchResult.params[kClusterParamId]
-                                      as String?;
-                              final result = await showAssignPersonAction(
-                                context,
-                                clusterID: clusterId ?? searchResult.name(),
-                              );
-                              if (result != null &&
-                                  result is (PersonEntity, EnteFile)) {
-                                if (!context.mounted) return;
-                                // ignore: unawaited_futures
-                                routeToPage(
-                                  context,
-                                  PeoplePage(
-                                    person: result.$1,
-                                    searchResult: null,
-                                  ),
-                                );
-                              } else if (result != null &&
-                                  result is PersonEntity) {
-                                if (!context.mounted) return;
-                                // ignore: unawaited_futures
-                                routeToPage(
-                                  context,
-                                  PeoplePage(
-                                    person: result,
-                                    searchResult: null,
-                                  ),
-                                );
-                              }
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 6, bottom: 0),
-                              child: Text(
-                                context.strings.addName,
-                                maxLines: 1,
-                                textAlign: TextAlign.center,
-                                overflow: TextOverflow.ellipsis,
-                                style: getEnteTextTheme(context).small,
-                              ),
-                            ),
-                          )
+                  ? GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () async {
+                        final clusterId =
+                            searchResult.params[kClusterParamId] as String?;
+                        final result = await showAssignPersonAction(
+                          context,
+                          clusterID: clusterId ?? searchResult.name(),
+                        );
+                        if (result != null &&
+                            result is (PersonEntity, EnteFile)) {
+                          if (!context.mounted) return;
+                          // ignore: unawaited_futures
+                          routeToPage(
+                            context,
+                            PeoplePage(person: result.$1, searchResult: null),
+                          );
+                        } else if (result != null && result is PersonEntity) {
+                          if (!context.mounted) return;
+                          // ignore: unawaited_futures
+                          routeToPage(
+                            context,
+                            PeoplePage(person: result, searchResult: null),
+                          );
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 6, bottom: 0),
+                        child: Text(
+                          context.strings.addName,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: getEnteTextTheme(context).small,
+                        ),
+                      ),
+                    )
                   : Padding(
                       padding: EdgeInsets.zero,
                       child: _PersonLabel(

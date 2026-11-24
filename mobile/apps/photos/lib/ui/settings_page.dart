@@ -2,12 +2,8 @@ import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
-import "package:ente_ui/components/settings/app_engagement_section.dart";
 import "package:ente_ui/pages/settings_search_page.dart";
 import "package:flutter/material.dart";
-import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart";
-import "package:photos/services/review_service.dart";
 import "package:photos/ui/settings/about/about_us_page.dart";
 import "package:photos/ui/settings/appearance/appearance_settings_page.dart";
 import "package:photos/ui/settings/free_space_options.dart";
@@ -53,15 +49,8 @@ class _SettingsBody extends StatelessWidget {
           },
         ),
         const SizedBox(height: 8),
-        if (isLocalGalleryMode) ...[
-          _buildOfflineFeaturesCard(context),
-          const SizedBox(height: 8),
-        ],
-        // Offline fork: no "rate us" / share links, they need the network.
-        if (!kOfflineFork) ...[
-          AppEngagementSection(reviewUrl: ReviewService.url),
-          const SizedBox(height: 8),
-        ],
+        _buildOfflineFeaturesCard(context),
+        const SizedBox(height: 8),
         _buildMenuItem(
           title: context.strings.about,
           icon: HugeIcons.strokeRoundedInformationCircle,

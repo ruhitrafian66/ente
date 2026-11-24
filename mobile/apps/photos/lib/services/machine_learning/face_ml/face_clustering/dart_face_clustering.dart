@@ -5,7 +5,6 @@ import "package:logging/logging.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/dart_db.dart";
 import "package:photos/events/people_changed_event.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering_service.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_db_info_for_clustering.dart";
@@ -21,9 +20,7 @@ class DartFaceClustering implements FaceClustering {
   // Offline fork: there is no account database. Every "account" singleton
   // resolves to the local gallery one, so person and feedback code that was
   // written for accounts works on the on-device data.
-  static DartFaceClustering get instance =>
-      kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final DartFaceClustering _accountInstance = DartFaceClustering._(DartMLDataDB.instance);
+  static DartFaceClustering get instance => localGalleryInstance;
   static final localGalleryInstance = DartFaceClustering._(
     DartMLDataDB.localGalleryInstance,
   );

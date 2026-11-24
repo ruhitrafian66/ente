@@ -11,7 +11,6 @@ import "package:flutter/widgets.dart" show AppLifecycleState, WidgetsBinding;
 import "package:logging/logging.dart";
 import "package:permission_handler/permission_handler.dart";
 import "package:photos/main.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/ml_run_control.dart";
 import "package:photos/services/notification_service.dart";
 import "package:photos/settings/local_settings.dart";
@@ -110,7 +109,7 @@ class BackgroundTasks {
                       ? Duration.zero
                       : const Duration(minutes: 10),
                   // Offline fork: run on a device with no network.
-                  requiresNetwork: !kOfflineFork && Platform.isAndroid,
+                  requiresNetwork: false,
                   runBudget: Platform.isIOS
                       ? BgTaskUtils.taskTimeoutFor(
                           BgTaskUtils.iOSBackgroundAppRefreshTask,
@@ -130,7 +129,7 @@ class BackgroundTasks {
                     ? const Duration(hours: 1)
                     : null,
                 // Offline fork: run on a device with no network.
-                requiresNetwork: !kOfflineFork,
+                requiresNetwork: false,
                 requiresCharging: Platform.isAndroid,
                 runBudget: Platform.isIOS
                     ? null

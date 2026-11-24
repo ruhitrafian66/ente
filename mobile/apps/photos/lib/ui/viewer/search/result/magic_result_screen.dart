@@ -12,7 +12,6 @@ import 'package:photos/models/file_load_result.dart';
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/search/hierarchical/magic_filter.dart";
 import 'package:photos/models/selected_files.dart';
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import 'package:photos/ui/viewer/actions/file_selection_overlay_bar.dart';
 import 'package:photos/ui/viewer/gallery/gallery.dart';
 import 'package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart';
@@ -59,7 +58,7 @@ class _MagicResultScreenState extends State<MagicResultScreen> {
   late final Logger _logger = Logger("_MagicResultScreenState");
   late Map<int, int> fileIDToRelevantPos;
   Map<String, int> _localIdToIntId = const {};
-  Future<void>? _localIdsLoaded;
+  late final Future<void> _localIdsLoaded;
   bool _enableGrouping = false;
   late final SearchFilterDataProvider _searchFilterDataProvider;
 
@@ -70,9 +69,7 @@ class _MagicResultScreenState extends State<MagicResultScreen> {
     _coverHeroTag = files.isEmpty ? null : widget.heroTag + files.first.tag;
     _enableGrouping = widget.enableGrouping;
     fileIDToRelevantPos = getFileIDToRelevantPos();
-    if (isLocalGalleryMode) {
-      _localIdsLoaded = _loadLocalIntIds();
-    }
+    _localIdsLoaded = _loadLocalIntIds();
     _filesUpdatedEvent = Bus.instance.on<LocalPhotosUpdatedEvent>().listen((
       event,
     ) {
@@ -167,12 +164,9 @@ class _MagicResultScreenState extends State<MagicResultScreen> {
   }
 
   int? _fileIdForSort(EnteFile file) {
-    if (isLocalGalleryMode) {
-      final localId = file.localID;
-      if (localId == null || localId.isEmpty) return null;
-      return _localIdToIntId[localId];
-    }
-    return file.uploadedFileID ?? file.generatedID;
+    final localId = file.localID;
+    if (localId == null || localId.isEmpty) return null;
+    return _localIdToIntId[localId];
   }
 
   @override

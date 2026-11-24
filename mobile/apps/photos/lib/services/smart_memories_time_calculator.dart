@@ -8,7 +8,6 @@ class TimeMemoriesCalculator {
     DateTime currentTime, {
     Iterable<EnteFile>? recentSourceFiles,
     int? totalAvailableFileCount,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, int> seenTimes,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -36,7 +35,6 @@ class TimeMemoriesCalculator {
       showStart: startOfCurrentWeek,
       showEnd: startOfCurrentWeek.add(const Duration(days: 7)),
       kind: TimeMemoryKind.lastWeek,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       seenTimes: seenTimes,
       fileIdToFaces: fileIdToFaces,
@@ -61,7 +59,6 @@ class TimeMemoriesCalculator {
         startOfCurrentMonth.month + 1,
       ),
       kind: TimeMemoryKind.lastMonth,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       seenTimes: seenTimes,
       fileIdToFaces: fileIdToFaces,
@@ -127,7 +124,6 @@ class TimeMemoriesCalculator {
         final allPhotos = yearGroups.values.expand((x) => x).toList();
         final photoSelection = await DartMemoriesComputer._bestSelection(
           allPhotos,
-          isLocalGalleryMode: isLocalGalleryMode,
           mlEnabled: mlEnabled,
           fileIdToFaces: fileIdToFaces,
           faceIDsToPersonID: faceIDsToPersonID,
@@ -149,7 +145,6 @@ class TimeMemoriesCalculator {
           final files = yearGroups[year]!;
           final photoSelection = await DartMemoriesComputer._bestSelection(
             files,
-            isLocalGalleryMode: isLocalGalleryMode,
             mlEnabled: mlEnabled,
             fileIdToFaces: fileIdToFaces,
             faceIDsToPersonID: faceIDsToPersonID,
@@ -181,7 +176,6 @@ class TimeMemoriesCalculator {
               .toList();
           final photoSelection = await DartMemoriesComputer._bestSelection(
             allPhotos,
-            isLocalGalleryMode: isLocalGalleryMode,
             mlEnabled: mlEnabled,
             fileIdToFaces: fileIdToFaces,
             faceIDsToPersonID: faceIDsToPersonID,
@@ -205,7 +199,6 @@ class TimeMemoriesCalculator {
             final files = currentWeekYearGroups[year]!;
             final photoSelection = await DartMemoriesComputer._bestSelection(
               files,
-              isLocalGalleryMode: isLocalGalleryMode,
               mlEnabled: mlEnabled,
               fileIdToFaces: fileIdToFaces,
               faceIDsToPersonID: faceIDsToPersonID,
@@ -233,14 +226,10 @@ class TimeMemoriesCalculator {
     DartMemoriesComputer._markUsedMemories(
       historicalMemoryFileIds,
       historicalMemoryResult,
-      isLocalGalleryMode: isLocalGalleryMode,
     );
     currentMonthYearGroups.removeWhere((_, memories) {
       memories.removeWhere((memory) {
-        final fileId = DartMemoriesComputer._memoryFileIdFromMemory(
-          memory,
-          isLocalGalleryMode: isLocalGalleryMode,
-        );
+        final fileId = DartMemoriesComputer._memoryFileIdFromMemory(memory);
         return fileId != null && historicalMemoryFileIds.contains(fileId);
       });
       return memories.isEmpty;
@@ -259,7 +248,6 @@ class TimeMemoriesCalculator {
       final photoSelection = await DartMemoriesComputer._bestSelection(
         monthYearFiles,
         prefferedSize: monthSelectionSize,
-        isLocalGalleryMode: isLocalGalleryMode,
         mlEnabled: mlEnabled,
         fileIdToFaces: fileIdToFaces,
         faceIDsToPersonID: faceIDsToPersonID,
@@ -285,7 +273,6 @@ class TimeMemoriesCalculator {
     final photoSelection = await DartMemoriesComputer._bestSelection(
       allPhotos,
       prefferedSize: monthSelectionSize,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       fileIdToFaces: fileIdToFaces,
       faceIDsToPersonID: faceIDsToPersonID,
@@ -434,7 +421,6 @@ class TimeMemoriesCalculator {
     required DateTime showStart,
     required DateTime showEnd,
     required TimeMemoryKind kind,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, int> seenTimes,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -463,7 +449,6 @@ class TimeMemoriesCalculator {
       candidates,
       prefferedSize: _recentTimeMemorySelectionSize,
       distributionOverride: SelectionDistribution.timeBuckets,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       fileIdToFaces: fileIdToFaces,
       faceIDsToPersonID: faceIDsToPersonID,

@@ -2,9 +2,7 @@ import "package:flutter_rust_bridge/flutter_rust_bridge.dart" show Int64List;
 import "package:package_info_plus/package_info_plus.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
-import "package:photos/models/ml/face/person.dart";
 import "package:photos/service_locator.dart";
-import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/memories/memory_sources.dart";
 import "package:photos/services/rewind/rewind_edition.dart";
 import "package:photos/src/rust/api/rewind_api.dart" as rust;
@@ -16,27 +14,18 @@ const _screenshotName = "screenshot";
 
 Future<rust.RewindRequest> buildRewindRequest(DateTime now) async {
   final packageInfo = await PackageInfo.fromPlatform();
-  final persons = isLocalGalleryMode || !rewindUsesMl
-      ? const <PersonEntity>[]
-      : await PersonService.instance.getPersons();
   return rust.RewindRequest(
     year: RewindEdition.year,
     now: now.microsecondsSinceEpoch,
     utcOffsetSeconds: now.timeZoneOffset.inSeconds,
     seasonStart: RewindEdition.availableFrom.microsecondsSinceEpoch,
     installedAt: packageInfo.installTime?.microsecondsSinceEpoch ?? 0,
-    localGalleryMode: isLocalGalleryMode,
+    localGalleryMode: true,
     // Offline fork: only device files exist. The account path (albums,
     // likes from the social database) is removed.
     files: await _localFiles(),
-    people: [
-      for (final person in persons)
-        rust.RewindPerson(
-          id: person.remoteID,
-          isIgnored: person.data.isIgnored,
-          isHiddenFromMemories: person.data.hideFromMemories,
-        ),
-    ],
+    // Offline fork: local gallery mode sends no persons.
+    people: const [],
     // Offline fork: there is no account email, so no person is "me".
     mePersonId: null,
   );

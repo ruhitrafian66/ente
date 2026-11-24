@@ -8,7 +8,6 @@ import "package:photos/db/offline_files_db.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/ml/face/face_with_embedding.dart";
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
 import "package:photos/utils/face/face_thumbnail_cache.dart";
@@ -108,26 +107,14 @@ class _FileFaceWidgetState extends State<FileFaceWidget> {
       return widget.faceCrop;
     }
     try {
-      final mlDataDB = isLocalGalleryMode
-          ? MLDataDB.localGalleryInstance
-          : MLDataDB.instance;
-      int? recentFileID;
-      if (isLocalGalleryMode) {
-        final localId = widget.file.localID;
-        if (localId == null || localId.isEmpty) {
-          _logger.severe("Missing local ID for face crop generation");
-          return null;
-        }
-        recentFileID = await OfflineFilesDB.instance.getOrCreateLocalIntId(
-          localId,
-        );
-      } else {
-        recentFileID = widget.file.uploadedFileID;
-      }
-      if (recentFileID == null) {
-        _logger.severe("Missing file ID for face crop generation");
+      final mlDataDB = MLDataDB.localGalleryInstance;
+      final localId = widget.file.localID;
+      if (localId == null || localId.isEmpty) {
+        _logger.severe("Missing local ID for face crop generation");
         return null;
       }
+      final int recentFileID = await OfflineFilesDB.instance
+          .getOrCreateLocalIntId(localId);
       final FaceWithoutEmbedding? faceToUse =
           widget.face ??
           await mlDataDB.getCoverFaceForPerson(

@@ -497,12 +497,7 @@ class SuperLogging {
 
   static bool shouldReportCrashes() {
     // Offline fork: crash reporting is always off.
-    if (kOfflineFork) return false;
-    if (_preferences.containsKey(keyShouldReportCrashes)) {
-      return _preferences.getBool(keyShouldReportCrashes)!;
-    } else {
-      return true;
-    }
+    return false;
   }
 
   static Future<void> setShouldReportCrashes(bool value) {
@@ -566,11 +561,6 @@ class SuperLogging {
   static Future<bool> isFDroidBuild() async {
     // Offline fork: the package name is io.ente.photos.offline. Treat the
     // fork as an F-Droid build so that crash reporting stays disabled.
-    if (kOfflineFork) return true;
-    if (!Platform.isAndroid) {
-      return false;
-    }
-    final pkgName = (await PackageInfo.fromPlatform()).packageName;
-    return pkgName.startsWith("io.ente.photos.fdroid");
+    return true;
   }
 }

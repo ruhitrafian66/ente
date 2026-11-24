@@ -5,13 +5,9 @@ import "package:ente_components/ente_components.dart" as components;
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:photos/models/collection/collection.dart';
 import "package:photos/models/file/file.dart";
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/ml/face/person.dart";
-import "package:photos/models/search/hierarchical/face_filter.dart";
-import "package:photos/models/search/hierarchical/hierarchical_search_filter.dart";
-import "package:photos/models/search/hierarchical/only_them_filter.dart";
 import 'package:photos/models/selected_files.dart';
 import "package:photos/ui/components/bottom_action_bar/action_bar_widget.dart";
 import "package:photos/ui/viewer/actions/file_selection_actions_widget.dart";
@@ -19,15 +15,11 @@ import "package:photos/ui/viewer/actions/large_selection_confirmation.dart";
 import "package:photos/ui/viewer/actions/select_all_status_icon.dart";
 import "package:photos/ui/viewer/gallery/state/boundary_reporter_mixin.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
-import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
-import "package:photos/ui/viewer/gallery/state/search_filter_data_provider.dart";
 import "package:photos/ui/viewer/gallery/state/selection_state.dart";
 
 class FileSelectionOverlayBar extends StatefulWidget {
   final GalleryType galleryType;
   final SelectedFiles selectedFiles;
-  // Offline fork: no server album exists; the value is kept for the callers.
-  final Collection? collection;
   final Color? backgroundColor;
   final PersonEntity? person;
   final String? clusterID;
@@ -35,7 +27,6 @@ class FileSelectionOverlayBar extends StatefulWidget {
   const FileSelectionOverlayBar(
     this.galleryType,
     this.selectedFiles, {
-    this.collection,
     this.backgroundColor,
     this.person,
     this.clusterID,
@@ -50,16 +41,12 @@ class FileSelectionOverlayBar extends StatefulWidget {
 class _FileSelectionOverlayBarState extends State<FileSelectionOverlayBar>
     with BoundaryReporter {
   final ValueNotifier<bool> _hasSelectedFilesNotifier = ValueNotifier(false);
-  late GalleryType _galleryType;
-  SearchFilterDataProvider? _searchFilterDataProvider;
-  bool? _galleryInitialFilterStillApplied;
   bool _wasEmpty = true;
   static const Duration animationDuration = components.Motion.slow;
 
   @override
   void initState() {
     super.initState();
-    _galleryType = widget.galleryType;
     _wasEmpty = widget.selectedFiles.files.isEmpty;
     widget.selectedFiles.addListener(_selectedFilesListener);
     widget.selectedFiles.addListener(_boundaryUpdateListener);
@@ -74,38 +61,7 @@ class _FileSelectionOverlayBarState extends State<FileSelectionOverlayBar>
     _hasSelectedFilesNotifier.dispose();
     widget.selectedFiles.removeListener(_selectedFilesListener);
     widget.selectedFiles.removeListener(_boundaryUpdateListener);
-    _searchFilterDataProvider?.removeListener(
-      listener: _filterAppliedListener,
-      fromApplied: true,
-    );
     super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant FileSelectionOverlayBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _galleryType = widget.galleryType;
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final inheritedSearchFilterData = InheritedSearchFilterData.maybeOf(
-      context,
-    );
-    if (inheritedSearchFilterData?.isHierarchicalSearchable ?? false) {
-      _searchFilterDataProvider =
-          inheritedSearchFilterData!.searchFilterDataProvider;
-
-      _searchFilterDataProvider!.removeListener(
-        listener: _filterAppliedListener,
-        fromApplied: true,
-      );
-      _searchFilterDataProvider!.addListener(
-        listener: _filterAppliedListener,
-        toApplied: true,
-      );
-    }
   }
 
   @override
@@ -114,7 +70,7 @@ class _FileSelectionOverlayBarState extends State<FileSelectionOverlayBar>
       '$runtimeType building with ${widget.selectedFiles.files.length}',
     );
 
-    return _galleryType == GalleryType.homepage
+    return widget.galleryType == GalleryType.homepage
         ? _body()
         : PopScope(
             // canPop=false disables iOS's back gesture.
@@ -157,7 +113,7 @@ class _FileSelectionOverlayBarState extends State<FileSelectionOverlayBar>
             child: boundaryWidget(
               position: BoundaryPosition.bottom,
               child: FileSelectionActionsWidget(
-                _galleryType,
+                widget.galleryType,
                 widget.selectedFiles,
                 person: widget.person,
                 clusterID: widget.clusterID,
@@ -207,50 +163,6 @@ class _FileSelectionOverlayBarState extends State<FileSelectionOverlayBar>
         _wasEmpty = isEmpty;
       }
     });
-  }
-
-  void _filterAppliedListener() {
-    widget.selectedFiles.clearAll();
-    _updateGalleryTypeIfRequired();
-  }
-
-  // Once the initial filter is removed, this remains a search-results gallery.
-  void _updateGalleryTypeIfRequired() {
-    if (_galleryInitialFilterStillApplied != null &&
-        !_galleryInitialFilterStillApplied!) {
-      return;
-    }
-
-    final appliedFilters = _searchFilterDataProvider!.appliedFilters;
-    final initialFilter = _searchFilterDataProvider!.initialGalleryFilter;
-    bool initalFilterIsInAppliedFiters = false;
-    for (HierarchicalSearchFilter filter in appliedFilters) {
-      if (filter.isSameFilter(initialFilter)) {
-        initalFilterIsInAppliedFiters = true;
-        break;
-      }
-      if (initialFilter is FaceFilter) {
-        for (HierarchicalSearchFilter filter in appliedFilters) {
-          if (filter is OnlyThemFilter) {
-            if (filter.faceFilters.any(
-              (faceFilter) => faceFilter.isSameFilter(initialFilter),
-            )) {
-              initalFilterIsInAppliedFiters = true;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    if (!initalFilterIsInAppliedFiters) {
-      setState(() {
-        _galleryInitialFilterStillApplied = false;
-        _galleryType = GalleryType.searchResults;
-      });
-    } else {
-      _galleryInitialFilterStillApplied = true;
-    }
   }
 }
 

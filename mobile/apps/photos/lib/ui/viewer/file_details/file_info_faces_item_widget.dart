@@ -18,7 +18,6 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart"
@@ -196,9 +195,7 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
     }
 
     // Offline fork: manual tagging works locally, keyed by `mlFileID`.
-    if ((!isLocalGalleryMode || kOfflineFork) &&
-        kOfflineManualTagFileToPerson &&
-        widget.file.mlFileID != null) {
+    if (kOfflineManualTagFileToPerson && widget.file.mlFileID != null) {
       children.add(_buildAddFaceThumbnail(onTap: _openAddFilesToPersonPage));
     }
 
@@ -299,7 +296,6 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
     // Offline fork: manual tagging works locally. In local gallery mode a
     // file gets its `mlFileID` when it is queued for indexing.
     final showManualTagOption =
-        (!isLocalGalleryMode || kOfflineFork) &&
         widget.file.mlFileID != null &&
         kOfflineManualTagFileToPerson &&
         reason == NoFacesReason.noFacesFound;
@@ -427,10 +423,6 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
   }
 
   Widget _editStateButton() {
-    // Offline fork: face edit mode works locally.
-    if (isLocalGalleryMode && !kOfflineFork) {
-      return const SizedBox.shrink();
-    }
     final Widget action;
     if (_isEditMode) {
       final hasSelection = _selectedFaceInfos().isNotEmpty;
@@ -599,48 +591,27 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
   }
 
   Future<_FaceDataResult> _fetchFaceData() async {
-    final bool isLocalGallery = isLocalGalleryMode;
-    int? fileKey;
-    if (isLocalGallery) {
-      final localId = widget.file.localID;
-      if (localId == null || localId.isEmpty) {
-        return _FaceDataResult(
-          defaultFaces: [],
-          remainingFaces: [],
-          manualPersons: const [],
-          errorReason: NoFacesReason.fileNotUploaded,
-        );
-      }
-      fileKey = await OfflineFilesDB.instance.getOrCreateLocalIntId(localId);
-    } else {
-      if (widget.file.uploadedFileID == null) {
-        return _FaceDataResult(
-          defaultFaces: [],
-          remainingFaces: [],
-          manualPersons: const [],
-          errorReason: NoFacesReason.fileNotUploaded,
-        );
-      }
-      fileKey = widget.file.uploadedFileID!;
+    final localId = widget.file.localID;
+    if (localId == null || localId.isEmpty) {
+      return _FaceDataResult(
+        defaultFaces: [],
+        remainingFaces: [],
+        manualPersons: const [],
+        errorReason: NoFacesReason.fileNotUploaded,
+      );
     }
+    final int fileKey = await OfflineFilesDB.instance.getOrCreateLocalIntId(
+      localId,
+    );
 
-    // Offline fork: persons exist locally, so the person data is loaded in
-    // local gallery mode too.
-    final bool personsUnavailable = isLocalGallery && !kOfflineFork;
     // Manual assignments can exist even when no faces were detected.
-    final persons = personsUnavailable
-        ? <String, PersonEntity>{}
-        : await PersonService.instance.getPersonsMap();
+    final persons = await PersonService.instance.getPersonsMap();
 
-    final mlDataDB = isLocalGallery
-        ? MLDataDB.localGalleryInstance
-        : MLDataDB.instance;
+    final mlDataDB = MLDataDB.localGalleryInstance;
     final faces = await mlDataDB.getFacesForGivenFileID(fileKey);
 
     if (faces == null) {
-      final manualPersons = personsUnavailable
-          ? const <PersonEntity>[]
-          : _getManualPersonsForFile(persons, [], []);
+      final manualPersons = _getManualPersonsForFile(persons, [], []);
       return _FaceDataResult(
         defaultFaces: [],
         remainingFaces: [],
@@ -654,9 +625,7 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
     final faceIdsToClusterIds = await mlDataDB.getFaceIdsToClusterIds(
       faces.map((face) => face.faceID).toList(),
     );
-    final clusterIDToPerson = personsUnavailable
-        ? <String, String>{}
-        : await mlDataDB.getClusterIDToPersonID();
+    final clusterIDToPerson = await mlDataDB.getClusterIDToPersonID();
     final defaultFaces = <FaceWithoutEmbedding>[];
     final remainingFaces = <FaceWithoutEmbedding>[];
 
@@ -678,9 +647,7 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
       }
     }
     if (defaultFaces.isEmpty && remainingFaces.isEmpty) {
-      final manualPersons = personsUnavailable
-          ? const <PersonEntity>[]
-          : _getManualPersonsForFile(persons, [], []);
+      final manualPersons = _getManualPersonsForFile(persons, [], []);
       return _FaceDataResult(
         defaultFaces: [],
         remainingFaces: [],
@@ -697,9 +664,7 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
     );
 
     if (faceCrops == null) {
-      final manualPersons = personsUnavailable
-          ? const <PersonEntity>[]
-          : _getManualPersonsForFile(persons, [], []);
+      final manualPersons = _getManualPersonsForFile(persons, [], []);
       return _FaceDataResult(
         defaultFaces: [],
         remainingFaces: [],

@@ -17,8 +17,7 @@ abstract class SuperIsolate {
   Timer? _inactivityTimer;
   // Offline fork (S25 tuning): upstream was a fixed 60 seconds for every
   // isolate. Only the ML indexing isolate gets the longer timeout.
-  Duration get _inactivityDuration =>
-      kOfflineFork && isolateName == "MLIndexingIsolate"
+  Duration get _inactivityDuration => isolateName == "MLIndexingIsolate"
       ? kOfflineMlIndexingIsolateIdleTimeout
       : const Duration(seconds: 60);
   int _activeTasks = 0;

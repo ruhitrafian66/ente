@@ -5,8 +5,6 @@ import "package:ente_strings/ente_strings.dart";
 import "package:ente_ui/models/settings_search_item.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
-import "package:photos/core/configuration.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/ui/settings/about/about_us_page.dart";
 import "package:photos/ui/settings/appearance/appearance_settings_page.dart";
@@ -19,8 +17,6 @@ import "package:photos/ui/settings/security/security_settings_page.dart";
 class SettingsSearchRegistry {
   static List<SettingsSearchItem> getSearchableItems(BuildContext context) {
     final l10n = context.strings;
-    final hasLoggedIn = Configuration.instance.isLoggedIn();
-    final isLocalGallery = isLocalGalleryMode;
     final showThemeControls = Platform.isAndroid || kDebugMode;
     final items = <SettingsSearchItem>[];
 
@@ -162,106 +158,100 @@ class SettingsSearchRegistry {
       ),
     );
 
-    if (hasLoggedIn || isLocalGallery) {
-      items.add(
-        SettingsSearchItem(
-          title: l10n.machineLearning,
-          sectionPath: l10n.machineLearning,
-          icon: HugeIcons.strokeRoundedMagicWand01,
-          routeBuilder: (_) => const MachineLearningSettingsPage(),
-          keywords: [
-            "ml",
-            "ai",
-            "faces",
-            "people",
-            "magic search",
-            "similar images",
-            "duplicates",
-          ],
-        ),
-      );
+    items.add(
+      SettingsSearchItem(
+        title: l10n.machineLearning,
+        sectionPath: l10n.machineLearning,
+        icon: HugeIcons.strokeRoundedMagicWand01,
+        routeBuilder: (_) => const MachineLearningSettingsPage(),
+        keywords: [
+          "ml",
+          "ai",
+          "faces",
+          "people",
+          "magic search",
+          "similar images",
+          "duplicates",
+        ],
+      ),
+    );
 
-      items.add(
-        SettingsSearchItem(
-          title: l10n.localIndexing,
-          subtitle: l10n.machineLearning,
-          sectionPath: l10n.machineLearning,
-          icon: HugeIcons.strokeRoundedDatabase01,
-          routeBuilder: (_) => const MachineLearningSettingsPage(),
-          isSubPage: true,
-          keywords: ["indexing", "local", "on-device"],
-        ),
-      );
-    }
+    items.add(
+      SettingsSearchItem(
+        title: l10n.localIndexing,
+        subtitle: l10n.machineLearning,
+        sectionPath: l10n.machineLearning,
+        icon: HugeIcons.strokeRoundedDatabase01,
+        routeBuilder: (_) => const MachineLearningSettingsPage(),
+        isSubPage: true,
+        keywords: ["indexing", "local", "on-device"],
+      ),
+    );
 
-    if (hasLoggedIn || isLocalGallery) {
-      items.addAll([
+    items.addAll([
+      SettingsSearchItem(
+        title: l10n.memories,
+        sectionPath: l10n.memories,
+        icon: HugeIcons.strokeRoundedSparkles,
+        routeBuilder: (_) => const MemoriesSettingsScreen(),
+        keywords: ["flashback", "reminder", "highlights"],
+      ),
+      SettingsSearchItem(
+        title: l10n.showMemories,
+        subtitle: l10n.memories,
+        sectionPath: l10n.memories,
+        icon: HugeIcons.strokeRoundedSparkles,
+        routeBuilder: (_) => const MemoriesSettingsScreen(),
+        isSubPage: true,
+        keywords: ["show", "memories", "highlights"],
+      ),
+      if (memoriesCacheService.curatedMemoriesOption)
         SettingsSearchItem(
-          title: l10n.memories,
-          sectionPath: l10n.memories,
-          icon: HugeIcons.strokeRoundedSparkles,
-          routeBuilder: (_) => const MemoriesSettingsScreen(),
-          keywords: ["flashback", "reminder", "highlights"],
-        ),
-        SettingsSearchItem(
-          title: l10n.showMemories,
+          title: l10n.curatedMemories,
           subtitle: l10n.memories,
           sectionPath: l10n.memories,
           icon: HugeIcons.strokeRoundedSparkles,
           routeBuilder: (_) => const MemoriesSettingsScreen(),
           isSubPage: true,
-          keywords: ["show", "memories", "highlights"],
+          keywords: ["curated", "smart", "memories"],
         ),
-        if (memoriesCacheService.curatedMemoriesOption)
-          SettingsSearchItem(
-            title: l10n.curatedMemories,
-            subtitle: l10n.memories,
-            sectionPath: l10n.memories,
-            icon: HugeIcons.strokeRoundedSparkles,
-            routeBuilder: (_) => const MemoriesSettingsScreen(),
-            isSubPage: true,
-            keywords: ["curated", "smart", "memories"],
-          ),
-      ]);
-    }
+    ]);
 
     // Offline fork: the "Free up space" screen holds the device-only tools.
-    if (kOfflineFork) {
-      items.addAll([
-        SettingsSearchItem(
-          title: l10n.freeUpSpace,
-          sectionPath: l10n.freeUpSpace,
-          icon: HugeIcons.strokeRoundedRocket01,
-          routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
-          keywords: ["storage", "space", "clean", "delete", "local", "device"],
-        ),
-        SettingsSearchItem(
-          title: "Exact duplicates", // Offline fork: not localized
-          subtitle: l10n.freeUpSpace,
-          sectionPath: l10n.freeUpSpace,
-          icon: HugeIcons.strokeRoundedCopy01,
-          routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
-          isSubPage: true,
-          keywords: [
-            "duplicate",
-            "duplicates",
-            "same",
-            "identical",
-            "copy",
-            "copies",
-          ],
-        ),
-        SettingsSearchItem(
-          title: "Convert PNG to JPG", // Offline fork: not localized
-          subtitle: l10n.freeUpSpace,
-          sectionPath: l10n.freeUpSpace,
-          icon: HugeIcons.strokeRoundedImageCrop,
-          routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
-          isSubPage: true,
-          keywords: ["png", "jpg", "jpeg", "convert", "compress"],
-        ),
-      ]);
-    }
+    items.addAll([
+      SettingsSearchItem(
+        title: l10n.freeUpSpace,
+        sectionPath: l10n.freeUpSpace,
+        icon: HugeIcons.strokeRoundedRocket01,
+        routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
+        keywords: ["storage", "space", "clean", "delete", "local", "device"],
+      ),
+      SettingsSearchItem(
+        title: "Exact duplicates", // Offline fork: not localized
+        subtitle: l10n.freeUpSpace,
+        sectionPath: l10n.freeUpSpace,
+        icon: HugeIcons.strokeRoundedCopy01,
+        routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
+        isSubPage: true,
+        keywords: [
+          "duplicate",
+          "duplicates",
+          "same",
+          "identical",
+          "copy",
+          "copies",
+        ],
+      ),
+      SettingsSearchItem(
+        title: "Convert PNG to JPG", // Offline fork: not localized
+        subtitle: l10n.freeUpSpace,
+        sectionPath: l10n.freeUpSpace,
+        icon: HugeIcons.strokeRoundedImageCrop,
+        routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
+        isSubPage: true,
+        keywords: ["png", "jpg", "jpeg", "convert", "compress"],
+      ),
+    ]);
 
     items.add(
       SettingsSearchItem(

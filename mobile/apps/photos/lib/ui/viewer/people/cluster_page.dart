@@ -4,7 +4,6 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:photos/core/event_bus.dart";
-import "package:photos/events/app_mode_changed_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/local_photos_updated_event.dart";
 import "package:photos/events/people_changed_event.dart";
@@ -67,7 +66,6 @@ class _ClusterPageState extends State<ClusterPage> {
   late final List<EnteFile> files;
   late final StreamSubscription<LocalPhotosUpdatedEvent> _filesUpdatedEvent;
   late final StreamSubscription<PeopleChangedEvent> _peopleChangedEvent;
-  late final StreamSubscription<AppModeChangedEvent> _appModeChangedEvent;
   late final ValueNotifier<Set<String>> _timelineNotifier;
   late final VoidCallback _timelineListener;
 
@@ -110,11 +108,6 @@ class _ClusterPageState extends State<ClusterPage> {
         }
       }
     });
-    _appModeChangedEvent = Bus.instance.on<AppModeChangedEvent>().listen((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
     _timelineNotifier = MemoryLaneService.instance.readyPersonIds;
     _timelineListener = () {
       if (mounted) setState(() {});
@@ -134,7 +127,6 @@ class _ClusterPageState extends State<ClusterPage> {
   void dispose() {
     _filesUpdatedEvent.cancel();
     _peopleChangedEvent.cancel();
-    _appModeChangedEvent.cancel();
     _timelineNotifier.removeListener(_timelineListener);
     if (ClusterFeedbackService.lastViewedClusterID == widget.clusterID) {
       ClusterFeedbackService.resetLastViewedClusterID();

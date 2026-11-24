@@ -15,8 +15,7 @@ class HomeHeaderWidget extends StatefulWidget {
 class _HomeHeaderWidgetState extends State<HomeHeaderWidget> {
   @override
   Widget build(BuildContext context) {
-    final showAddAlbumAction =
-        !isLocalGalleryMode || permissionService.hasGrantedLimitedPermissions();
+    final showAddAlbumAction = permissionService.hasGrantedLimitedPermissions();
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [

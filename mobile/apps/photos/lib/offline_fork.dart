@@ -3,10 +3,6 @@
 // This fork always runs in local gallery mode, never signs in to an Ente
 // account, and never uses the network. See CLAUDE.md at the repository root.
 
-/// True for every build of this fork. Kept as a named constant so each
-/// deviation from upstream is easy to grep for.
-const bool kOfflineFork = true;
-
 /// Only the face models ship inside the APK. CLIP (semantic search), pet
 /// recognition and OCR need models that are not bundled, so they stay off.
 const bool kOfflineRunClip = false;

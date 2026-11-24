@@ -93,7 +93,7 @@ class SmartMemoriesService {
     TimeLogger t,
   ) async {
     try {
-      if (isLocalGalleryMode && memoriesResult.isEmpty) {
+      if (memoriesResult.isEmpty) {
         _logger.severe(
           "Smart memories returned empty in local gallery mode, falling back to simple memories",
         );
@@ -115,20 +115,18 @@ class SmartMemoriesService {
   }
 
   Future<MemoriesResult> _fallbackAfterCalculationError() async {
-    if (isLocalGalleryMode) {
-      try {
-        _logger.warning(
-          "Falling back to simple memories after smart memories failure in local gallery mode",
-        );
-        final fallbackMemories = await calcSimpleMemories();
-        return MemoriesResult(fallbackMemories, <BaseLocation>[]);
-      } catch (fallbackError, fallbackStackTrace) {
-        _logger.severe(
-          "Offline fallback to simple memories failed",
-          fallbackError,
-          fallbackStackTrace,
-        );
-      }
+    try {
+      _logger.warning(
+        "Falling back to simple memories after smart memories failure in local gallery mode",
+      );
+      final fallbackMemories = await calcSimpleMemories();
+      return MemoriesResult(fallbackMemories, <BaseLocation>[]);
+    } catch (fallbackError, fallbackStackTrace) {
+      _logger.severe(
+        "Offline fallback to simple memories failed",
+        fallbackError,
+        fallbackStackTrace,
+      );
     }
     return MemoriesResult.failed();
   }

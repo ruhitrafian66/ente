@@ -12,7 +12,6 @@ import "package:photos/db/ml/base.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/ml/rust_db.dart";
 import "package:photos/db/offline_files_db.dart";
-import "package:photos/events/app_mode_changed_event.dart";
 import "package:photos/events/compute_control_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/local_photos_updated_event.dart";
@@ -38,7 +37,6 @@ import "package:photos/services/person_folders/person_folder_service.dart";
 import "package:photos/services/search_service.dart";
 import "package:photos/utils/isolate/isolate_operations.dart";
 import "package:photos/utils/ml_util.dart";
-import "package:photos/utils/network_util.dart";
 import "package:photos/utils/ram_check_util.dart";
 
 class MLService {
@@ -81,9 +79,7 @@ class MLService {
         : _kForceClusteringFaceCount;
   }
 
-  FaceClustering get _faceClustering => isLocalGalleryMode
-      ? FaceClustering.localGalleryInstance
-      : FaceClustering.instance;
+  FaceClustering get _faceClustering => FaceClustering.localGalleryInstance;
 
   IMLDataDB<int> _dbForMode(MLMode mode) {
     return mode == MLMode.localGallery
@@ -127,11 +123,6 @@ class MLService {
         );
         stopActiveRun(MlStopReason.controller);
       }
-    });
-    // Every setAppMode call site fires this event, so a latched stop fully
-    // replaces polled mode checks inside the pipeline.
-    Bus.instance.on<AppModeChangedEvent>().listen((_) {
-      stopActiveRun(MlStopReason.modeChanged);
     });
     _syncMlControllerStatusForBg();
 
@@ -235,9 +226,7 @@ class MLService {
       _logger.info("runAllML skipped, app is not resumed");
       return MlRunDisposition.denied;
     }
-    final MLMode mode = isLocalGalleryMode
-        ? MLMode.localGallery
-        : MLMode.enteGallery;
+    const MLMode mode = MLMode.localGallery;
     if (force) {
       _mlControllerStatus = true;
     }
@@ -521,15 +510,6 @@ class MLService {
           }
           await MLIndexingIsolate.instance.cleanupLocalIndexingModels();
           continue;
-        } else if (!(isLocalGalleryMode || await canUseHighBandwidth())) {
-          _logger.info(
-            'stopping indexing because user is not connected to wifi and in online mode',
-          );
-          if (maxFilesToIndex != null) {
-            allowImageIndexing = false;
-            continue;
-          }
-          break;
         } else {
           await MLModelDownloadService.instance.ensureModelsDownloaded(
             onlyIndexingModels: true,
@@ -585,7 +565,6 @@ class MLService {
       // sessions warm in the foreground; the isolate idle timeout releases
       // them later through MLIndexingIsolate.onDispose.
       final keepRuntimeWarm =
-          kOfflineFork &&
           !isProcessBg &&
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
       if (!keepRuntimeWarm) {
@@ -626,28 +605,22 @@ class MLService {
     final clusterAllImagesTime = DateTime.now();
 
     final faceIdNotToCluster = <String, List<String>>{};
-    // Offline fork: persons are local, so "not this person" feedback also
-    // applies in local gallery mode.
-    if (!isLocalGalleryMode || kOfflineFork) {
-      _logger.info('Pulling remote feedback before actually clustering');
-      await PersonService.instance.sync();
-      final persons = await PersonService.instance.getPersons();
-      for (final person in persons) {
-        if (person.data.rejectedFaceIDs.isNotEmpty) {
-          final personClusters = person.data.assigned.map((e) => e.id).toList();
-          for (final faceID in person.data.rejectedFaceIDs) {
-            faceIdNotToCluster[faceID] = personClusters;
-          }
+    // Offline fork: persons are local, so "not this person" feedback applies.
+    _logger.info('Pulling remote feedback before actually clustering');
+    await PersonService.instance.sync();
+    final persons = await PersonService.instance.getPersons();
+    for (final person in persons) {
+      if (person.data.rejectedFaceIDs.isNotEmpty) {
+        final personClusters = person.data.assigned.map((e) => e.id).toList();
+        for (final faceID in person.data.rejectedFaceIDs) {
+          faceIdNotToCluster[faceID] = personClusters;
         }
       }
-    } else {
-      _logger.info("Skipping person metadata in local gallery mode");
     }
 
     try {
-      final fileIDToCreationTime = isLocalGalleryMode
-          ? await _getLocalGalleryFileIdToCreationTime()
-          : await FilesDB.instance.getFileIDToCreationTime();
+      final fileIDToCreationTime =
+          await _getLocalGalleryFileIdToCreationTime();
       await faceClustering.clusterAllFaces(
         fileIDToCreationTime: fileIDToCreationTime,
         rejectedClusterIDsByFaceID: faceIdNotToCluster,
@@ -806,7 +779,6 @@ class MLService {
     final localID = file.localID;
     if (!Platform.isAndroid ||
         !instruction.isLocalGallery ||
-        !isLocalGalleryMode ||
         localID == null ||
         localID.isEmpty ||
         file.isSharedMediaToAppSandbox) {
@@ -823,7 +795,6 @@ class MLService {
       }
       if (await permissionService.getPermissionState() !=
               PermissionState.authorized ||
-          !isLocalGalleryMode ||
           file.localID != localID ||
           (file.uploadedFileID != null && file.uploadedFileID != -1)) {
         return false;

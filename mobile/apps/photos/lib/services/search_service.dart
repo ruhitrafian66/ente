@@ -38,7 +38,6 @@ import "package:photos/models/search/hierarchical/top_level_generic_filter.dart"
 import "package:photos/models/search/hierarchical/uploader_filter.dart";
 import "package:photos/models/search/search_constants.dart";
 import "package:photos/models/search/search_types.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/date_parse_service.dart";
 import "package:photos/services/filter/db_filters.dart";
@@ -150,14 +149,11 @@ class SearchService {
   }
 
   Future<Map<int, EnteFile>> _getFilesByUploadedID() {
-    // Offline fork: keyed by `mlFileID`, which is the local int ID in local
-    // gallery mode and the uploaded file ID in account mode.
+    // Offline fork: keyed by `mlFileID`, which is the local int ID.
     return _cachedFilesByUploadedID ??= getAllFilesForSearch().then((
       files,
     ) async {
-      if (isLocalGalleryMode) {
-        await OfflineFilesDB.instance.refreshIntIdCache();
-      }
+      await OfflineFilesDB.instance.refreshIntIdCache();
       final filesByUploadedID = <int, EnteFile>{};
       for (final file in files) {
         final uploadedID = file.mlFileID;
@@ -210,7 +206,7 @@ class SearchService {
     String query,
     Set<String> localFileIDs,
   ) async {
-    if (!isLocalGalleryMode || localFileIDs.isEmpty) {
+    if (localFileIDs.isEmpty) {
       return [];
     }
 
@@ -1041,100 +1037,8 @@ class SearchService {
     String coverHeroTagPrefix = "people_search",
   }) async {
     try {
-      // Offline fork: persons exist locally, so the cluster-only local gallery
-      // branch below is bypassed and the full person-aware path runs.
-      if (isLocalGalleryMode && !kOfflineFork) {
-        final effectiveMinClusterSize = minClusterSize > 1 ? 1 : minClusterSize;
-        if (showIgnoredOnly) {
-          return [];
-        }
-        debugPrint("getting faces (localGallery)");
-        final localGalleryMlDb = MLDataDB.localGalleryInstance;
-        final Map<int, Set<String>> fileIdToClusterID = await localGalleryMlDb
-            .getFileIdToClusterIds();
-        if (fileIdToClusterID.isEmpty) {
-          return [];
-        }
-        final localIntIds = fileIdToClusterID.keys.toSet();
-        final localIdMap = await OfflineFilesDB.instance.getLocalIdsForIntIds(
-          localIntIds,
-        );
-        final allFiles = await getAllFilesForSearch();
-        final localIdToFile = <String, EnteFile>{};
-        for (final file in allFiles) {
-          final localId = file.localID;
-          if (localId != null && localId.isNotEmpty) {
-            localIdToFile[localId] = file;
-          }
-        }
-        final Map<String, List<EnteFile>> clusterIdToFiles = {};
-        for (final entry in fileIdToClusterID.entries) {
-          final localId = localIdMap[entry.key];
-          if (localId == null) continue;
-          final file = localIdToFile[localId];
-          if (file == null) continue;
-          for (final cluster in entry.value) {
-            clusterIdToFiles.putIfAbsent(cluster, () => []).add(file);
-          }
-        }
-        final List<GenericSearchResult> facesResult = [];
-        final sortedClusterIds = clusterIdToFiles.keys.toList()
-          ..sort(
-            (a, b) => clusterIdToFiles[b]!.length.compareTo(
-              clusterIdToFiles[a]!.length,
-            ),
-          );
-        for (final clusterId in sortedClusterIds) {
-          final files = clusterIdToFiles[clusterId]!;
-          if (files.length < effectiveMinClusterSize) continue;
-          facesResult.add(
-            GenericSearchResult(
-              ResultType.faces,
-              "",
-              files,
-              params: {kClusterParamId: clusterId},
-              onResultTap: (ctx) {
-                routeToPage(
-                  ctx,
-                  ClusterPage(
-                    files,
-                    tagPrefix: "${ResultType.faces.toString()}_$clusterId",
-                    coverHeroTag: PersonFaceWidget.coverHeroTag(
-                      tagPrefix: coverHeroTagPrefix,
-                      clusterID: clusterId,
-                    ),
-                    clusterID: clusterId,
-                    showNamingBanner: false,
-                  ),
-                  useFadeTransition: true,
-                );
-              },
-              hierarchicalSearchFilter: FaceFilter(
-                personId: null,
-                clusterId: clusterId,
-                faceName: null,
-                faceFile: files.first,
-                occurrence: kMostRelevantFilter,
-                matchedUploadedIDs: filesToUploadedFileIDs(files),
-              ),
-            ),
-          );
-        }
-        if (facesResult.isEmpty) return [];
-        sortPeopleFaces(
-          facesResult,
-          PeopleSortConfig(
-            sortKey: localSettings.peopleSortKey(),
-            nameSortAscending: localSettings.peopleNameSortAscending,
-            updatedSortAscending: localSettings.peopleUpdatedSortAscending,
-            photosSortAscending: localSettings.peoplePhotosSortAscending,
-          ),
-        );
-        if (limit != null) {
-          return facesResult.sublist(0, min(limit, facesResult.length));
-        }
-        return facesResult;
-      }
+      // Offline fork: persons exist locally, so the full person-aware path
+      // runs. The upstream cluster-only local gallery branch is removed.
       debugPrint("getting faces");
       final Map<int, Set<String>> fileIdToClusterID = await mlDataDB
           .getFileIdToClusterIds();

@@ -1,7 +1,5 @@
 import "package:dio/dio.dart";
-import "package:ente_install_source/ente_install_source.dart";
 import "package:package_info_plus/package_info_plus.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/core/network/endpoint_config.dart";
 import "package:photos/db/ml/db.dart";
@@ -76,9 +74,6 @@ EnteWakeLockService get wakeLockService =>
 MlDecryptionRecordStore get mlDecryptionRecordStore =>
     ServiceLocator.instance.mlDecryptionRecordStore;
 
-// True when showing local-device photos instead of an Ente account. Network
-// access may still be used.
-bool get isLocalGalleryMode => localSettings.isLocalGalleryMode;
 
 bool get hasGrantedMLConsent => localSettings.localGalleryMLConsent;
 
@@ -162,16 +157,6 @@ PermissionService? _permissionService;
 PermissionService get permissionService {
   _permissionService ??= PermissionService(ServiceLocator.instance.prefs);
   return _permissionService!;
-}
-
-InstallSourceService? _installSourceService;
-InstallSourceService get installSourceService {
-  _installSourceService ??= InstallSourceService(
-    ServiceLocator.instance.enteDio,
-    app: "photos",
-    getToken: Configuration.instance.getToken,
-  );
-  return _installSourceService!;
 }
 
 UsersGateway? _usersGateway;

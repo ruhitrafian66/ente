@@ -54,47 +54,11 @@ class _NotificationSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final l10n = context.strings;
-    final service = NotificationService.instance;
-    final showOnlyOnThisDay = isLocalGalleryMode;
 
+    // Local gallery: only the "on this day" notification exists.
     return SettingsPageScaffold(
       title: l10n.notifications,
       children: [
-        if (!showOnlyOnThisDay) ...[
-          SettingsItem(
-            title: l10n.sharedPhotoNotifications,
-            subtitle: l10n.sharedPhotoNotificationsExplanation,
-            subtitleMaxLines: 2,
-            showChevron: false,
-            trailing: ToggleSwitchComponent.async(
-              value: () =>
-                  _hasPermission &&
-                  service.shouldShowNotificationsForSharedPhotosAndAlbums(),
-              onChanged: () => _toggleWithPermission(
-                service.shouldShowNotificationsForSharedPhotosAndAlbums,
-                service.setShouldShowNotificationsForSharedPhotosAndAlbums,
-              ).ignore(),
-              showStateIcon: false,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SettingsItem(
-            title: l10n.socialNotifications,
-            subtitle: l10n.socialNotificationsExplanation,
-            subtitleMaxLines: 2,
-            showChevron: false,
-            trailing: ToggleSwitchComponent.async(
-              value: () =>
-                  _hasPermission && service.shouldShowSocialNotifications(),
-              onChanged: () => _toggleWithPermission(
-                service.shouldShowSocialNotifications,
-                service.setShouldShowSocialNotifications,
-              ).ignore(),
-              showStateIcon: false,
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
         SettingsItem(
           title: l10n.onThisDayMemories,
           subtitle: l10n.onThisDayNotificationExplanation,
@@ -110,24 +74,6 @@ class _NotificationSettingsScreenState
             showStateIcon: false,
           ),
         ),
-        if (!showOnlyOnThisDay) ...[
-          const SizedBox(height: 8),
-          SettingsItem(
-            title: l10n.birthdays,
-            subtitle: l10n.receiveRemindersOnBirthdays,
-            subtitleMaxLines: 2,
-            showChevron: false,
-            trailing: ToggleSwitchComponent.async(
-              value: () =>
-                  _hasPermission && localSettings.birthdayNotificationsEnabled,
-              onChanged: () => _toggleWithPermission(
-                () => localSettings.birthdayNotificationsEnabled,
-                memoriesCacheService.setBirthdayNotifications,
-              ).ignore(),
-              showStateIcon: false,
-            ),
-          ),
-        ],
       ],
     );
   }

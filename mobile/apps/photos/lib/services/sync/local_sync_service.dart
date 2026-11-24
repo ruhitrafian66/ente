@@ -135,7 +135,6 @@ class LocalSyncService {
       }
       if (!hasCompletedFirstImport()) {
         await _prefs.setBool(kHasCompletedFirstImportKey, true);
-        await localSettings.setIsFromLocalGalleryToEnte(true);
         if (backupPreferenceService.hasSkippedOnboardingPermission) {
           await backupPreferenceService.setOnboardingPermissionSkipped(false);
         }

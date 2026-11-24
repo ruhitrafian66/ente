@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import "package:local_auth/local_auth.dart";
 import "package:logging/logging.dart";
 import "package:photo_manager/photo_manager.dart";
-import 'package:photos/core/configuration.dart';
 import "package:photos/core/constants.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/force_reload_trash_page_event.dart";
@@ -31,7 +30,6 @@ import 'package:photos/ui/components/buttons/button_widget.dart';
 import 'package:photos/ui/components/models/button_type.dart';
 import 'package:photos/ui/notification/toast.dart';
 import "package:photos/ui/tools/collage/collage_creator_page.dart";
-import "package:photos/ui/viewer/date/edit_date_sheet.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/people/add_files_to_person_page.dart";
 import 'package:photos/utils/delete_file_util.dart';
@@ -66,8 +64,6 @@ class FileSelectionActionsWidget extends StatefulWidget {
 class _FileSelectionActionsWidgetState
     extends State<FileSelectionActionsWidget> {
   static final _logger = Logger("FileSelectionActionsWidget");
-  late int currentUserID;
-  late FilesSplit split;
   bool _isUpdatingPersonCover = false;
   final GlobalKey shareButtonKey = GlobalKey();
   final StreamController<double> _progressController =
@@ -76,13 +72,7 @@ class _FileSelectionActionsWidgetState
   @override
   void initState() {
     super.initState();
-    currentUserID = Configuration.instance.getUserID() ?? -1;
-
-    split = FilesSplit.split(<EnteFile>[], currentUserID);
     widget.selectedFiles.addListener(_selectFileChangeListener);
-    if (widget.selectedFiles.files.isNotEmpty) {
-      _selectFileChangeListener();
-    }
   }
 
   @override
@@ -93,7 +83,6 @@ class _FileSelectionActionsWidgetState
   }
 
   void _selectFileChangeListener() {
-    split = FilesSplit.split(widget.selectedFiles.files, currentUserID);
     if (mounted) {
       setState(() => {});
     }
@@ -104,15 +93,6 @@ class _FileSelectionActionsWidgetState
     if (widget.selectedFiles.files.isEmpty) {
       return const SizedBox();
     }
-    final ownedFilesCount = split.ownedByCurrentUser.length;
-    final ownedAndPendingUploadFilesCount =
-        ownedFilesCount + split.pendingUploads.length;
-    final bool anyOwnedFiles =
-        split.pendingUploads.isNotEmpty || split.ownedByCurrentUser.isNotEmpty;
-    final bool allOwnedFiles =
-        ownedAndPendingUploadFilesCount > 0 && split.ownedByOtherUsers.isEmpty;
-
-    final bool anyUploadedFiles = split.ownedByCurrentUser.isNotEmpty;
     // Offline fork: people actions need an ML file ID, not an upload.
     final bool hasMlFileIDs = widget.selectedFiles.files.any(
       (file) => file.mlFileID != null,
@@ -159,8 +139,9 @@ class _FileSelectionActionsWidgetState
             hugeIcon: HugeIcons.strokeRoundedDelete01,
             labelText: context.strings.delete,
             gridOrder: 3,
-            onTap: anyOwnedFiles ? _onDeleteClick : null,
-            shouldShow: allOwnedFiles,
+            // Offline fork: every device file has no owner, so delete is
+            // always available.
+            onTap: _onDeleteClick,
             isCritical: true,
           ),
         );
@@ -211,16 +192,12 @@ class _FileSelectionActionsWidgetState
         );
         // Offline fork: local files are never "owned uploads", so the cover
         // action depends on the selection count and the ML file ID.
-        if (kOfflineFork
-            ? widget.selectedFiles.files.length == 1
-            : ownedFilesCount == 1) {
+        if (widget.selectedFiles.files.length == 1) {
           items.add(
             SelectionSheetAction(
               hugeIcon: HugeIcons.strokeRoundedImage01,
               labelText: context.strings.useAsCover,
-              onTap: (kOfflineFork ? hasMlFileIDs : anyUploadedFiles)
-                  ? _setPersonCover
-                  : null,
+              onTap: hasMlFileIDs ? _setPersonCover : null,
             ),
           );
         }
@@ -268,27 +245,6 @@ class _FileSelectionActionsWidgetState
         );
       }
 
-      if (widget.type.showBulkEditTime()) {
-        items.add(
-          SelectionSheetAction(
-            shouldShow: widget.selectedFiles.files.every(
-              (element) => (element.ownerID == currentUserID),
-            ),
-            labelText: context.strings.editTime,
-            hugeIcon: HugeIcons.strokeRoundedClock01,
-            onTap: () async {
-              final newDate = await showEditDateSheet(
-                context,
-                widget.selectedFiles.files,
-              );
-              if (newDate != null) {
-                widget.selectedFiles.clearAll();
-              }
-            },
-          ),
-        );
-      }
-
       items.add(
         SelectionSheetAction(
           hugeIcon: HugeIcons.strokeRoundedIncognito,
@@ -311,7 +267,13 @@ class _FileSelectionActionsWidgetState
   }
 
   Future<void> _onDeleteClick() async {
-    return showDeleteSheet(context, widget.selectedFiles, split);
+    // Offline fork: there is no account, so no file has an owner. The split
+    // puts every device file in `pendingUploads`, which the sheet can delete.
+    return showDeleteSheet(
+      context,
+      widget.selectedFiles,
+      FilesSplit.split(widget.selectedFiles.files, -1),
+    );
   }
 
   Future<void> _onAddFilesToPerson() async {

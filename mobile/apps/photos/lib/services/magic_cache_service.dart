@@ -265,9 +265,8 @@ class MagicCacheService {
     });
   }
 
-  String get _lastMagicCacheUpdateKey => isLocalGalleryMode
-      ? "${_lastMagicCacheUpdateTime}_offline"
-      : _lastMagicCacheUpdateTime;
+  // Keep the "_offline" suffix: it is the local gallery pref key.
+  String get _lastMagicCacheUpdateKey => "${_lastMagicCacheUpdateTime}_offline";
 
   Future<void> _resetLastMagicCacheUpdateTime() async {
     await _prefs.setInt(
@@ -321,9 +320,9 @@ class MagicCacheService {
   }
 
   Future<String> _getCachePath() async {
-    final suffix = isLocalGalleryMode ? "_offline" : "";
+    // Keep the "_offline" suffix: it is the local gallery cache file.
     return (await getApplicationSupportDirectory()).path +
-        "/cache/magic_cache$suffix";
+        "/cache/magic_cache_offline";
   }
 
   Future<void> updateCache({bool forced = false}) =>
@@ -492,121 +491,71 @@ class MagicCacheService {
         w?.log("cacheFound");
       }
       final List<GenericSearchResult> genericSearchResults = [];
-      final promptByTitle = <String, Prompt>{};
-      for (final prompt in prompts) {
-        promptByTitle[prompt.title] = prompt;
-      }
       final List<EnteFile> files = await SearchService.instance
           .getAllFilesForSearch();
 
-      if (!isLocalGalleryMode) {
-        final Map<String, List<EnteFile>> magicIdToFiles = {};
-        final Map<String, Map<int, int>> promptFileOrder = {};
-        final Map<int, List<String>> uploadedIdToMagicTitles = {};
-        for (final cache in magicCaches) {
-          magicIdToFiles[cache.title] = [];
-          promptFileOrder[cache.title] = cache.fileIdToPositionMap;
-          for (final uploadedId in cache.fileIdToPositionMap.keys) {
-            uploadedIdToMagicTitles
-                .putIfAbsent(uploadedId, () => <String>[])
-                .add(cache.title);
-          }
+      final cacheByTitle = <String, MagicCache>{};
+      final localIntIds = <int>{};
+      for (final cache in magicCaches) {
+        cacheByTitle[cache.title] = cache;
+        if (cache.fileLocalIntIDs != null) {
+          localIntIds.addAll(cache.fileLocalIntIDs!);
         }
-        for (EnteFile file in files) {
-          if (!file.isUploaded) continue;
-          final uploadedId = file.uploadedFileID;
-          if (uploadedId == null) {
-            continue;
-          }
-          final magicTitles = uploadedIdToMagicTitles[uploadedId];
-          if (magicTitles == null) {
-            continue;
-          }
-          for (final magicTitle in magicTitles) {
-            if (file.isVideo &&
-                (promptByTitle[magicTitle]?.showVideo ?? true) == false) {
-              continue;
-            }
-            magicIdToFiles[magicTitle]!.add(file);
+      }
+      if (localIntIds.isNotEmpty) {
+        final localIdMap = await OfflineFilesDB.instance.getLocalIdsForIntIds(
+          localIntIds,
+        );
+        final localIdToIntId = <String, int>{};
+        for (final entry in localIdMap.entries) {
+          localIdToIntId[entry.value] = entry.key;
+        }
+        final neededLocalIds = localIdMap.values.toSet();
+        final localIdToFile = <String, EnteFile>{};
+        for (final file in files) {
+          final localId = file.localID;
+          if (localId != null && neededLocalIds.contains(localId)) {
+            localIdToFile[localId] = file;
           }
         }
         for (final p in prompts) {
+          final cache = cacheByTitle[p.title];
+          final localIntIdsForPrompt = cache?.fileLocalIntIDs ?? const <int>[];
+          final filesForPrompt = <EnteFile>[];
+          for (final localIntId in localIntIdsForPrompt) {
+            final localId = localIdMap[localIntId];
+            final file = localId != null ? localIdToFile[localId] : null;
+            if (file == null) continue;
+            if (file.isVideo && !p.showVideo) {
+              continue;
+            }
+            filesForPrompt.add(file);
+          }
+          final fileIdToPosMap = <int, int>{};
+          for (int i = 0; i < filesForPrompt.length; i++) {
+            final localId = filesForPrompt[i].localID;
+            final fileId = localId != null ? localIdToIntId[localId] : null;
+            if (fileId != null) {
+              fileIdToPosMap[fileId] = i;
+            }
+          }
+          if (p.recentFirst && filesForPrompt.length > 1) {
+            sortLocalGalleryMagicFilesByCreationTime(
+              filesForPrompt,
+              fileIdToPosMap,
+              localIdToIntId,
+            );
+          }
           if (!context.mounted) return const [];
           final genericSearchResult = toGenericSearchResult(
             context,
             p,
-            magicIdToFiles[p.title] ?? [],
-            promptFileOrder[p.title] ?? {},
+            filesForPrompt,
+            fileIdToPosMap,
+            localIdToIntId: localIdToIntId,
           );
           if (genericSearchResult != null) {
             genericSearchResults.add(genericSearchResult);
-          }
-        }
-      } else {
-        final cacheByTitle = <String, MagicCache>{};
-        final localIntIds = <int>{};
-        for (final cache in magicCaches) {
-          cacheByTitle[cache.title] = cache;
-          if (cache.fileLocalIntIDs != null) {
-            localIntIds.addAll(cache.fileLocalIntIDs!);
-          }
-        }
-        if (localIntIds.isNotEmpty) {
-          final localIdMap = await OfflineFilesDB.instance.getLocalIdsForIntIds(
-            localIntIds,
-          );
-          final localIdToIntId = <String, int>{};
-          for (final entry in localIdMap.entries) {
-            localIdToIntId[entry.value] = entry.key;
-          }
-          final neededLocalIds = localIdMap.values.toSet();
-          final localIdToFile = <String, EnteFile>{};
-          for (final file in files) {
-            final localId = file.localID;
-            if (localId != null && neededLocalIds.contains(localId)) {
-              localIdToFile[localId] = file;
-            }
-          }
-          for (final p in prompts) {
-            final cache = cacheByTitle[p.title];
-            final localIntIdsForPrompt =
-                cache?.fileLocalIntIDs ?? const <int>[];
-            final filesForPrompt = <EnteFile>[];
-            for (final localIntId in localIntIdsForPrompt) {
-              final localId = localIdMap[localIntId];
-              final file = localId != null ? localIdToFile[localId] : null;
-              if (file == null) continue;
-              if (file.isVideo && !p.showVideo) {
-                continue;
-              }
-              filesForPrompt.add(file);
-            }
-            final fileIdToPosMap = <int, int>{};
-            for (int i = 0; i < filesForPrompt.length; i++) {
-              final localId = filesForPrompt[i].localID;
-              final fileId = localId != null ? localIdToIntId[localId] : null;
-              if (fileId != null) {
-                fileIdToPosMap[fileId] = i;
-              }
-            }
-            if (p.recentFirst && filesForPrompt.length > 1) {
-              sortLocalGalleryMagicFilesByCreationTime(
-                filesForPrompt,
-                fileIdToPosMap,
-                localIdToIntId,
-              );
-            }
-            if (!context.mounted) return const [];
-            final genericSearchResult = toGenericSearchResult(
-              context,
-              p,
-              filesForPrompt,
-              fileIdToPosMap,
-              localIdToIntId: localIdToIntId,
-            );
-            if (genericSearchResult != null) {
-              genericSearchResults.add(genericSearchResult);
-            }
           }
         }
       }
@@ -634,11 +583,7 @@ class MagicCacheService {
       final List<int> matchedIds = clipResults[prompt.query] ?? [];
       if (matchedIds.isNotEmpty) {
         results.add(
-          MagicCache(
-            prompt.title,
-            isLocalGalleryMode ? const <int>[] : matchedIds,
-            fileLocalIntIDs: isLocalGalleryMode ? matchedIds : null,
-          ),
+          MagicCache(prompt.title, const <int>[], fileLocalIntIDs: matchedIds),
         );
       }
       matchCount.add(matchedIds.length);

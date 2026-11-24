@@ -12,8 +12,6 @@ import "package:photos/models/base/id.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/face/person.dart";
-import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_ml/face_detection/detection.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
@@ -86,10 +84,7 @@ class _FileInfoFaceWidgetState extends State<FileInfoFaceWidget> {
                   : isEditMode
                   ? hasPerson
                         ? _onMinusIconTap
-                        // Offline fork: a face can get a name locally.
-                        : (isLocalGalleryMode && !kOfflineFork
-                              ? null
-                              : _onPlusIconTap)
+                        : _onPlusIconTap
                   : _routeToPersonOrClusterPage,
               onLongPress: isEditMode && !isSelectionMode && !hasPerson
                   ? widget.onLongPressSelected
@@ -209,11 +204,8 @@ class _FileInfoFaceWidgetState extends State<FileInfoFaceWidget> {
   }
 
   Future<void> _routeToPersonOrClusterPage() async {
-    final mlDataDB = isLocalGalleryMode
-        ? MLDataDB.localGalleryInstance
-        : MLDataDB.instance;
-    // Offline fork: persons exist locally, so open the person page.
-    if ((!isLocalGalleryMode || kOfflineFork) && widget.person != null) {
+    final mlDataDB = MLDataDB.localGalleryInstance;
+    if (widget.person != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) =>
@@ -226,59 +218,35 @@ class _FileInfoFaceWidgetState extends State<FileInfoFaceWidget> {
         widget.clusterID ??
         await mlDataDB.getClusterIDForFaceID(widget.face.faceID);
     if (clusterID != null) {
-      final fileIdsToClusterIds = isLocalGalleryMode
-          ? await mlDataDB.getFileIdToClusterIds()
-          : await mlDataDB.getFileIdToClusterIDSetForCluster({clusterID});
+      final fileIdsToClusterIds = await mlDataDB.getFileIdToClusterIds();
       final files = await SearchService.instance.getAllFilesForSearch();
-      List<EnteFile> clusterFiles;
-      if (isLocalGalleryMode) {
-        final localIntIds = fileIdsToClusterIds.keys.toSet();
-        final localIdMap = await OfflineFilesDB.instance.getLocalIdsForIntIds(
-          localIntIds,
-        );
-        final localIdToFile = <String, EnteFile>{};
-        for (final file in files) {
-          final localId = file.localID;
-          if (localId != null && localId.isNotEmpty) {
-            localIdToFile[localId] = file;
-          }
+      final localIntIds = fileIdsToClusterIds.keys.toSet();
+      final localIdMap = await OfflineFilesDB.instance.getLocalIdsForIntIds(
+        localIntIds,
+      );
+      final localIdToFile = <String, EnteFile>{};
+      for (final file in files) {
+        final localId = file.localID;
+        if (localId != null && localId.isNotEmpty) {
+          localIdToFile[localId] = file;
         }
-        clusterFiles = [];
-        for (final entry in fileIdsToClusterIds.entries) {
-          if (!entry.value.contains(clusterID)) continue;
-          final localId = localIdMap[entry.key];
-          if (localId == null) continue;
-          final file = localIdToFile[localId];
-          if (file != null) {
-            clusterFiles.add(file);
-          }
+      }
+      final clusterFiles = <EnteFile>[];
+      for (final entry in fileIdsToClusterIds.entries) {
+        if (!entry.value.contains(clusterID)) continue;
+        final localId = localIdMap[entry.key];
+        if (localId == null) continue;
+        final file = localIdToFile[localId];
+        if (file != null) {
+          clusterFiles.add(file);
         }
-      } else {
-        clusterFiles = files
-            .where(
-              (file) =>
-                  fileIdsToClusterIds[file.uploadedFileID]?.contains(
-                    clusterID,
-                  ) ??
-                  false,
-            )
-            .toList();
       }
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => ClusterPage(
-            clusterFiles,
-            clusterID: clusterID,
-            // Offline fork: the save-person banner also shows locally.
-            showNamingBanner: !isLocalGalleryMode || kOfflineFork,
-          ),
+          builder: (context) => ClusterPage(clusterFiles, clusterID: clusterID),
         ),
       );
-      return;
-    }
-    // Offline fork: unclustered faces follow the normal flow.
-    if (isLocalGalleryMode && !kOfflineFork) {
       return;
     }
     if (widget.face.score <= kMinimumQualityFaceScore) {

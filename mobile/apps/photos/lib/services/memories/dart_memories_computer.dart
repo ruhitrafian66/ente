@@ -7,7 +7,6 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/foundation.dart" show kDebugMode, visibleForTesting;
 import "package:logging/logging.dart";
 import "package:ml_linalg/vector.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/constants.dart";
 import "package:photos/db/ml/base.dart";
 import "package:photos/db/ml/db.dart";
@@ -30,7 +29,6 @@ import "package:photos/models/ml/face/person.dart";
 import "package:photos/models/ml/vector.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/location_service.dart";
-import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/ml_model_download_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/memories/memories_computation_context.dart";
@@ -70,7 +68,6 @@ class DartMemoriesComputer implements MemoriesComputer {
   static const _minimumUnnamedPeopleWithMePhotos = minimumMemoryLength;
   static const _minimumUnnamedPeopleNonGroupPhotos = minimumMemoryLength;
   static const _minimumUnnamedPeopleNonConsecutiveDays = 4;
-  static const _minimumNamedPeopleBeforeDisablingUnnamedFallback = 5;
   static const _unnamedClusterPersonIDPrefix = "cluster:";
   static const _debugForceUnnamedClustersOnly = false;
 
@@ -81,9 +78,7 @@ class DartMemoriesComputer implements MemoriesComputer {
   Future<bool> isMlReady() async {
     if (!_mlEnabled) return false;
     try {
-      final mlDataDB = isLocalGalleryMode
-          ? MLDataDB.localGalleryInstance
-          : MLDataDB.instance;
+      final mlDataDB = MLDataDB.localGalleryInstance;
       final clipIndexed = await mlDataDB.getClipIndexedFileCount();
       if (clipIndexed < minimumMemoryLength) {
         return false;
@@ -218,8 +213,8 @@ class DartMemoriesComputer implements MemoriesComputer {
     required TimeLogger timeLogger,
   }) async {
     final allFileIdsToFile = await getFilesAndMapForMemories(
-      useLocalIntIds: isLocalGalleryMode,
-      requireLocalId: isLocalGalleryMode,
+      useLocalIntIds: true,
+      requireLocalId: true,
     );
     _logger.info("All files length: ${allFileIdsToFile.length} $timeLogger");
 
@@ -232,12 +227,10 @@ class DartMemoriesComputer implements MemoriesComputer {
     final seenTimes = await memoriesDB.getSeenTimes();
     _logger.info('seenTimes has ${seenTimes.length} entries $timeLogger');
 
-    final mlDataDB = isLocalGalleryMode
-        ? MLDataDB.localGalleryInstance
-        : MLDataDB.instance;
-    final allPersons = (!mlEnabled || isLocalGalleryMode)
-        ? const <PersonEntity>[]
-        : await PersonService.instance.getPersons();
+    final mlDataDB = MLDataDB.localGalleryInstance;
+    // Offline fork: upstream loads no persons for memories in local gallery
+    // mode, which is the only mode here.
+    const allPersons = <PersonEntity>[];
     final persons = allPersons
         .where((person) => !person.data.hideFromMemories)
         .toList();
@@ -246,14 +239,7 @@ class DartMemoriesComputer implements MemoriesComputer {
     );
     final bool unnamedPeopleFallbackEnabled =
         mlEnabled && localSettings.showLocalGalleryModeOption;
-    final amountOfNonIgnoredPersons = persons
-        .where((person) => !person.data.isIgnored)
-        .length;
-    final canUseUnnamedFallback =
-        unnamedPeopleFallbackEnabled &&
-        (isLocalGalleryMode ||
-            amountOfNonIgnoredPersons <
-                _minimumNamedPeopleBeforeDisablingUnnamedFallback);
+    final canUseUnnamedFallback = unnamedPeopleFallbackEnabled;
     final shouldLoadUnnamedClusterData =
         unnamedPeopleFallbackEnabled &&
         (canUseUnnamedFallback ||
@@ -265,11 +251,6 @@ class DartMemoriesComputer implements MemoriesComputer {
       shouldLoadUnnamedClusterData: shouldLoadUnnamedClusterData,
       t: timeLogger,
     );
-
-    final currentUserEmail = isLocalGalleryMode
-        ? null
-        : Configuration.instance.getEmail();
-    _logger.info('currentUserEmail: $currentUserEmail $timeLogger');
 
     final citySearchIndex = await locationService.getCitySearchIndex(
       allFileIdsToFile.values,
@@ -333,7 +314,6 @@ class DartMemoriesComputer implements MemoriesComputer {
     return MemoriesComputationContext(
       allFileIdsToFile: allFileIdsToFile,
       collectionIDsToExclude: collectionIDsToExclude,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       now: now,
       oldCache: oldCache,
@@ -341,7 +321,8 @@ class DartMemoriesComputer implements MemoriesComputer {
       canUseUnnamedFallback: canUseUnnamedFallback,
       seenTimes: seenTimes,
       persons: persons,
-      currentUserEmail: currentUserEmail,
+      // Offline fork: there is no account, so there is no user email.
+      currentUserEmail: null,
       citySearchIndex: citySearchIndex,
       fileIdToFaces: fileIdToFaces,
       clusterIdToFaceCount: unnamedClusterData.clusterIdToFaceCount,
@@ -371,19 +352,10 @@ class DartMemoriesComputer implements MemoriesComputer {
     similarityThreshold: similarityThreshold,
   );
 
-  static int? _memoryFileId(
-    EnteFile file, {
-    required bool isLocalGalleryMode,
-  }) =>
-      PhotoSelector.memoryFileId(file, isLocalGalleryMode: isLocalGalleryMode);
+  static int? _memoryFileId(EnteFile file) => PhotoSelector.memoryFileId(file);
 
-  static int? _memoryFileIdFromMemory(
-    Memory memory, {
-    required bool isLocalGalleryMode,
-  }) => PhotoSelector.memoryFileIdFromMemory(
-    memory,
-    isLocalGalleryMode: isLocalGalleryMode,
-  );
+  static int? _memoryFileIdFromMemory(Memory memory) =>
+      PhotoSelector.memoryFileIdFromMemory(memory);
 
   static bool _isTooCloseInTime(
     int? creationTime,
@@ -399,13 +371,11 @@ class DartMemoriesComputer implements MemoriesComputer {
     List<Memory> memories,
     Map<int, EmbeddingVector> fileIDToImageEmbedding, {
     int? minKeep,
-    required bool isLocalGalleryMode,
     double similarityThreshold = _clipSimilarImageThreshold,
   }) => PhotoSelector.filterNearDuplicates(
     memories,
     fileIDToImageEmbedding,
     minKeep: minKeep,
-    isLocalGalleryMode: isLocalGalleryMode,
     similarityThreshold: similarityThreshold,
   );
 
@@ -425,7 +395,6 @@ class DartMemoriesComputer implements MemoriesComputer {
     required Map<int, int> seenTimes,
     required int nowInMicroseconds,
     required int windowEnd,
-    required bool isLocalGalleryMode,
     required PeopleSelectionBuilder selectionBuilder,
   }) {
     if (clusterIdToFaceCount.isEmpty || clusterIdToFaceIDs.isEmpty) {
@@ -446,20 +415,10 @@ class DartMemoriesComputer implements MemoriesComputer {
       if (selected.length <= 1) return selected;
       int bestIdx = 0;
       int bestFaceCount =
-          fileIdToFaces[_memoryFileIdFromMemory(
-                selected[0],
-                isLocalGalleryMode: isLocalGalleryMode,
-              )]
-              ?.length ??
-          999;
+          fileIdToFaces[_memoryFileIdFromMemory(selected[0])]?.length ?? 999;
       for (int i = 1; i < selected.length; i++) {
         final faceCount =
-            fileIdToFaces[_memoryFileIdFromMemory(
-                  selected[i],
-                  isLocalGalleryMode: isLocalGalleryMode,
-                )]
-                ?.length ??
-            999;
+            fileIdToFaces[_memoryFileIdFromMemory(selected[i])]?.length ?? 999;
         if (faceCount < bestFaceCount) {
           bestFaceCount = faceCount;
           bestIdx = i;
@@ -662,9 +621,6 @@ class DartMemoriesComputer implements MemoriesComputer {
         computationContext,
         preparedData,
       );
-      if (currentResult.failed && !computationContext.isLocalGalleryMode) {
-        return <MemoriesResult>[currentResult, MemoriesResult.failed()];
-      }
       final nextCache = _cacheWithCurrentTrips(
         computationContext.oldCache,
         currentResult,
@@ -711,7 +667,6 @@ class DartMemoriesComputer implements MemoriesComputer {
       fileIndex.files,
       computationContext.allFileIdsToFile,
       computationContext.now,
-      isLocalGalleryMode: computationContext.isLocalGalleryMode,
       seenTimes: computationContext.seenTimes,
       citySearchIndex: computationContext.citySearchIndex,
     );
@@ -756,7 +711,6 @@ class DartMemoriesComputer implements MemoriesComputer {
           computationContext.allFileIdsToFile;
       final Set<int> collectionIDsToExclude =
           computationContext.collectionIDsToExclude;
-      final bool isLocalGalleryMode = computationContext.isLocalGalleryMode;
       final bool mlEnabled = computationContext.mlEnabled;
       final DateTime now = period ?? computationContext.now;
       final MemoriesCache oldCache = periodCache ?? computationContext.oldCache;
@@ -802,11 +756,7 @@ class DartMemoriesComputer implements MemoriesComputer {
         seenTimes: seenTimes,
         collectionIDsToExclude: collectionIDsToExclude,
       );
-      _markUsedMemories(
-        usedMemoryFileIds,
-        onThisDayMemories,
-        isLocalGalleryMode: isLocalGalleryMode,
-      );
+      _markUsedMemories(usedMemoryFileIds, onThisDayMemories);
       memories.addAll(onThisDayMemories);
       dev.log(
         "All files length after on this day: "
@@ -821,7 +771,6 @@ class DartMemoriesComputer implements MemoriesComputer {
           surfaceAll: debugSurfaceAll,
           seenTimes: seenTimes,
           persons: persons,
-          isLocalGalleryMode: isLocalGalleryMode,
           canUseUnnamedFallback: canUseUnnamedFallback,
           currentUserEmail: currentUserEmail,
           fileIdToFaces: fileIdToFaces,
@@ -832,11 +781,7 @@ class DartMemoriesComputer implements MemoriesComputer {
           clipPositiveTextVector: clipPositiveTextVector,
           clipPeopleActivityVectors: clipPeopleActivityVectors,
         );
-        _markUsedMemories(
-          usedMemoryFileIds,
-          peopleMemories,
-          isLocalGalleryMode: isLocalGalleryMode,
-        );
+        _markUsedMemories(usedMemoryFileIds, peopleMemories);
         memories.addAll(peopleMemories);
         dev.log(
           "All files length after people: "
@@ -853,7 +798,6 @@ class DartMemoriesComputer implements MemoriesComputer {
         shownTrips: oldCache.tripsShownLogs,
         surfaceAll: debugSurfaceAll,
         cachedTripMemories: oldCache.toShowMemories,
-        isLocalGalleryMode: isLocalGalleryMode,
         mlEnabled: mlEnabled,
         seenTimes: seenTimes,
         fileIdToFaces: fileIdToFaces,
@@ -862,11 +806,7 @@ class DartMemoriesComputer implements MemoriesComputer {
         clipPositiveTextVector: clipPositiveTextVector,
         citySearchIndex: citySearchIndex,
       );
-      _markUsedMemories(
-        usedMemoryFileIds,
-        tripMemories,
-        isLocalGalleryMode: isLocalGalleryMode,
-      );
+      _markUsedMemories(usedMemoryFileIds, tripMemories);
       memories.addAll(tripMemories);
       dev.log(
         "All files length after trips: "
@@ -879,16 +819,11 @@ class DartMemoriesComputer implements MemoriesComputer {
           now,
           oldCache.clipShownLogs,
           surfaceAll: debugSurfaceAll,
-          isLocalGalleryMode: isLocalGalleryMode,
           seenTimes: seenTimes,
           fileIDToImageEmbedding: fileIDToImageEmbedding,
           clipMemoryTypeVectors: clipMemoryTypeVectors,
         );
-        _markUsedMemories(
-          usedMemoryFileIds,
-          clipMemories,
-          isLocalGalleryMode: isLocalGalleryMode,
-        );
+        _markUsedMemories(usedMemoryFileIds, clipMemories);
         memories.addAll(clipMemories);
         dev.log(
           "All files length after clip memories: "
@@ -901,7 +836,6 @@ class DartMemoriesComputer implements MemoriesComputer {
       final timeFiles = _collectAvailableCandidates(
         TimeMemoriesCalculator._filesForTimeMemories(fileIndex, now),
         usedMemoryFileIds,
-        isLocalGalleryMode: isLocalGalleryMode,
       );
       final timeMemories = await _onThisDayOrWeekResults(
         timeFiles,
@@ -914,7 +848,6 @@ class DartMemoriesComputer implements MemoriesComputer {
           allFileIdsToFile,
           usedMemoryFileIds,
         ),
-        isLocalGalleryMode: isLocalGalleryMode,
         mlEnabled: mlEnabled,
         seenTimes: seenTimes,
         fileIdToFaces: fileIdToFaces,
@@ -922,11 +855,7 @@ class DartMemoriesComputer implements MemoriesComputer {
         fileIDToImageEmbedding: fileIDToImageEmbedding,
         clipPositiveTextVector: clipPositiveTextVector,
       );
-      _markUsedMemories(
-        usedMemoryFileIds,
-        timeMemories,
-        isLocalGalleryMode: isLocalGalleryMode,
-      );
+      _markUsedMemories(usedMemoryFileIds, timeMemories);
       memories.addAll(timeMemories);
       dev.log(
         "All files length after time: "
@@ -936,18 +865,13 @@ class DartMemoriesComputer implements MemoriesComputer {
       final fillerFiles = _collectAvailableCandidates(
         TimeMemoriesCalculator._filesForHistoricalWindow(fileIndex, now),
         usedMemoryFileIds,
-        isLocalGalleryMode: isLocalGalleryMode,
       );
       final fillerMemories = await _getFillerResults(
         fillerFiles,
         now,
         seenTimes: seenTimes,
       );
-      _markUsedMemories(
-        usedMemoryFileIds,
-        fillerMemories,
-        isLocalGalleryMode: isLocalGalleryMode,
-      );
+      _markUsedMemories(usedMemoryFileIds, fillerMemories);
       memories.addAll(fillerMemories);
       dev.log(
         "All files length after filler: "
@@ -965,21 +889,19 @@ class DartMemoriesComputer implements MemoriesComputer {
   Future<List<SmartMemory>> computeSimple() async {
     final now = DateTime.now();
     final allFileIdsToFile = await getFilesAndMapForMemories(
-      useLocalIntIds: isLocalGalleryMode,
-      requireLocalId: isLocalGalleryMode,
+      useLocalIntIds: true,
+      requireLocalId: true,
     );
     final fileIndex = MemoryFileIndex(allFileIdsToFile.values);
     final usedMemoryFileIds = <int>{};
     final seenTimes = await memoriesDB.getSeenTimes();
     final collectionIDsToExclude = await getCollectionIDsToExclude();
-    final localIdToIntId = isLocalGalleryMode
-        ? await OfflineFilesDB.instance.ensureLocalIntIds(
-            allFileIdsToFile.values
-                .map((file) => file.localID)
-                .whereType<String>()
-                .where((id) => id.isNotEmpty),
-          )
-        : <String, int>{};
+    final localIdToIntId = await OfflineFilesDB.instance.ensureLocalIntIds(
+      allFileIdsToFile.values
+          .map((file) => file.localID)
+          .whereType<String>()
+          .where((id) => id.isNotEmpty),
+    );
 
     final List<SmartMemory> memories = [];
 
@@ -993,15 +915,12 @@ class DartMemoriesComputer implements MemoriesComputer {
     if (onThisDayMemories.isNotEmpty &&
         onThisDayMemories.first.shouldShowNow()) {
       memories.add(onThisDayMemories.first);
-      _markUsedMemories(usedMemoryFileIds, [
-        onThisDayMemories.first,
-      ], isLocalGalleryMode: isLocalGalleryMode);
+      _markUsedMemories(usedMemoryFileIds, [onThisDayMemories.first]);
     }
 
     final fillerFiles = _collectAvailableCandidates(
       TimeMemoriesCalculator._filesForHistoricalWindow(fileIndex, now),
       usedMemoryFileIds,
-      isLocalGalleryMode: isLocalGalleryMode,
     );
     final fillerMemories = await _getFillerResults(
       fillerFiles,
@@ -1015,15 +934,11 @@ class DartMemoriesComputer implements MemoriesComputer {
 
   static List<EnteFile> _collectAvailableCandidates(
     Iterable<EnteFile> candidates,
-    Set<int> usedMemoryFileIds, {
-    required bool isLocalGalleryMode,
-  }) {
+    Set<int> usedMemoryFileIds,
+  ) {
     final availableFiles = <EnteFile>[];
     for (final file in candidates) {
-      final fileID = _memoryFileId(
-        file,
-        isLocalGalleryMode: isLocalGalleryMode,
-      );
+      final fileID = _memoryFileId(file);
       if (fileID != null && usedMemoryFileIds.contains(fileID)) {
         continue;
       }
@@ -1041,15 +956,11 @@ class DartMemoriesComputer implements MemoriesComputer {
 
   static void _markUsedMemories(
     Set<int> usedMemoryFileIds,
-    Iterable<SmartMemory> memories, {
-    required bool isLocalGalleryMode,
-  }) {
+    Iterable<SmartMemory> memories,
+  ) {
     for (final memory in memories) {
       for (final fileMemory in memory.memories) {
-        final fileId = _memoryFileIdFromMemory(
-          fileMemory,
-          isLocalGalleryMode: isLocalGalleryMode,
-        );
+        final fileId = _memoryFileIdFromMemory(fileMemory);
         if (fileId != null) {
           usedMemoryFileIds.add(fileId);
         }
@@ -1064,7 +975,6 @@ class DartMemoriesComputer implements MemoriesComputer {
     bool surfaceAll = false,
     required Map<int, int> seenTimes,
     required List<PersonEntity> persons,
-    required bool isLocalGalleryMode,
     required bool canUseUnnamedFallback,
     String? currentUserEmail,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -1082,7 +992,6 @@ class DartMemoriesComputer implements MemoriesComputer {
       surfaceAll: surfaceAll,
       seenTimes: seenTimes,
       persons: persons,
-      isLocalGalleryMode: isLocalGalleryMode,
       canUseUnnamedFallback: canUseUnnamedFallback,
       currentUserEmail: currentUserEmail,
       fileIdToFaces: fileIdToFaces,
@@ -1100,7 +1009,6 @@ class DartMemoriesComputer implements MemoriesComputer {
     DateTime currentTime,
     List<ClipShownLog> shownClip, {
     bool surfaceAll = false,
-    required bool isLocalGalleryMode,
     required Map<int, int> seenTimes,
     required Map<int, EmbeddingVector> fileIDToImageEmbedding,
     required Map<ClipMemoryType, Vector> clipMemoryTypeVectors,
@@ -1110,7 +1018,6 @@ class DartMemoriesComputer implements MemoriesComputer {
       currentTime,
       shownClip,
       surfaceAll: surfaceAll,
-      isLocalGalleryMode: isLocalGalleryMode,
       seenTimes: seenTimes,
       fileIDToImageEmbedding: fileIDToImageEmbedding,
       clipMemoryTypeVectors: clipMemoryTypeVectors,
@@ -1124,7 +1031,6 @@ class DartMemoriesComputer implements MemoriesComputer {
     required List<TripsShownLog> shownTrips,
     bool surfaceAll = false,
     required Iterable<ToShowMemory> cachedTripMemories,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, int> seenTimes,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -1140,7 +1046,6 @@ class DartMemoriesComputer implements MemoriesComputer {
       shownTrips,
       surfaceAll: surfaceAll,
       cachedTripMemories: cachedTripMemories,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       seenTimes: seenTimes,
       fileIdToFaces: fileIdToFaces,
@@ -1156,7 +1061,6 @@ class DartMemoriesComputer implements MemoriesComputer {
     DateTime currentTime, {
     required Iterable<EnteFile> recentSourceFiles,
     required int totalAvailableFileCount,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, int> seenTimes,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -1169,7 +1073,6 @@ class DartMemoriesComputer implements MemoriesComputer {
       currentTime,
       recentSourceFiles: recentSourceFiles,
       totalAvailableFileCount: totalAvailableFileCount,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       seenTimes: seenTimes,
       fileIdToFaces: fileIdToFaces,
@@ -1290,13 +1193,11 @@ class DartMemoriesComputer implements MemoriesComputer {
   static Future<List<Memory>> _bestSelectionPeople(
     List<Memory> memories, {
     int? prefferedSize,
-    required bool isLocalGalleryMode,
     required Map<int, EmbeddingVector> fileIDToImageEmbedding,
     required Vector clipPositiveTextVector,
   }) => PhotoSelector.bestSelectionPeople(
     memories,
     prefferedSize: prefferedSize,
-    isLocalGalleryMode: isLocalGalleryMode,
     fileIDToImageEmbedding: fileIDToImageEmbedding,
     clipPositiveTextVector: clipPositiveTextVector,
   );
@@ -1305,7 +1206,6 @@ class DartMemoriesComputer implements MemoriesComputer {
     List<Memory> memories, {
     int? prefferedSize,
     SelectionDistribution? distributionOverride,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
     required Map<String, String> faceIDsToPersonID,
@@ -1315,7 +1215,6 @@ class DartMemoriesComputer implements MemoriesComputer {
     memories,
     prefferedSize: prefferedSize,
     distributionOverride: distributionOverride,
-    isLocalGalleryMode: isLocalGalleryMode,
     mlEnabled: mlEnabled,
     fileIdToFaces: fileIdToFaces,
     faceIDsToPersonID: faceIDsToPersonID,

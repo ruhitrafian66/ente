@@ -4,13 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
 import "package:photos/core/user_config.dart";
-import 'package:photos/db/device_files_db.dart';
 import 'package:photos/db/files_db.dart';
 import 'package:photos/events/files_updated_event.dart';
 import 'package:photos/events/force_reload_home_gallery_event.dart';
 import 'package:photos/events/local_photos_updated_event.dart';
 import 'package:photos/models/file/file.dart';
-import 'package:photos/models/file_load_result.dart';
 import 'package:photos/models/gallery_type.dart';
 import 'package:photos/models/selected_files.dart';
 import "package:photos/service_locator.dart";
@@ -41,7 +39,6 @@ class HomeGalleryWidget extends StatefulWidget {
 }
 
 class _HomeGalleryWidgetState extends State<HomeGalleryWidget> {
-  static const _maxFastAddFiles = 50;
   // Offline fork: the "hide shared items" setting screen is removed, so the
   // value cannot change while the app runs.
   final bool _shouldHideSharedItems =
@@ -68,31 +65,7 @@ class _HomeGalleryWidgetState extends State<HomeGalleryWidget> {
       return null;
     }
 
-    var candidates = files;
-    if (!isLocalGalleryMode) {
-      if (files.length > _maxFastAddFiles ||
-          !event.hasRecentNewLocalDiscovery) {
-        return null;
-      }
-      if (!backupPreferenceService.hasSelectedAllFoldersForBackup) {
-        final onlyNewSince = backupPreferenceService.onlyNewSinceEpoch;
-        if (onlyNewSince != null) {
-          candidates = candidates
-              .where((file) => file.creationTime! >= onlyNewSince)
-              .toList(growable: false);
-        }
-        final localIDs = candidates.map((file) => file.localID!).toSet();
-        final selectedLocalIDs = await FilesDB.instance
-            .getLocalIDsInBackupFolders(
-              localIDs,
-              filterOptions.ignoredCollectionIDs ?? {},
-            );
-        candidates = candidates
-            .where((file) => selectedLocalIDs.contains(file.localID))
-            .toList(growable: false);
-      }
-    }
-    return applyDBFilters(candidates, filterOptions);
+    return applyDBFilters(files, filterOptions);
   }
 
   @override
@@ -100,32 +73,14 @@ class _HomeGalleryWidgetState extends State<HomeGalleryWidget> {
     final gallery = Gallery(
       asyncLoader: (creationStartTime, creationEndTime, {limit, asc}) async {
         final ownerID = Configuration.instance.getUserIDV2();
-        final hasSelectedAllForBackup =
-            backupPreferenceService.hasSelectedAllFoldersForBackup ||
-            isLocalGalleryMode;
-        FileLoadResult result;
-        final filterOptions = _filterOptions;
-        if (hasSelectedAllForBackup) {
-          result = await FilesDB.instance.getAllLocalAndUploadedFiles(
-            creationStartTime,
-            creationEndTime,
-            ownerID,
-            limit: limit,
-            asc: asc,
-            filterOptions: filterOptions,
-          );
-        } else {
-          result = await FilesDB.instance.getAllPendingOrUploadedFiles(
-            creationStartTime,
-            creationEndTime,
-            ownerID,
-            limit: limit,
-            asc: asc,
-            filterOptions: filterOptions,
-          );
-        }
-
-        return result;
+        return FilesDB.instance.getAllLocalAndUploadedFiles(
+          creationStartTime,
+          creationEndTime,
+          ownerID,
+          limit: limit,
+          asc: asc,
+          filterOptions: _filterOptions,
+        );
       },
       reloadEvent: Bus.instance.on<LocalPhotosUpdatedEvent>(),
       removalEventTypes: const {

@@ -7,7 +7,6 @@ import "package:path/path.dart";
 import "package:path_provider/path_provider.dart";
 import "package:photos/db/ml/clip_vector_db.dart";
 import "package:photos/models/ml/vector.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/semantic_search/query_result.dart";
 import "package:photos/src/rust/api/usearch_api.dart";
 import "package:shared_preferences/shared_preferences.dart";
@@ -32,12 +31,7 @@ class UsearchClipVectorDB implements ClipVectorDB {
   // Offline fork: there is no account database. Every "account" singleton
   // resolves to the local gallery one, so person and feedback code that was
   // written for accounts works on the on-device data.
-  static UsearchClipVectorDB get instance =>
-      kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final UsearchClipVectorDB _accountInstance = UsearchClipVectorDB._privateConstructor(
-    "ente.ml.vectordb.clip.usearch",
-    "clip_vectordb_migration",
-  );
+  static UsearchClipVectorDB get instance => localGalleryInstance;
   static final localGalleryInstance = UsearchClipVectorDB._privateConstructor(
     "ente.ml.offline.vectordb.clip.usearch",
     "clip_vectordb_migration_offline",

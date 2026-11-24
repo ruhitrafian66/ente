@@ -6,14 +6,12 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
 import "package:photos/events/people_changed_event.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/notification/toast.dart";
@@ -24,10 +22,8 @@ import "package:photos/ui/viewer/gallery/hooks/pick_person_avatar.dart";
 import "package:photos/ui/viewer/people/merge_persons_offline.dart";
 import "package:photos/ui/viewer/people/person_cluster_suggestion.dart";
 import "package:photos/ui/viewer/people/person_face_widget.dart";
-import "package:photos/ui/viewer/people/reassign_me_selection_page.dart";
 import "package:photos/ui/viewer/people/save_or_edit_person.dart";
 import "package:photos/utils/dialog_util.dart";
-import "package:photos/utils/person_contact_linking_util.dart";
 
 const kShowUnnamedIgnoredPersonEventSource =
     "_AppBarWidgetState._showPersonUnnamedDelete";
@@ -106,7 +102,6 @@ enum PeoplePopupAction {
   removeLabel,
   reviewSuggestions,
   unignore,
-  reassignMe,
   memoryLane,
   // Offline fork: merge this person into another named person.
   mergeWithPerson,
@@ -119,25 +114,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
   bool isQuickLink = false;
   late GalleryType galleryType;
   late PersonEntity person;
-  late StreamSubscription<PeopleChangedEvent> _peopleChangedEventSubscription;
-
-  String? _resolveAppBarTitle({
-    required PersonEntity sourcePerson,
-    required String? title,
-  }) {
-    // Offline fork: there is no account, so no person is "me".
-    if (!kOfflineFork &&
-        isCurrentUserContactLink(
-          email: sourcePerson.data.email,
-          userID: sourcePerson.data.userID,
-        )) {
-      if (title == null) {
-        return context.strings.me;
-      }
-      return context.strings.accountOwnerPersonAppbarTitle(title: title);
-    }
-    return title;
-  }
 
   @override
   void initState() {
@@ -149,32 +125,13 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     };
 
     widget.selectedFiles.addListener(_selectedFilesListener);
-
-    _peopleChangedEventSubscription = Bus.instance
-        .on<PeopleChangedEvent>()
-        .listen((event) {
-          if (event.person != null &&
-              event.type == PeopleEventType.saveOrEditPerson &&
-              widget.person.remoteID == event.person!.remoteID &&
-              event.source == "reassignMe") {
-            person = event.person!;
-            setState(() {
-              _appBarTitle = _resolveAppBarTitle(
-                sourcePerson: person,
-                title: person.data.name,
-              );
-            });
-          }
-        });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _appBarTitle = _resolveAppBarTitle(
-      sourcePerson: person,
-      title: widget.title,
-    );
+    // Offline fork: there is no account, so no person is "me".
+    _appBarTitle = widget.title;
   }
 
   @override
@@ -186,17 +143,13 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
         oldWidget.person.data.email != widget.person.data.email ||
         oldWidget.person.data.userID != widget.person.data.userID) {
       person = widget.person;
-      _appBarTitle = _resolveAppBarTitle(
-        sourcePerson: person,
-        title: widget.title,
-      );
+      _appBarTitle = widget.title;
     }
   }
 
   @override
   void dispose() {
     widget.selectedFiles.removeListener(_selectedFilesListener);
-    _peopleChangedEventSubscription.cancel();
     super.dispose();
   }
 
@@ -253,9 +206,7 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     final bool hideFromMemories = person.data.hideFromMemories;
     final bool hasAssignedCluster = person.data.assigned.isNotEmpty;
     final List<Widget> actions = <Widget>[];
-    // Offline fork: person actions work without an account.
-    if (widget.selectedFiles.files.isNotEmpty ||
-        (!kOfflineFork && !Configuration.instance.hasConfiguredAccount())) {
+    if (widget.selectedFiles.files.isNotEmpty) {
       return actions;
     }
 
@@ -328,26 +279,12 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
           ),
         ),
         // Offline fork: person-to-person merge. Not localized.
-        if (kOfflineFork && person.data.name.trim().isNotEmpty)
+        if (person.data.name.trim().isNotEmpty)
           const EntePopupMenuOption(
             value: PeoplePopupAction.mergeWithPerson,
             label: "Merge with another person",
             leadingWidget: HugeIcon(
               icon: HugeIcons.strokeRoundedGitMerge,
-              size: IconSizes.small,
-            ),
-          ),
-        // Offline fork: "me" needs an account, so reassign never shows.
-        if (!kOfflineFork &&
-            isCurrentUserContactLink(
-              email: person.data.email,
-              userID: person.data.userID,
-            ))
-          EntePopupMenuOption(
-            value: PeoplePopupAction.reassignMe,
-            label: context.strings.reassignMe,
-            leadingWidget: const HugeIcon(
-              icon: HugeIcons.strokeRoundedUser,
               size: IconSizes.small,
             ),
           ),
@@ -437,8 +374,6 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
             await _showPerson(context);
           } else if (value == PeoplePopupAction.removeLabel) {
             await _resetPerson(context);
-          } else if (value == PeoplePopupAction.reassignMe) {
-            await _reassignMe(context);
           } else if (value == PeoplePopupAction.mergeWithPerson) {
             await _mergeWithAnotherPerson(context);
           }
@@ -591,10 +526,7 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
             );
             setState(() {
               person = updatedPerson;
-              _appBarTitle = _resolveAppBarTitle(
-                sourcePerson: person,
-                title: person.data.name,
-              );
+              _appBarTitle = person.data.name;
             });
             Bus.instance.fire(
               PeopleChangedEvent(
@@ -634,12 +566,5 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
         person = result;
       });
     }
-  }
-
-  Future<void> _reassignMe(BuildContext context) async {
-    await routeToPage(
-      context,
-      ReassignMeSelectionPage(currentMeId: widget.person.remoteID),
-    );
   }
 }

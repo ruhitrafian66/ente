@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_sort_order.dart";
-import "package:photos/models/metadata/collection_magic.dart";
 import "package:photos/models/metadata/file_magic.dart";
 import "package:photos/utils/file_sort_util.dart";
 
@@ -40,29 +39,6 @@ void main() {
     expect(files.map((file) => file.uploadedFileID), [3, 2, 1]);
     sortFilesByName(files, FileSortOrder.filenameDescending);
     expect(files.map((file) => file.uploadedFileID), [1, 2, 3]);
-  });
-
-  test("album metadata round-trips every sort and defaults to date", () {
-    for (final order in FileSortOrder.values) {
-      final metadata = CollectionPubMagicMetadata.fromMap(order.metadata);
-      expect(metadata.fileSortOrder, order);
-      expect(
-        CollectionPubMagicMetadata.fromMap(metadata.toJson()).fileSortOrder,
-        order,
-      );
-    }
-    expect(
-      CollectionPubMagicMetadata.fromMap({}).fileSortOrder,
-      FileSortOrder.newestFirst,
-    );
-    expect(
-      CollectionPubMagicMetadata.fromMap({
-        "sortBy": "unknown",
-        "asc": true,
-      }).fileSortOrder,
-      FileSortOrder.oldestFirst,
-    );
-    expect(FileSortOrder.newestFirst.metadata["sortBy"], "date");
   });
 }
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import "package:crypto/crypto.dart";
 import "package:ente_crypto/ente_crypto.dart";
@@ -11,12 +10,9 @@ import "package:photos/core/configuration.dart";
 import "package:photos/db/entities_db.dart";
 import "package:photos/db/files_db.dart";
 import "package:photos/gateways/entity/entity_gateway.dart";
-import "package:photos/gateways/entity/models/data.dart";
 import "package:photos/gateways/entity/models/key.dart";
 import "package:photos/gateways/entity/models/type.dart";
 import "package:photos/models/local_entity_data.dart";
-import "package:photos/offline_fork.dart";
-import "package:photos/utils/gzip.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
 class EntityService {
@@ -66,166 +62,30 @@ class EntityService {
     int? expectedUpdatedAt,
   }) async {
     final String plainText = jsonEncode(jsonMap);
-    if (kOfflineFork) {
-      // Offline fork: entities (persons) live only in the local entities
-      // table. No entity key, no encryption, no server round trip.
-      final localData = LocalEntityData(
-        id: id ?? "local_${nanoid()}",
-        type: type,
-        data: plainText,
-        ownerID: 0,
-        updatedAt: DateTime.now().microsecondsSinceEpoch,
-      );
-      await _db.upsertEntities([localData]);
-      return localData;
-    }
-    final key = await getOrCreateEntityKey(type);
-    late String encryptedData, header;
-    if (type.isZipped) {
-      final ChaChaEncryptionResult result = await gzipAndEncryptJson(
-        jsonMap,
-        key,
-      );
-      encryptedData = result.encData;
-      header = result.header;
-    } else {
-      final encryptedKeyData = await CryptoUtil.encryptChaCha(
-        utf8.encode(plainText),
-        key,
-      );
-      encryptedData = CryptoUtil.bin2base64(encryptedKeyData.encryptedData!);
-      header = CryptoUtil.bin2base64(encryptedKeyData.header!);
-    }
-    debugPrint(
-      " ${id == null ? 'Adding' : 'Updating'} entity of type: " + type.name,
-    );
-
-    final EntityData data = id == null || addWithCustomID
-        ? await _gateway.createEntity(type, id, encryptedData, header)
-        : await _gateway.updateEntity(
-            type,
-            id,
-            encryptedData,
-            header,
-            expectedUpdatedAt: expectedUpdatedAt,
-          );
+    // Offline fork: entities (persons) live only in the local entities
+    // table. No entity key, no encryption, no server round trip.
     final localData = LocalEntityData(
-      id: data.id,
+      id: id ?? "local_${nanoid()}",
       type: type,
       data: plainText,
-      ownerID: data.userID,
-      updatedAt: data.updatedAt,
+      ownerID: 0,
+      updatedAt: DateTime.now().microsecondsSinceEpoch,
     );
-
     await _db.upsertEntities([localData]);
-    syncEntities().ignore();
     return localData;
   }
 
   Future<void> deleteEntry(String id) async {
-    if (!kOfflineFork) await _gateway.deleteEntity(id);
     await _db.deleteEntities([id]);
   }
 
-  Future<void> syncEntities() async {
-    if (kOfflineFork) return;
-    try {
-      await _remoteToLocalSync(EntityType.location);
-      await _remoteToLocalSync(EntityType.cgroup);
-      await _remoteToLocalSync(EntityType.smartAlbum);
-    } catch (e) {
-      _logger.severe("Failed to sync entities", e);
-    }
-  }
+  // Offline fork: there is no server, so there is nothing to sync.
+  Future<void> syncEntities() async {}
 
-  Future<int> syncEntity(EntityType type) async {
-    if (kOfflineFork) return 0;
-    try {
-      return await _remoteToLocalSync(type);
-    } catch (e) {
-      _logger.severe("Failed to sync entities", e);
-      return -1;
-    }
-  }
+  Future<int> syncEntity(EntityType type) async => 0;
 
   int lastSyncTime(EntityType type) {
     return _prefs.getInt(_getEntityLastSyncTimePrefix(type)) ?? 0;
-  }
-
-  Future<int> _remoteToLocalSync(
-    EntityType type, {
-    int prevFetchCount = 0,
-  }) async {
-    final int lastSyncTime =
-        _prefs.getInt(_getEntityLastSyncTimePrefix(type)) ?? 0;
-    final List<EntityData> result = await _gateway.getDiff(
-      type,
-      lastSyncTime,
-      limit: fetchLimit,
-    );
-    if (result.isEmpty) {
-      return prevFetchCount;
-    }
-    final bool hasMoreItems = result.length == fetchLimit;
-    _logger.info("${result.length} entries of type $type fetched");
-    final maxSyncTime = result.map((e) => e.updatedAt).reduce(max);
-    final List<String> deletedIDs = result
-        .where((element) => element.isDeleted)
-        .map((e) => e.id)
-        .toList();
-    if (deletedIDs.isNotEmpty) {
-      _logger.info("${deletedIDs.length} entries of type $type deleted");
-      await _db.deleteEntities(deletedIDs);
-    }
-    result.removeWhere((element) => element.isDeleted);
-    if (result.isNotEmpty) {
-      final entityKey = await getOrCreateEntityKey(type);
-      final List<LocalEntityData> entities = [];
-      for (EntityData e in result) {
-        try {
-          late String plainText;
-          if (type.isZipped) {
-            final jsonMap = await decryptAndUnzipJson(
-              entityKey,
-              encryptedData: e.encryptedData!,
-              header: e.header!,
-            );
-            plainText = jsonEncode(jsonMap);
-          } else {
-            final Uint8List decryptedValue = await CryptoUtil.decryptChaCha(
-              CryptoUtil.base642bin(e.encryptedData!),
-              entityKey,
-              CryptoUtil.base642bin(e.header!),
-            );
-            plainText = utf8.decode(decryptedValue);
-          }
-          entities.add(
-            LocalEntityData(
-              id: e.id,
-              type: type,
-              data: plainText,
-              ownerID: e.userID,
-              updatedAt: e.updatedAt,
-            ),
-          );
-        } catch (e, s) {
-          _logger.severe("Failed to decrypted data for key $type", e, s);
-          rethrow;
-        }
-      }
-      if (entities.isNotEmpty) {
-        await _db.upsertEntities(entities);
-      }
-    }
-    await _prefs.setInt(_getEntityLastSyncTimePrefix(type), maxSyncTime);
-    if (hasMoreItems) {
-      _logger.info("Diff limit reached, pulling again");
-      await _remoteToLocalSync(
-        type,
-        prevFetchCount: prevFetchCount + result.length,
-      );
-    }
-    return prevFetchCount + result.length;
   }
 
   Future<Uint8List> getOrCreateEntityKey(EntityType type) async {

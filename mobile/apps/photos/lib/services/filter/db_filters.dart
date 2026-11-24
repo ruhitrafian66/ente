@@ -1,4 +1,3 @@
-import "package:photos/core/configuration.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/services/filter/collection_ignore.dart";
 import "package:photos/services/filter/dedupe_by_upload_id.dart";
@@ -55,7 +54,7 @@ Future<List<EnteFile>> applyDBFilters(
       options.ignoreSavedFiles) {
     final collectionIgnoreFilter = CollectionsAndSavedFileFilter(
       options.ignoredCollectionIDs ?? <int>{},
-      Configuration.instance.getUserID() ?? 0,
+      0,
       files,
       options.ignoreSavedFiles,
     );

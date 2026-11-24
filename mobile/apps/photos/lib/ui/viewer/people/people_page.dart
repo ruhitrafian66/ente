@@ -23,7 +23,6 @@ import "package:photos/services/search_service.dart";
 import 'package:photos/ui/viewer/actions/file_selection_overlay_bar.dart';
 import 'package:photos/ui/viewer/gallery/gallery.dart';
 import "package:photos/ui/viewer/gallery/gallery_app_bar_config.dart";
-import "package:photos/ui/viewer/gallery/hierarchical_search_gallery.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
 import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
@@ -279,29 +278,7 @@ class _PeoplePageState extends State<PeoplePage> {
               child: Stack(
                 alignment: Alignment.bottomCenter,
                 children: [
-                  Builder(
-                    builder: (context) {
-                      final inheritedSearchFilterData =
-                          InheritedSearchFilterData.of(context);
-                      if (!inheritedSearchFilterData.isHierarchicalSearchable) {
-                        return personGallery;
-                      }
-                      return ValueListenableBuilder(
-                        valueListenable: inheritedSearchFilterData
-                            .searchFilterDataProvider!
-                            .isSearchingNotifier,
-                        builder: (context, value, _) {
-                          return value
-                              ? HierarchicalSearchGallery(
-                                  tagPrefix: widget.tagPrefix,
-                                  selectedFiles: _selectedFiles,
-                                  appBar: appBar,
-                                )
-                              : personGallery;
-                        },
-                      );
-                    },
-                  ),
+                  personGallery,
                   FileSelectionOverlayBar(
                     PeoplePage.overlayType,
                     _selectedFiles,

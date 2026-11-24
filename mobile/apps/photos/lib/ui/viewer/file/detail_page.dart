@@ -14,9 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import "package:flutter_svg/flutter_svg.dart";
 import 'package:logging/logging.dart';
-import 'package:photos/core/configuration.dart';
 import 'package:photos/core/constants.dart';
-import 'package:photos/core/errors.dart';
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/file_caption_updated_event.dart";
 import "package:photos/events/guest_view_event.dart";
@@ -546,7 +544,6 @@ class _BodyState extends State<_Body> {
                       return FileBottomBar(
                         _files![selectedIndex],
                         onFileRemoved: _onFileRemoved,
-                        userID: Configuration.instance.getUserID(),
                         enableFullScreenNotifier: InheritedDetailPageState.of(
                           context,
                         ).enableFullScreenNotifier,
@@ -816,21 +813,6 @@ class _BodyState extends State<_Body> {
   }
 
   Future<void> _onEditFileRequested(EnteFile file) async {
-    if (file.uploadedFileID != null &&
-        file.ownerID != Configuration.instance.getUserID()) {
-      _logger.severe(
-        "Attempt to edit unowned file",
-        UnauthorizedEditError(),
-        StackTrace.current,
-      );
-      // ignore: unawaited_futures
-      showErrorDialog(
-        context,
-        context.strings.sorry,
-        context.strings.weDontSupportEditingPhotosAndAlbumsThatYouDont,
-      );
-      return;
-    }
     final dialog = createProgressDialog(context, context.strings.pleaseWait);
     await dialog.show();
 

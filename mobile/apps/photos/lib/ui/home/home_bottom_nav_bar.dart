@@ -9,7 +9,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/events/tab_changed_event.dart';
 import 'package:photos/models/home_tab.dart';
-import "package:photos/models/selected_albums.dart";
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/ui/tabs/nav_bar.dart';
 
@@ -19,17 +18,13 @@ const double _homeNavItemSpacing = 22;
 
 class HomeBottomNavigationBar extends StatefulWidget {
   const HomeBottomNavigationBar(
-    this.selectedFiles,
-    this.selectedAlbums, {
+    this.selectedFiles, {
     required this.selectedTabIndex,
-    required this.showFeed,
     super.key,
   });
 
   final SelectedFiles selectedFiles;
-  final SelectedAlbums selectedAlbums;
   final int selectedTabIndex;
-  final bool showFeed;
 
   @override
   State<HomeBottomNavigationBar> createState() =>
@@ -48,7 +43,6 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar> {
     super.initState();
     currentTabIndex = widget.selectedTabIndex;
     widget.selectedFiles.addListener(_selectedFilesListener);
-    widget.selectedAlbums.addListener(_selectedAlbumsListener);
     _tabChangedEventSubscription = Bus.instance.on<TabChangedEvent>().listen((
       event,
     ) {
@@ -73,17 +67,10 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar> {
   void dispose() {
     _tabChangedEventSubscription.cancel();
     widget.selectedFiles.removeListener(_selectedFilesListener);
-    widget.selectedAlbums.removeListener(_selectedAlbumsListener);
     super.dispose();
   }
 
   void _selectedFilesListener() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  void _selectedAlbumsListener() {
     if (mounted) {
       setState(() {});
     }
@@ -116,18 +103,15 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar> {
   @override
   Widget build(BuildContext context) {
     final bool filesAreSelected = widget.selectedFiles.files.isNotEmpty;
-    final bool albumsAreSelected = widget.selectedAlbums.albums.isNotEmpty;
 
     return SafeArea(
       child: RepaintBoundary(
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
-          height: filesAreSelected || albumsAreSelected
-              ? 0
-              : homeBottomNavigationBarHeight,
+          height: filesAreSelected ? 0 : homeBottomNavigationBarHeight,
           child: IgnorePointer(
-            ignoring: filesAreSelected || albumsAreSelected,
+            ignoring: filesAreSelected,
             child: ListView(
               physics: const NeverScrollableScrollPhysics(),
               children: [
@@ -136,7 +120,6 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar> {
                   children: [
                     _HomeNavBar(
                       selectedIndex: currentTabIndex,
-                      showFeed: widget.showFeed,
                       onTabChange: (index) {
                         _onTabChange(index, mode: "OnPressed");
                       },
@@ -153,47 +136,38 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar> {
 }
 
 class _HomeNavBar extends StatelessWidget {
-  const _HomeNavBar({
-    required this.selectedIndex,
-    required this.showFeed,
-    required this.onTabChange,
-  });
+  const _HomeNavBar({required this.selectedIndex, required this.onTabChange});
 
-  static const _tabs = [
-    _HomeNavTab(
+  // Offline fork: there is no feed tab. The keys are the stable tab IDs of
+  // TabChangedEvent (Search stays 3).
+  static const _tabs = {
+    0: _HomeNavTab(
       semanticLabel: 'Home',
       semanticIdentifier: 'ente.photos.tab.home',
       outlineAsset: 'assets/icons/nav_bar/home_outline.svg',
       filledAsset: 'assets/icons/nav_bar/home_filled.svg',
     ),
-    _HomeNavTab(
+    1: _HomeNavTab(
       semanticLabel: 'Albums',
       semanticIdentifier: 'ente.photos.tab.albums',
       outlineAsset: 'assets/icons/nav_bar/albums_outline.svg',
       filledAsset: 'assets/icons/nav_bar/albums_filled.svg',
     ),
-    _HomeNavTab(
-      semanticLabel: 'Feed',
-      semanticIdentifier: 'ente.photos.tab.feed',
-      outlineAsset: 'assets/icons/nav_bar/feed_outline.svg',
-      filledAsset: 'assets/icons/nav_bar/feed_filled.svg',
-    ),
-    _HomeNavTab(
+    searchTabIndex: _HomeNavTab(
       semanticLabel: 'Search',
       semanticIdentifier: 'ente.photos.tab.search',
       outlineAsset: 'assets/icons/nav_bar/search_outline.svg',
       filledAsset: 'assets/icons/nav_bar/search_filled.svg',
     ),
-  ];
+  };
 
   final int selectedIndex;
-  final bool showFeed;
   final ValueChanged<int> onTabChange;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.componentColors;
-    final tabIndices = homeTabIndices(showFeed: showFeed);
+    final tabIndices = homeTabIndices(showFeed: false);
     return GNav(
       curve: Curves.easeOutExpo,
       backgroundColor: colors.fillLight,
@@ -216,7 +190,7 @@ class _HomeNavBar extends StatelessWidget {
       onTabChange: (index) => onTabChange(tabIndices[index]),
       tabs: List.generate(tabIndices.length, (index) {
         final tabIndex = tabIndices[index];
-        final tab = _tabs[tabIndex];
+        final tab = _tabs[tabIndex]!;
         return GButton(
           margin: EdgeInsets.only(
             left: index == 0 ? Spacing.lg : _homeNavItemSpacing,

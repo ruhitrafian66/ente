@@ -6,7 +6,6 @@ import "package:computer/computer.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/base.dart";
 import "package:photos/events/diff_sync_complete_event.dart";
@@ -18,7 +17,6 @@ import "package:photos/models/local_entity_data.dart";
 import "package:photos/models/ml/face/detection.dart";
 import 'package:photos/models/ml/face/face_with_embedding.dart';
 import "package:photos/models/ml/face/person.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/entity_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -40,8 +38,6 @@ typedef PersonAvatarUpdateResult = ({
 
 class PersonService {
   static const Object _attributeNotProvided = Object();
-  static const String _appliedCGroupSyncTimeKeyPrefix =
-      "person_feedback_applied_cgroup_sync_time";
   final EntityService entityService;
   final IMLDataDB<int> faceMLDataDB;
   final SharedPreferences prefs;
@@ -92,7 +88,7 @@ class PersonService {
           _shouldReconcilePeople = true;
           // Offline fork: no remote sync will ever trigger the reconcile, so
           // run it after each local people change.
-          if (kOfflineFork) unawaited(instance.sync());
+          unawaited(instance.sync());
         }
       });
     }
@@ -199,9 +195,6 @@ class PersonService {
     return entityService.lastSyncTime(EntityType.cgroup);
   }
 
-  String get _appliedCGroupSyncTimeKey =>
-      "${_appliedCGroupSyncTimeKeyPrefix}_${Configuration.instance.getUserID() ?? 0}";
-
   Future<List<PersonEntity>> getPersons() async {
     final remoteSyncTime = lastRemoteSyncTime();
     if (_cachedRemoteSyncTime != remoteSyncTime) {
@@ -293,14 +286,9 @@ class PersonService {
   }
 
   Future<void> _syncOnce() async {
-    if (isLocalGalleryMode && !kOfflineFork) {
-      logger.finest("Skipping person feedback sync in local gallery mode");
-      return;
-    }
     // Offline fork: there is nothing to pull, but the local reconcile still
     // runs. It keeps `PersonData.assigned` in step with the cluster -> person
     // table, which the People UI reads.
-
     if (_shouldReconcilePeople) {
       _shouldReconcilePeople = false;
       try {
@@ -310,20 +298,12 @@ class PersonService {
         rethrow;
       }
       Bus.instance.fire(PeopleChangedEvent(type: PeopleEventType.syncDone));
-    } else {
-      final didChange = await _pullAndApplyRemotePersons();
-      if (didChange) {
-        logger.info("people: got remote data update");
-        Bus.instance.fire(PeopleChangedEvent(type: PeopleEventType.syncDone));
-      }
     }
   }
 
   Future<void> _reconcileClusters() async {
     final EnteWatch? w = kDebugMode ? EnteWatch("reconcileClusters") : null;
     w?.start();
-    await _pullAndApplyRemotePersons(skipClusterUpdateIfNoChange: false);
-    w?.log("Stored remote feedback");
     final dbPersonClusterInfo = await faceMLDataDB
         .getPersonToClusterIdToFaceIds();
     w?.log("Got DB person cluster info");
@@ -641,135 +621,6 @@ class PersonService {
     return updatedTarget;
   }
 
-  Future<bool> _pullAndApplyRemotePersons({
-    bool skipClusterUpdateIfNoChange = true,
-  }) async {
-    if (isLocalGalleryMode) {
-      logger.finest("Skip fetching remote clusters in local gallery mode");
-      return false;
-    }
-    final int changedEntities = await entityService.syncEntity(
-      EntityType.cgroup,
-    );
-    final bool changed = changedEntities > 0;
-    final downloadedSyncTime = lastRemoteSyncTime();
-    final appliedSyncTime = prefs.getInt(_appliedCGroupSyncTimeKey) ?? 0;
-    final hasUnappliedChanges = downloadedSyncTime != appliedSyncTime;
-    if (!changed && !hasUnappliedChanges && skipClusterUpdateIfNoChange) {
-      return false;
-    }
-
-    final entities = await entityService.getEntities(EntityType.cgroup);
-    final remotePersonIDs = entities.map((e) => e.id).toSet();
-    final localPersonMappings = await faceMLDataDB.getPersonToClusterIDs();
-    int removedOrphans = 0;
-    for (final localPersonID in localPersonMappings.keys) {
-      if (!remotePersonIDs.contains(localPersonID)) {
-        removedOrphans++;
-        await _removeOrphanedLocalPerson(localPersonID);
-      }
-    }
-    if (removedOrphans > 0) {
-      logger.info(
-        "Removed $removedOrphans orphaned local person mappings during sync",
-      );
-    }
-    // todo: (neerajg) perf change, this can be expensive to do on every sync
-    // especially when we have a lot of people. We should only do this when the
-    // last sync time is updated for cgroup entity type. To avoid partial update,
-    // we need to maintain a lastSyncTime value whenever this data is processed
-    // and stored in the db.
-    entities.sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
-    final Map<String, String> faceIdToClusterID = {};
-    final Map<String, String> clusterToPersonID = {};
-    bool shouldCheckRejectedFaces = false;
-    for (var e in entities) {
-      final personData = PersonData.fromJson(json.decode(e.data));
-      if (personData.rejectedFaceIDs.isNotEmpty) {
-        shouldCheckRejectedFaces = true;
-      }
-      int faceCount = 0;
-
-      for (var cluster in personData.assigned) {
-        faceCount += cluster.faces.length;
-        for (var faceId in cluster.faces) {
-          if (!faceIdToClusterID.containsKey(faceId)) {
-            faceIdToClusterID[faceId] = cluster.id;
-          }
-        }
-        clusterToPersonID[cluster.id] = e.id;
-      }
-      if (kDebugMode) {
-        logger.info(
-          "Person ${e.id} ${personData.name} has ${personData.assigned.length} clusters with $faceCount faces",
-        );
-      }
-    }
-    logger.info("Storing feedback for ${faceIdToClusterID.length} faces");
-    await faceMLDataDB.updateFaceIdToClusterId(faceIdToClusterID);
-    await faceMLDataDB.bulkAssignClusterToPersonID(clusterToPersonID);
-
-    if (shouldCheckRejectedFaces) {
-      final dbPeopleClusterInfo = await faceMLDataDB
-          .getPersonToClusterIdToFaceIds();
-      for (var e in entities) {
-        final personData = PersonData.fromJson(json.decode(e.data));
-        if (personData.rejectedFaceIDs.isNotEmpty) {
-          final personClustersToFaceIDs = dbPeopleClusterInfo[e.id];
-          if (personClustersToFaceIDs == null) {
-            logger.warning(
-              "Person ${e.id} ${personData.name} has rejected faces but no clusters found in local DB",
-            );
-            continue;
-          }
-          final personFaceIDs = personClustersToFaceIDs.values
-              .expand((e) => e)
-              .toSet();
-          final rejectedFaceIDsSet = personData.rejectedFaceIDs.toSet();
-          final assignedAndRejectedFaceIDs = rejectedFaceIDsSet.intersection(
-            personFaceIDs,
-          );
-
-          if (assignedAndRejectedFaceIDs.isNotEmpty) {
-            final dbPersonClusterInfo = dbPeopleClusterInfo[e.id]!;
-            final faceToClusterToRemove = <String, String>{};
-            for (final clusterIdToFaceIDs in dbPersonClusterInfo.entries) {
-              final clusterID = clusterIdToFaceIDs.key;
-              final faceIDs = clusterIdToFaceIDs.value;
-              final foundRejectedFacesToCluster = <String, String>{};
-              final removeFaceIDs = <String>{};
-              for (final faceID in faceIDs) {
-                if (assignedAndRejectedFaceIDs.contains(faceID)) {
-                  removeFaceIDs.add(faceID);
-                  foundRejectedFacesToCluster[faceID] = clusterID;
-                }
-              }
-              if (faceIDs.length == removeFaceIDs.length) {
-                logger.info(
-                  "Cluster $clusterID for person ${e.id} ${personData.name} is empty due to rejected faces from remote, removing the cluster from person",
-                );
-                await faceMLDataDB.removeClusterToPerson(
-                  personID: e.id,
-                  clusterID: clusterID,
-                );
-                await faceMLDataDB.captureNotPersonFeedback(
-                  personID: e.id,
-                  clusterID: clusterID,
-                );
-              } else {
-                faceToClusterToRemove.addAll(foundRejectedFacesToCluster);
-              }
-            }
-            await faceMLDataDB.removeFaceIdToClusterId(faceToClusterToRemove);
-          }
-        }
-      }
-    }
-
-    await prefs.setInt(_appliedCGroupSyncTimeKey, downloadedSyncTime);
-    return changed || hasUnappliedChanges;
-  }
-
   Future<FaceWithoutEmbedding?> getCoverFace({
     required int fileID,
     String? personID,
@@ -881,12 +732,11 @@ class PersonService {
     await updatePerson(updatedPerson);
     await refreshPersonCache();
     if (hideFromMemories == true && !person.data.hideFromMemories) {
-      final currentUserEmail = Configuration.instance.getEmail();
+      // Offline fork: there is no account, so no person is the current user.
       unawaited(
         memoriesCacheService.purgePersonFromMemoriesCache(
           id,
-          isCurrentUser:
-              currentUserEmail != null && person.data.email == currentUserEmail,
+          isCurrentUser: false,
         ),
       );
     }

@@ -3,14 +3,11 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
 import "package:photos/events/people_changed_event.dart";
 import "package:photos/models/file/file.dart";
 import 'package:photos/models/gallery_type.dart';
 import 'package:photos/models/selected_files.dart';
-import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import 'package:photos/ui/components/buttons/button_widget.dart';
@@ -151,7 +148,6 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
     required bool onCover,
     Color? foregroundColor,
   }) {
-    final hasAccount = Configuration.instance.hasConfiguredAccount();
     final List<Widget> actions = <Widget>[];
     if (widget.selectedFiles.files.isNotEmpty) {
       return actions;
@@ -168,26 +164,23 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
           ),
         ),
       // Offline fork: ignore and split work on local data.
-      if (kOfflineFork || (!isLocalGalleryMode && hasAccount)) ...[
-        EntePopupMenuOption(
-          value: ClusterPopupAction.ignore,
-          label: context.strings.ignorePerson,
-          leadingWidget: const HugeIcon(
-            icon: HugeIcons.strokeRoundedUserBlock01,
-            size: IconSizes.small,
-          ),
+      EntePopupMenuOption(
+        value: ClusterPopupAction.ignore,
+        label: context.strings.ignorePerson,
+        leadingWidget: const HugeIcon(
+          icon: HugeIcons.strokeRoundedUserBlock01,
+          size: IconSizes.small,
         ),
-        EntePopupMenuOption(
-          value: ClusterPopupAction.breakupCluster,
-          label: context.strings.mixedGrouping,
-          leadingWidget: const HugeIcon(
-            icon: HugeIcons.strokeRoundedUserMultiple,
-            size: IconSizes.small,
-          ),
+      ),
+      EntePopupMenuOption(
+        value: ClusterPopupAction.breakupCluster,
+        label: context.strings.mixedGrouping,
+        leadingWidget: const HugeIcon(
+          icon: HugeIcons.strokeRoundedUserMultiple,
+          size: IconSizes.small,
         ),
-      ],
+      ),
     ];
-    if (items.isEmpty) return actions;
 
     final overflowMenuAction = onCover
         ? galleryAppBarActionsSheetAction

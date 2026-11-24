@@ -2,11 +2,9 @@ import "package:photos/db/memories_db.dart";
 import "package:photos/db/offline_files_db.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/metadata/common_keys.dart";
-import "package:photos/service_locator.dart";
 import "package:photos/services/search_service.dart";
 
-MemoriesDB get memoriesDB =>
-    isLocalGalleryMode ? MemoriesDB.localGalleryInstance : MemoriesDB.instance;
+MemoriesDB get memoriesDB => MemoriesDB.localGalleryInstance;
 
 Future<Map<int, EnteFile>> getFilesAndMapForMemories({
   bool useGeneratedIds = false,

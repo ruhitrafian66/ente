@@ -13,7 +13,6 @@ import "package:intl/intl.dart";
 import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:photos/core/configuration.dart';
 import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/theme/ente_theme.dart';
 import "package:photos/ui/common/progress_dialog.dart";
@@ -382,7 +381,6 @@ Future<String> _clientInfo() async {
   final String debugInfo =
       '\n\n\n\n ------------------- \nFollowing information can '
       'help us in debugging if you are facing any issue '
-      '\nRegistered email: ${Configuration.instance.getEmail()}'
       '\nClient: ${packageInfo.packageName}'
       '\n$supportDeviceInfo';
   return debugInfo;

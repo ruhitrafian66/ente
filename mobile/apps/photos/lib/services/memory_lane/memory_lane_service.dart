@@ -42,8 +42,7 @@ class MemoryLaneService {
 
   final Logger _logger = Logger("MemoryLaneService");
   final MemoryLaneCacheService _cacheService = MemoryLaneCacheService.instance;
-  IMLDataDB<int> get _mlDataDB =>
-      isLocalGalleryMode ? MLDataDB.localGalleryInstance : MLDataDB.instance;
+  IMLDataDB<int> get _mlDataDB => MLDataDB.localGalleryInstance;
   final FilesDB _filesDB = FilesDB.instance;
   final OfflineFilesDB _offlineFilesDB = OfflineFilesDB.instance;
   final TaskQueue<_TimelineRequest> _precomputeQueue = TaskQueue(
@@ -103,14 +102,9 @@ class MemoryLaneService {
     if (!isFeatureEnabled) {
       return;
     }
+    // Offline fork: upstream loads no persons here in local gallery mode,
+    // which is the only mode here. The timelines are cluster based.
     final List<PersonEntity> persons = [];
-    if (!isLocalGalleryMode) {
-      if (!PersonService.isInitialized) {
-        _logger.warning("Full recompute skipped: PersonService unavailable");
-        return;
-      }
-      persons.addAll(await PersonService.instance.getPersons());
-    }
     final assigned = <String>{};
     for (final person in persons) {
       for (final cluster in person.data.assigned) {
@@ -135,15 +129,6 @@ class MemoryLaneService {
       await _scheduleTimelinesForMemoriesStrip(persons);
     } catch (e, s) {
       _logger.severe("_scheduleTimelinesForMemoriesStrip failed:", e, s);
-    }
-    if (!isLocalGalleryMode) {
-      for (final person in persons) {
-        if (person.data.isIgnored) {
-          await _invalidateTimeline(person.remoteID);
-          continue;
-        }
-        schedulePersonRecompute(person.remoteID, force: force);
-      }
     }
     final cache = await _cacheService.getCache();
     final List<Future<void>> tasks = [];
@@ -989,9 +974,6 @@ class MemoryLaneService {
   }
 
   Future<Map<int, EnteFile>> getTimelineFiles(Iterable<int> fileIds) async {
-    if (!isLocalGalleryMode) {
-      return _filesDB.getFileIDToFileFromIDs(fileIds.toList());
-    }
     final idToLocalId = await _offlineFilesDB.getLocalIdsForIntIds(fileIds);
     final localIdToId = idToLocalId.map((id, localId) => MapEntry(localId, id));
     final files = await _filesDB.getLocalFiles(

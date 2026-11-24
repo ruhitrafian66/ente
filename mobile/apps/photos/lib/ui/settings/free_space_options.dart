@@ -2,15 +2,11 @@ import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
-import "package:flutter/foundation.dart" show kDebugMode;
 import "package:flutter/material.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/exact_duplicates_page.dart";
 import "package:photos/ui/tools/person_folders_page.dart";
 import "package:photos/ui/tools/png_to_jpg_page.dart";
-import "package:photos/ui/tools/similar_images_page.dart";
-import "package:photos/ui/viewer/gallery/large_files_page.dart";
 import "package:photos/ui/viewer/gallery/trash_page.dart";
 
 class FreeUpSpaceOptionsScreen extends StatefulWidget {
@@ -65,64 +61,37 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
   Widget _buildReviewOptions(BuildContext context, StringsLocalizations l10n) {
     // Offline fork: only tools that work on device files, without an account,
     // a server or CLIP embeddings.
-    if (kOfflineFork) {
-      return MenuGroupComponent(
-        items: [
-          _buildFreeSpaceOption(
-            title: "Exact duplicates", // Offline fork: not localized
-            subtitle:
-                "Find files with identical content and delete the extra copies", // Offline fork: not localized
-            icon: HugeIcons.strokeRoundedCopy01,
-            onTap: () async {
-              await routeToPage(context, const ExactDuplicatesPage());
-            },
-          ),
-          _buildFreeSpaceOption(
-            title: "Convert PNG to JPG", // Offline fork: not localized
-            subtitle:
-                "Compress PNG images to save space", // Offline fork: not localized
-            icon: HugeIcons.strokeRoundedImageCrop,
-            onTap: () async {
-              await routeToPage(context, const PngToJpgPage());
-            },
-          ),
-          _buildFreeSpaceOption(
-            title: "Person folders", // Offline fork: not localized
-            subtitle:
-                "Move photos of named persons into Pictures/People", // Offline fork: not localized
-            icon: HugeIcons.strokeRoundedFolder01,
-            onTap: () async {
-              await routeToPage(context, const PersonFoldersPage());
-            },
-          ),
-        ],
-      );
-    }
-
-    final options = <Widget>[
-      if (kOfflineEnableVectorDb)
+    return MenuGroupComponent(
+      items: [
         _buildFreeSpaceOption(
-          title: l10n.similarImages,
-          subtitle: l10n.useMLToFindSimilarImages,
-          icon: HugeIcons.strokeRoundedImageCrop,
+          title: "Exact duplicates", // Offline fork: not localized
+          subtitle:
+              "Find files with identical content and delete the extra copies", // Offline fork: not localized
+          icon: HugeIcons.strokeRoundedCopy01,
           onTap: () async {
-            await routeToPage(
-              context,
-              const SimilarImagesPage(debugScreen: kDebugMode),
-            );
+            await routeToPage(context, const ExactDuplicatesPage());
           },
         ),
-      _buildFreeSpaceOption(
-        title: l10n.viewLargeFiles,
-        subtitle: l10n.viewLargeFilesDesc,
-        icon: HugeIcons.strokeRoundedFile02,
-        onTap: () async {
-          await routeToPage(context, LargeFilesPagePage());
-        },
-      ),
-    ];
-
-    return MenuGroupComponent(items: options);
+        _buildFreeSpaceOption(
+          title: "Convert PNG to JPG", // Offline fork: not localized
+          subtitle:
+              "Compress PNG images to save space", // Offline fork: not localized
+          icon: HugeIcons.strokeRoundedImageCrop,
+          onTap: () async {
+            await routeToPage(context, const PngToJpgPage());
+          },
+        ),
+        _buildFreeSpaceOption(
+          title: "Person folders", // Offline fork: not localized
+          subtitle:
+              "Move photos of named persons into Pictures/People", // Offline fork: not localized
+          icon: HugeIcons.strokeRoundedFolder01,
+          onTap: () async {
+            await routeToPage(context, const PersonFoldersPage());
+          },
+        ),
+      ],
+    );
   }
 
   SettingsItem _buildFreeSpaceOption({

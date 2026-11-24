@@ -5,11 +5,9 @@ import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:path/path.dart" as path;
 import "package:path_provider/path_provider.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/ml/rust_db.dart";
-import "package:photos/events/app_mode_changed_event.dart";
 import "package:photos/events/diff_sync_complete_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/people_changed_event.dart";
@@ -29,7 +27,6 @@ import "package:synchronized/synchronized.dart";
 
 class RewindService {
   RewindService(SharedPreferences prefs) : _progress = RewindProgress(prefs) {
-    Bus.instance.on<AppModeChangedEvent>().listen((_) => _reset());
     Bus.instance.on<PeopleChangedEvent>().listen((_) => _rebuildStory());
     Bus.instance.on<DiffSyncCompleteEvent>().listen((_) => _rebuildStory());
     Bus.instance
@@ -286,12 +283,7 @@ class RewindService {
       _logger.info("Skipping Rewind: $_missingStateReason");
       return previous?.mlCoverage != null ? previous : null;
     }
-    final store = usesMl
-        ? await (isLocalGalleryMode
-                  ? RustMLDataDB.localGalleryInstance
-                  : RustMLDataDB.instance)
-              .store
-        : null;
+    final store = usesMl ? await RustMLDataDB.localGalleryInstance.store : null;
     final computed = await rust.computeRewind(
       request: await buildRewindRequest(now),
       store: store,
@@ -304,8 +296,8 @@ class RewindService {
     return computed;
   }
 
-  int? get _owner =>
-      isLocalGalleryMode ? 0 : Configuration.instance.getUserID();
+  // Offline fork: the local gallery owner is always 0.
+  int? get _owner => 0;
 
   bool get _hasSyncedLibrary =>
       LocalSyncService.instance.hasCompletedFirstImport();
@@ -325,7 +317,7 @@ class RewindService {
     return rust.decodeRewindState(
       bytes: await cache.readAsBytes(),
       year: RewindEdition.year,
-      localGalleryMode: isLocalGalleryMode,
+      localGalleryMode: true,
     );
   }
 

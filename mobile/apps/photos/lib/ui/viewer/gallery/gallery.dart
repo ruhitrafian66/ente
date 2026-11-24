@@ -38,11 +38,9 @@ import "package:photos/ui/viewer/gallery/state/boundary_reporter_mixin.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_context_state.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
-import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
 import "package:photos/ui/viewer/gallery/swipe_selection_wrapper.dart";
 import "package:photos/ui/viewer/gallery/swipe_to_select_helper.dart";
 import "package:photos/utils/file_sort_util.dart";
-import "package:photos/utils/hierarchical_search_util.dart";
 import "package:photos/utils/widget_util.dart";
 
 typedef GalleryLoader =
@@ -195,7 +193,6 @@ class GalleryState extends State<Gallery> with WidgetsBindingObserver {
   List<EnteFile> _allFilesWithDummies = [];
   SwipeToSelectHelper? _swipeHelper;
   final _swipeActiveNotifier = ValueNotifier<bool>(false);
-  InheritedSearchFilterData? _inheritedSearchFilterData;
   InheritedGalleryBoundaries? _boundariesProvider;
   late String _automationScrollIdentifier;
 
@@ -383,7 +380,6 @@ class GalleryState extends State<Gallery> with WidgetsBindingObserver {
       ++_layoutChangeGeneration;
       if (groupHeaderExtent == null) _needsLayoutRefresh = true;
     }
-    _inheritedSearchFilterData = InheritedSearchFilterData.maybeOf(context);
     final boundaries = GalleryBoundariesProvider.of(context);
     if (_boundariesProvider != boundaries) {
       _boundariesProvider?.selectionSheetMinHeightNotifier.removeListener(
@@ -913,23 +909,6 @@ class GalleryState extends State<Gallery> with WidgetsBindingObserver {
 
       if (sortOrder.isFilename) {
         sortFilesByName(result.files, sortOrder);
-      }
-
-      if (!result.hasMore) {
-        if (!mounted) {
-          return result;
-        }
-        final inheritedSearchFilterData = _inheritedSearchFilterData;
-        final searchFilterDataProvider =
-            inheritedSearchFilterData?.isHierarchicalSearchable == true
-            ? inheritedSearchFilterData!.searchFilterDataProvider
-            : null;
-        if (searchFilterDataProvider != null &&
-            !searchFilterDataProvider.isSearchingNotifier.value) {
-          unawaited(
-            curateFilters(searchFilterDataProvider, result.files, context),
-          );
-        }
       }
 
       return result;

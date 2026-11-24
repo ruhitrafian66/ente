@@ -3,7 +3,6 @@ import "dart:async" show unawaited;
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/cache/lru_map.dart";
-import "package:photos/db/files_db.dart";
 import "package:photos/db/ml/base.dart";
 import "package:photos/db/ml/clip_vector_db.dart";
 import "package:photos/db/ml/db.dart";
@@ -31,11 +30,8 @@ class SemanticSearchService {
 
   final LRUMap<String, List<double>> _queryEmbeddingCache = LRUMap(20);
   static const kMinimumSimilarityThreshold = 0.175;
-  IMLDataDB<int> get _mlDataDB =>
-      isLocalGalleryMode ? MLDataDB.localGalleryInstance : MLDataDB.instance;
-  ClipVectorDB get _vectorDB => isLocalGalleryMode
-      ? ClipVectorDB.localGalleryInstance
-      : ClipVectorDB.instance;
+  IMLDataDB<int> get _mlDataDB => MLDataDB.localGalleryInstance;
+  ClipVectorDB get _vectorDB => ClipVectorDB.localGalleryInstance;
 
   bool _textModelIsLoaded = false;
 
@@ -165,43 +161,11 @@ class SemanticSearchService {
       fileIDToScoreMap[result.id] = result.score;
     }
 
-    if (isLocalGalleryMode) {
-      return _getLocalGalleryMatchingFiles(
-        queryResults,
-        fileIDToScoreMap,
-        showThreshold,
-      );
-    }
-
-    final filesMap = await FilesDB.instance.getFileIDToFileFromIDs(
-      queryResults.map((e) => e.id).toList(),
+    return _getLocalGalleryMatchingFiles(
+      queryResults,
+      fileIDToScoreMap,
+      showThreshold,
     );
-
-    final deletedEntries = <int>[];
-    final results = <EnteFile>[];
-
-    for (final result in queryResults) {
-      final file = filesMap[result.id];
-      if (file != null) {
-        if (showThreshold) {
-          file.debugCaption =
-              "${fileIDToScoreMap[result.id]?.toStringAsFixed(3)}";
-        }
-        results.add(file);
-      }
-
-      if (file == null) {
-        deletedEntries.add(result.id);
-      }
-    }
-
-    _logger.info(results.length.toString() + " results");
-
-    if (deletedEntries.isNotEmpty) {
-      unawaited(_mlDataDB.deleteClipEmbeddings(deletedEntries));
-    }
-
-    return results;
   }
 
   Future<List<EnteFile>> _getLocalGalleryMatchingFiles(
@@ -287,9 +251,7 @@ class SemanticSearchService {
   Future<Map<String, List<int>>> _getStoreMatchingFileIDsForCommonQueries(
     Map<String, double> queryToScore,
   ) async {
-    final mlDataDB = isLocalGalleryMode
-        ? RustMLDataDB.localGalleryInstance
-        : RustMLDataDB.instance;
+    final mlDataDB = RustMLDataDB.localGalleryInstance;
     final queries = queryToScore.keys.toList(growable: false);
     final matches = await (await mlDataDB.store).discoverMatches(
       queries: [

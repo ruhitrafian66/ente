@@ -2,7 +2,6 @@ import "package:logging/logging.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/rust_db.dart";
 import "package:photos/events/people_changed_event.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -19,9 +18,7 @@ class StoreFaceClustering implements FaceClustering {
   // Offline fork: there is no account database. Every "account" singleton
   // resolves to the local gallery one, so person and feedback code that was
   // written for accounts works on the on-device data.
-  static StoreFaceClustering get instance =>
-      kOfflineFork ? localGalleryInstance : _accountInstance;
-  static final StoreFaceClustering _accountInstance = StoreFaceClustering._(RustMLDataDB.instance);
+  static StoreFaceClustering get instance => localGalleryInstance;
   static final localGalleryInstance = StoreFaceClustering._(
     RustMLDataDB.localGalleryInstance,
   );

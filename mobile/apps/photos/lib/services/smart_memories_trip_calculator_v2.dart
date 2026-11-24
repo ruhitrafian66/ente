@@ -138,7 +138,6 @@ class TripMemoriesCalculatorV2 {
     List<TripsShownLog> shownTrips, {
     bool surfaceAll = false,
     required Iterable<ToShowMemory> cachedTripMemories,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, int> seenTimes,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -151,7 +150,6 @@ class TripMemoriesCalculatorV2 {
       allFiles,
       allFileIdsToFile,
       currentTime,
-      isLocalGalleryMode: isLocalGalleryMode,
       seenTimes: seenTimes,
       citySearchIndex: citySearchIndex,
     );
@@ -162,7 +160,6 @@ class TripMemoriesCalculatorV2 {
       shownTrips,
       surfaceAll: surfaceAll,
       cachedTripMemories: cachedTripMemories,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       seenTimes: seenTimes,
       fileIdToFaces: fileIdToFaces,
@@ -177,7 +174,6 @@ class TripMemoriesCalculatorV2 {
     Iterable<EnteFile> allFiles,
     Map<int, EnteFile> allFileIdsToFile,
     DateTime currentTime, {
-    required bool isLocalGalleryMode,
     required Map<int, int> seenTimes,
     required CitySearchIndex citySearchIndex,
   }) {
@@ -191,11 +187,7 @@ class TripMemoriesCalculatorV2 {
 
     final filesWithLocation = allFiles.where((f) => f.hasLocation).toList()
       ..sort((a, b) => a.creationTime!.compareTo(b.creationTime!));
-    final baseLocations = _detectBaseLocations(
-      filesWithLocation,
-      currentTime,
-      isLocalGalleryMode: isLocalGalleryMode,
-    );
+    final baseLocations = _detectBaseLocations(filesWithLocation, currentTime);
     final baseCountriesToExclude = _baseCountriesToExcludeFromTripTitles(
       baseLocations,
       allFileIdsToFile,
@@ -271,7 +263,6 @@ class TripMemoriesCalculatorV2 {
     List<TripsShownLog> shownTrips, {
     bool surfaceAll = false,
     required Iterable<ToShowMemory> cachedTripMemories,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, int> seenTimes,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -306,7 +297,6 @@ class TripMemoriesCalculatorV2 {
         nowInMicroseconds,
         windowEnd,
         seenTimes: seenTimes,
-        isLocalGalleryMode: isLocalGalleryMode,
         mlEnabled: mlEnabled,
         fileIdToFaces: fileIdToFaces,
         faceIDsToPersonID: faceIDsToPersonID,
@@ -325,7 +315,6 @@ class TripMemoriesCalculatorV2 {
       shownTrips,
       baseCountriesToExclude: baseCountriesToExclude,
       cachedTripMemories: cachedTripMemories,
-      isLocalGalleryMode: isLocalGalleryMode,
       mlEnabled: mlEnabled,
       seenTimes: seenTimes,
       fileIdToFaces: fileIdToFaces,
@@ -338,9 +327,8 @@ class TripMemoriesCalculatorV2 {
 
   static List<BaseLocation> _detectBaseLocations(
     List<EnteFile> filesWithLocation,
-    DateTime currentTime, {
-    required bool isLocalGalleryMode,
-  }) {
+    DateTime currentTime,
+  ) {
     final smallRadiusClusters = _mergeNearbyLocationClusters(
       _clusterByLocation(filesWithLocation, radius: baseRadius),
       radius: _baseMergeRadius,
@@ -363,12 +351,7 @@ class TripMemoriesCalculatorV2 {
       baseLocations.add(
         BaseLocation(
           files
-              .map(
-                (file) => DartMemoriesComputer._memoryFileId(
-                  file,
-                  isLocalGalleryMode: isLocalGalleryMode,
-                ),
-              )
+              .map((file) => DartMemoriesComputer._memoryFileId(file))
               .whereType<int>()
               .toList(),
           location,
@@ -926,7 +909,6 @@ class TripMemoriesCalculatorV2 {
     int nowInMicroseconds,
     int windowEnd, {
     required Map<int, int> seenTimes,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
     required Map<String, String> faceIDsToPersonID,
@@ -967,7 +949,6 @@ class TripMemoriesCalculatorV2 {
       );
       final photoSelection = await DartMemoriesComputer._bestSelection(
         List<Memory>.of(trip.memories),
-        isLocalGalleryMode: isLocalGalleryMode,
         mlEnabled: mlEnabled,
         fileIdToFaces: fileIdToFaces,
         faceIDsToPersonID: faceIDsToPersonID,
@@ -996,7 +977,6 @@ class TripMemoriesCalculatorV2 {
     List<TripsShownLog> shownTrips, {
     required Set<String> baseCountriesToExclude,
     required Iterable<ToShowMemory> cachedTripMemories,
-    required bool isLocalGalleryMode,
     required bool mlEnabled,
     required Map<int, int> seenTimes,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -1078,7 +1058,7 @@ class TripMemoriesCalculatorV2 {
 
     final currentShownCount =
         activeTripIdentityKeys.length + selectedCandidates.length;
-    if (isLocalGalleryMode && currentShownCount == 0 && candidates.isNotEmpty) {
+    if (currentShownCount == 0 && candidates.isNotEmpty) {
       final fallbackSeasonalCandidates =
           candidates
               .where(
@@ -1116,7 +1096,6 @@ class TripMemoriesCalculatorV2 {
       );
       final photoSelection = await DartMemoriesComputer._bestSelection(
         List<Memory>.of(trip.memories),
-        isLocalGalleryMode: isLocalGalleryMode,
         mlEnabled: mlEnabled,
         fileIdToFaces: fileIdToFaces,
         faceIDsToPersonID: faceIDsToPersonID,

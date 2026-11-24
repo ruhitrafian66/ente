@@ -22,7 +22,6 @@ import "package:photos/ui/settings/ml/ml_consent_sheet.dart";
 import "package:photos/ui/settings/ml/ml_user_dev_screen.dart";
 import "package:photos/utils/email_util.dart";
 import "package:photos/utils/ml_util.dart";
-import "package:photos/utils/network_util.dart";
 
 class MachineLearningSettingsPage extends StatefulWidget {
   const MachineLearningSettingsPage({super.key});
@@ -369,6 +368,10 @@ class _ModelLoadingStateState extends State<ModelLoadingState> {
   @override
   Widget build(BuildContext context) {
     final colors = context.componentColors;
+    // Offline fork: the models are in the APK, so there is no wait for Wi-Fi.
+    MLModelDownloadService.instance.triggerModelsDownload(
+      onlyIndexingModels: false,
+    );
     return Column(
       children: [
         Padding(
@@ -382,29 +385,13 @@ class _ModelLoadingStateState extends State<ModelLoadingState> {
           ),
         ),
         const SizedBox(height: 8),
-        FutureBuilder(
-          future: canUseHighBandwidth().then((v) => isLocalGalleryMode || v),
-          builder: (context, snapshot) {
-            String title = "";
-            List<List<dynamic>> leadingIcon = HugeIcons.strokeRoundedLoading03;
-            if (snapshot.hasData) {
-              if (snapshot.data!) {
-                MLModelDownloadService.instance.triggerModelsDownload(
-                  onlyIndexingModels: false,
-                );
-                title = context.strings.checkingModels;
-                leadingIcon = HugeIcons.strokeRoundedCloudDownload;
-              } else {
-                title = context.strings.waitingForWifi;
-                leadingIcon = HugeIcons.strokeRoundedWifi02;
-              }
-            }
-            return MenuComponent(
-              title: title,
-              leading: HugeIcon(icon: leadingIcon, size: IconSizes.small),
-              trailing: EnteLoadingWidget(size: 12, color: colors.fillDark),
-            );
-          },
+        MenuComponent(
+          title: context.strings.checkingModels,
+          leading: const HugeIcon(
+            icon: HugeIcons.strokeRoundedCloudDownload,
+            size: IconSizes.small,
+          ),
+          trailing: EnteLoadingWidget(size: 12, color: colors.fillDark),
         ),
         ..._progressMap.entries.map((entry) {
           return Padding(

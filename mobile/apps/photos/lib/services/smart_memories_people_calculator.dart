@@ -8,7 +8,6 @@ class PeopleMemoriesCalculator {
     bool surfaceAll = false,
     required Map<int, int> seenTimes,
     required List<PersonEntity> persons,
-    required bool isLocalGalleryMode,
     required bool canUseUnnamedFallback,
     String? currentUserEmail,
     required Map<int, List<FaceWithoutEmbedding>> fileIdToFaces,
@@ -44,11 +43,9 @@ class PeopleMemoriesCalculator {
         );
       }
     }
-    final List<String> orderedImportantPersonsID = persons
-        .where((person) => !isLocalGalleryMode && !person.data.isIgnored)
-        .map((p) => p.remoteID)
-        .toList();
-    orderedImportantPersonsID.shuffle(Random());
+    // Offline fork: upstream gives no "important persons" in local gallery
+    // mode, which is the only mode here. The list stays empty.
+    final List<String> orderedImportantPersonsID = <String>[];
     final amountOfPersons = orderedImportantPersonsID.length;
     final shownPersonTimeout = Duration(
       days: min(
@@ -73,7 +70,6 @@ class PeopleMemoriesCalculator {
     Future<List<Memory>> selectPeopleMemories(List<Memory> memories) {
       return DartMemoriesComputer._bestSelectionPeople(
         memories,
-        isLocalGalleryMode: isLocalGalleryMode,
         fileIDToImageEmbedding: fileIDToImageEmbedding,
         clipPositiveTextVector: clipPositiveTextVector,
       );
@@ -91,7 +87,6 @@ class PeopleMemoriesCalculator {
           seenTimes: seenTimes,
           nowInMicroseconds: nowInMicroseconds,
           windowEnd: windowEnd,
-          isLocalGalleryMode: isLocalGalleryMode,
           selectionBuilder: selectPeopleMemories,
         );
     final randomizedUnnamedClusterCandidates =
@@ -296,7 +291,6 @@ class PeopleMemoriesCalculator {
               lastTimeMemories,
               fileIDToImageEmbedding,
               minKeep: 2,
-              isLocalGalleryMode: isLocalGalleryMode,
             );
         final spacedLastTimeMemories =
             DartMemoriesComputer._filterByTimeSpacing(filteredLastTimeMemories);

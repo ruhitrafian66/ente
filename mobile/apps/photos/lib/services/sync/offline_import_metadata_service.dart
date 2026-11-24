@@ -14,7 +14,6 @@ import "package:photos/module/metadata/exif.dart";
 import "package:photos/module/metadata/local_file.dart";
 import 'package:photos/module/metadata/location.dart';
 import "package:photos/module/metadata/photo.dart";
-import "package:photos/service_locator.dart";
 import "package:photos/services/process_activity.dart";
 
 class OfflineImportMetadataService {
@@ -31,7 +30,7 @@ class OfflineImportMetadataService {
   static final instance = OfflineImportMetadataService._privateConstructor();
 
   Future<void> processPendingFiles({int batchSize = kDefaultBatchSize}) async {
-    if (!Platform.isAndroid || !isLocalGalleryMode) {
+    if (!Platform.isAndroid) {
       return;
     }
     if (_running != null) {
@@ -42,7 +41,7 @@ class OfflineImportMetadataService {
     _running = Completer<void>();
     try {
       ({int creationTime, int generatedID})? cursor;
-      while (isLocalGalleryMode) {
+      while (true) {
         if (isProcessBg && await isForegroundEngineActive()) {
           _logger.info("Foreground active, stopping background processing");
           return;
@@ -62,12 +61,6 @@ class OfflineImportMetadataService {
 
         final updatedFiles = <EnteFile>[];
         for (final file in files) {
-          if (!isLocalGalleryMode) {
-            _logger.info(
-              "Offline mode disabled during per-file processing, stopping",
-            );
-            return;
-          }
           if ((file.localID ?? "").isEmpty) {
             continue;
           }
@@ -91,7 +84,6 @@ class OfflineImportMetadataService {
           return;
         }
       }
-      _logger.info("Offline mode disabled, stopping metadata processing");
     } finally {
       _running?.complete();
       _running = null;

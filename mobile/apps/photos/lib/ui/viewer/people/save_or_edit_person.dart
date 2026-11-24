@@ -6,14 +6,12 @@ import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:logging/logging.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/ente_theme_data.dart";
 import "package:photos/events/people_changed_event.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/models/search/generic_search_result.dart";
-import "package:photos/offline_fork.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/theme/ente_theme.dart";
@@ -60,7 +58,6 @@ class _SaveOrEditPersonState extends State<SaveOrEditPerson> {
   bool _isBirthdayValid = true;
   String? _email;
   bool _isMe = false;
-  bool _isMeAssignedToAnotherPerson = true;
   bool _isPinned = false;
   bool _hideFromMemories = false;
   bool userAlreadyAssigned = false;
@@ -214,18 +211,6 @@ class _SaveOrEditPersonState extends State<SaveOrEditPerson> {
                                       ),
                                     ),
                             ),
-                            if (_showThisIsMe) ...[
-                              const SizedBox(height: Spacing.sm),
-                              LabeledControlComponent(
-                                control: CheckboxComponent(
-                                  selected: _isMe,
-                                  onChanged: _setIsMe,
-                                ),
-                                label: context.strings.thisIsMeExclamation,
-                                foreground: colors.textLighter,
-                                onTap: () => _setIsMe(!_isMe),
-                              ),
-                            ],
                             const SizedBox(height: Spacing.xxl),
                             _buildBirthdayInput(),
                             if (widget.isEditing) ...[
@@ -266,12 +251,6 @@ class _SaveOrEditPersonState extends State<SaveOrEditPerson> {
       ),
     );
   }
-
-  // Offline fork: "This is me" needs an account email, so it never shows.
-  bool get _showThisIsMe =>
-      !kOfflineFork &&
-      Configuration.instance.getEmail() != null &&
-      (_isMe || !_isMeAssignedToAnotherPerson);
 
   Widget _buildAvatar() {
     const size = 108.0;
@@ -336,17 +315,6 @@ class _SaveOrEditPersonState extends State<SaveOrEditPerson> {
         person: result,
       ),
     );
-  }
-
-  void _setIsMe(bool selected) {
-    setState(() {
-      _isMe = selected;
-      _email = selected
-          ? Configuration.instance.getEmail()
-          : _initiallyIsMe
-          ? null
-          : widget.person?.data.email;
-    });
   }
 
   Future<void> _savePerson() async {
@@ -418,14 +386,6 @@ class _SaveOrEditPersonState extends State<SaveOrEditPerson> {
     }
     setState(() {
       _allPersons = persons;
-      _isMeAssignedToAnotherPerson = persons.any(
-        (candidate) =>
-            candidate.remoteID != person?.remoteID &&
-            isCurrentUserContactLink(
-              email: candidate.data.email,
-              userID: candidate.data.userID,
-            ),
-      );
     });
     if (!widget.isEditing) {
       final mergeablePersons = await loadMergeablePersons();
