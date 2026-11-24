@@ -7,9 +7,6 @@ import "package:photos/core/event_bus.dart";
 import "package:photos/core/network/endpoint_config.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/events/ml_consent_changed_event.dart";
-import "package:photos/gateways/collections/collection_files_gateway.dart";
-import "package:photos/gateways/collections/collection_share_gateway.dart";
-import "package:photos/gateways/collections/collections_gateway.dart";
 import "package:photos/gateways/entity/entity_gateway.dart";
 import "package:photos/gateways/users/users_gateway.dart";
 import "package:photos/services/backup_preference_service.dart";
@@ -209,28 +206,6 @@ InstallSourceService get installSourceService {
     getToken: Configuration.instance.getToken,
   );
   return _installSourceService!;
-}
-
-CollectionFilesGateway? _collectionFilesGateway;
-CollectionFilesGateway get collectionFilesGateway {
-  _collectionFilesGateway ??= CollectionFilesGateway(
-    ServiceLocator.instance.enteDio,
-  );
-  return _collectionFilesGateway!;
-}
-
-CollectionShareGateway? _collectionShareGateway;
-CollectionShareGateway get collectionShareGateway {
-  _collectionShareGateway ??= CollectionShareGateway(
-    ServiceLocator.instance.enteDio,
-  );
-  return _collectionShareGateway!;
-}
-
-CollectionsGateway? _collectionsGateway;
-CollectionsGateway get collectionsGateway {
-  _collectionsGateway ??= CollectionsGateway(ServiceLocator.instance.enteDio);
-  return _collectionsGateway!;
 }
 
 UsersGateway? _usersGateway;

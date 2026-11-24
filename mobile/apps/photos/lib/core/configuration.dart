@@ -17,7 +17,6 @@ import 'package:photos/core/cache/thumbnail_in_memory_cache.dart';
 import 'package:photos/core/constants.dart';
 import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/event_bus.dart';
-import 'package:photos/db/collections_db.dart';
 import 'package:photos/db/files_db.dart';
 import "package:photos/db/memories_db.dart";
 import "package:photos/db/ml/db.dart";
@@ -255,7 +254,6 @@ class Configuration implements LockScreenHost, AccountDeletionHost {
     );
 
     await FilesDB.instance.clearTable();
-    await CollectionsDB.instance.clearTable();
     await MemoriesDB.instance.clearTable();
     await PhotoReviewDB.instance.clearTable();
     await MLDataDB.instance.clearTable();
