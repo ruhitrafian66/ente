@@ -7,16 +7,6 @@ enum EntityType {
   memory,
   libraryShare;
 
-  bool get isZipped {
-    switch (this) {
-      case EntityType.location:
-      case EntityType.person:
-        return false;
-      default:
-        return true;
-    }
-  }
-
   String get name {
     switch (this) {
       case EntityType.location:

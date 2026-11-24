@@ -1,7 +1,6 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:dio/dio.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -46,9 +45,6 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     ServiceLocator.instance.init(
       preferences,
-      Dio(),
-      Dio(),
-      Dio(),
       PackageInfo(
         appName: "Photos",
         packageName: "photos",
@@ -145,8 +141,6 @@ void main() {
 
   FileWidget media(WidgetTester tester) =>
       tester.widget<FileWidget>(find.byType(FileWidget));
-
-
 }
 
 class _MemoryMusicPlayer implements MemoryMusicPlayer {

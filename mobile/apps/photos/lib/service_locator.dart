@@ -1,11 +1,7 @@
-import "package:dio/dio.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:photos/core/event_bus.dart";
-import "package:photos/core/network/endpoint_config.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/events/ml_consent_changed_event.dart";
-import "package:photos/gateways/entity/entity_gateway.dart";
-import "package:photos/gateways/users/users_gateway.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/services/backup_preference_service.dart";
 import "package:photos/services/entity_service.dart";
@@ -28,11 +24,7 @@ import "package:shared_preferences/shared_preferences.dart";
 
 class ServiceLocator {
   late final SharedPreferences prefs;
-  late final Dio enteDio;
-  late final Dio nonEnteDio;
-  late final Dio downloadDio;
   late final PackageInfo packageInfo;
-  late final EndpointConfig endpointConfig;
   late final LocalSettings localSettings;
   late final BackupSettings backupSettings;
   late final EnteWakeLockService wakeLockService;
@@ -42,27 +34,15 @@ class ServiceLocator {
 
   static final ServiceLocator instance = ServiceLocator._privateConstructor();
 
-  void init(
-    SharedPreferences prefs,
-    Dio enteDio,
-    Dio nonEnteDio,
-    Dio downloadDio,
-    PackageInfo packageInfo,
-  ) {
+  void init(SharedPreferences prefs, PackageInfo packageInfo) {
     this.prefs = prefs;
-    this.enteDio = enteDio;
-    this.nonEnteDio = nonEnteDio;
-    this.downloadDio = downloadDio;
     this.packageInfo = packageInfo;
-    endpointConfig = EndpointConfig(prefs);
     localSettings = LocalSettings(prefs);
     backupSettings = BackupSettings(prefs);
     wakeLockService = EnteWakeLockService();
     mlDecryptionRecordStore = MlDecryptionRecordStore(prefs);
   }
 }
-
-EndpointConfig get endpointConfig => ServiceLocator.instance.endpointConfig;
 
 LocalSettings get localSettings => ServiceLocator.instance.localSettings;
 
@@ -73,7 +53,6 @@ EnteWakeLockService get wakeLockService =>
 
 MlDecryptionRecordStore get mlDecryptionRecordStore =>
     ServiceLocator.instance.mlDecryptionRecordStore;
-
 
 bool get hasGrantedMLConsent => localSettings.localGalleryMLConsent;
 
@@ -93,10 +72,7 @@ BackupPreferenceService get backupPreferenceService {
 EntityService? _entityService;
 
 EntityService get entityService {
-  _entityService ??= EntityService(
-    ServiceLocator.instance.prefs,
-    EntityGateway(ServiceLocator.instance.enteDio),
-  );
+  _entityService ??= EntityService(ServiceLocator.instance.prefs);
   return _entityService!;
 }
 
@@ -157,14 +133,4 @@ PermissionService? _permissionService;
 PermissionService get permissionService {
   _permissionService ??= PermissionService(ServiceLocator.instance.prefs);
   return _permissionService!;
-}
-
-UsersGateway? _usersGateway;
-UsersGateway get usersGateway {
-  _usersGateway ??= UsersGateway(
-    ServiceLocator.instance.enteDio,
-    ServiceLocator.instance.nonEnteDio,
-    endpointConfig,
-  );
-  return _usersGateway!;
 }

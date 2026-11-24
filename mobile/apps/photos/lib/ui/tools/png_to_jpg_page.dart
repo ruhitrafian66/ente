@@ -488,7 +488,6 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
               child: ThumbnailWidget(
                 item.file,
                 shouldShowSyncStatus: false,
-                shouldShowFavoriteIcon: false,
                 key: Key("png_to_jpg_" + item.file.tag),
               ),
             ),

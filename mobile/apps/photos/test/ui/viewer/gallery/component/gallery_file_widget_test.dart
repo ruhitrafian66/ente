@@ -1,6 +1,5 @@
 import "dart:typed_data";
 
-import "package:dio/dio.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
@@ -103,9 +102,6 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ServiceLocator.instance.init(
       await SharedPreferences.getInstance(),
-      Dio(),
-      Dio(),
-      Dio(),
       PackageInfo(
         appName: "Photos",
         packageName: "photos",
@@ -160,7 +156,6 @@ void main() {
                             limitSelectionToOne: false,
                             tag: "selection_",
                             photoGridSize: photoGridSizeDefault,
-                            currentUserID: null,
                           ),
                         );
                       }).toList(),
@@ -236,7 +231,6 @@ void main() {
               limitSelectionToOne: false,
               tag: "person_share_gallery",
               photoGridSize: photoGridSizeDefault,
-              currentUserID: null,
             ),
           ),
         )..setGalleryFiles = files,
@@ -276,7 +270,6 @@ void main() {
               tag: "gallery_",
               photoGridSize: gridSize,
               thumbnailSize: thumbnailSize,
-              currentUserID: null,
             ),
           ),
         ),
@@ -349,7 +342,6 @@ void main() {
                   tag: "gallery_",
                   photoGridSize: photoGridSizeDefault,
                   thumbnailSize: thumbnailLargeSize,
-                  currentUserID: null,
                 ),
               ),
             ),
@@ -431,7 +423,6 @@ void main() {
                 // small-local-cache behavior when no justified override exists.
                 photoGridSize: photoGridSizeDefault - 1,
                 thumbnailSize: justified ? thumbnailLargeSize : null,
-                currentUserID: null,
               ),
             ),
           ),

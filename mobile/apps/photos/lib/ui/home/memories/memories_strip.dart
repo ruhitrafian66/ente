@@ -8,7 +8,6 @@ import "package:flutter_animate/flutter_animate.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
-import "package:photos/events/diff_sync_complete_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/local_photos_updated_event.dart";
 import "package:photos/events/memories_changed_event.dart";
@@ -56,7 +55,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
   late StreamSubscription<PeopleChangedEvent> _peopleChangedSubscription;
   late StreamSubscription<LocalPhotosUpdatedEvent>
   _localPhotosUpdatedSubscription;
-  late StreamSubscription<DiffSyncCompleteEvent> _diffSyncCompleteSubscription;
   late double _cardWidth;
 
   // Delay cover warming past startup; generations invalidate stale work.
@@ -104,9 +102,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     _localPhotosUpdatedSubscription = Bus.instance
         .on<LocalPhotosUpdatedEvent>()
         .listen(_onLocalPhotosUpdated);
-    _diffSyncCompleteSubscription = Bus.instance
-        .on<DiffSyncCompleteEvent>()
-        .listen((_) => _hideMemoryLaneIfFilesMissingOrHidden());
     MemoryLaneService.instance.readyPersonIds.addListener(
       _onMemoryLaneReadyTimelinesChanged,
     );
@@ -121,7 +116,6 @@ class _MemoriesStripWidgetState extends State<MemoriesStripWidget> {
     _mlConsentChangedSubscription.cancel();
     _peopleChangedSubscription.cancel();
     _localPhotosUpdatedSubscription.cancel();
-    _diffSyncCompleteSubscription.cancel();
     _warmTimer?.cancel();
     _scrollController.dispose();
     MemoryLaneService.instance.readyPersonIds.removeListener(

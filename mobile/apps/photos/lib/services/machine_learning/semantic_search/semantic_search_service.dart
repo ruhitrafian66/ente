@@ -63,6 +63,9 @@ class SemanticSearchService {
   }
 
   Future<void> _scheduleWarmup({required bool delayTextModelLoad}) async {
+    // Offline fork: the CLIP models are not bundled. Without them the text
+    // model load fails each time, so skip the warm-up.
+    if (!kOfflineRunClip) return;
     if (kOfflineUsearchForSearch) {
       unawaited(_prepareVectorDbForSearch());
     }

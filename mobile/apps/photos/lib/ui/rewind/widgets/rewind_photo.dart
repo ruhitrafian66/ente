@@ -43,7 +43,6 @@ class RewindPhotoState extends State<RewindPhoto> {
       alignment: widget.focus,
       rawThumbnail: true,
       shouldShowSyncStatus: false,
-      shouldShowFavoriteIcon: false,
       shouldShowVideoOverlayIcon: false,
       thumbnailSize: thumbnailLargeSize,
       useRequestedThumbnailSizeForLocalCache: true,

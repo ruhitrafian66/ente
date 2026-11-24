@@ -40,15 +40,6 @@ class SettingsSearchRegistry {
 
     items.addAll([
       SettingsSearchItem(
-        title: l10n.crashReporting,
-        subtitle: l10n.security,
-        sectionPath: l10n.security,
-        icon: HugeIcons.strokeRoundedBug02,
-        routeBuilder: (_) => const SecuritySettingsPage(),
-        isSubPage: true,
-        keywords: ["crash", "reporting", "diagnostics"],
-      ),
-      SettingsSearchItem(
         title: l10n.appLock,
         subtitle: l10n.security,
         sectionPath: l10n.security,
@@ -259,48 +250,23 @@ class SettingsSearchRegistry {
         sectionPath: l10n.about,
         icon: HugeIcons.strokeRoundedInformationCircle,
         routeBuilder: (_) => const AboutUsPage(),
-        keywords: ["version", "privacy", "terms", "license"],
+        keywords: ["version", "logs"],
       ),
     );
 
-    items.addAll([
+    // Offline fork: the web links of the About page are gone. The page has
+    // the app version and the log export.
+    items.add(
       SettingsSearchItem(
-        title: l10n.weAreOpenSource,
+        title: l10n.exportLogs,
         subtitle: l10n.about,
         sectionPath: l10n.about,
-        icon: HugeIcons.strokeRoundedGithub,
+        icon: HugeIcons.strokeRoundedBug02,
         routeBuilder: (_) => const AboutUsPage(),
         isSubPage: true,
-        keywords: ["open source", "github", "code"],
+        keywords: ["logs", "export", "debug", "diagnostics"],
       ),
-      SettingsSearchItem(
-        title: l10n.blog,
-        subtitle: l10n.about,
-        sectionPath: l10n.about,
-        icon: HugeIcons.strokeRoundedPencilEdit01,
-        routeBuilder: (_) => const AboutUsPage(),
-        isSubPage: true,
-        keywords: ["blog", "news", "updates"],
-      ),
-      SettingsSearchItem(
-        title: l10n.privacy,
-        subtitle: l10n.about,
-        sectionPath: l10n.about,
-        icon: HugeIcons.strokeRoundedShield01,
-        routeBuilder: (_) => const AboutUsPage(),
-        isSubPage: true,
-        keywords: ["privacy", "policy"],
-      ),
-      SettingsSearchItem(
-        title: l10n.termsOfServicesTitle,
-        subtitle: l10n.about,
-        sectionPath: l10n.about,
-        icon: HugeIcons.strokeRoundedFile01,
-        routeBuilder: (_) => const AboutUsPage(),
-        isSubPage: true,
-        keywords: ["terms", "tos", "service"],
-      ),
-    ]);
+    );
 
     return items;
   }

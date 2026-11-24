@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:photos/db/common/conflict_algo.dart';
 import 'package:photos/db/files_db.dart';
-import "package:photos/gateways/entity/models/type.dart";
+import "package:photos/models/entity_type.dart";
 import "package:photos/models/local_entity_data.dart";
 
 extension EntitiesDB on FilesDB {

@@ -3,24 +3,20 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/material.dart";
 import 'package:path/path.dart' as path;
-import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
 import "package:photos/module/download/file.dart";
 import "package:photos/ui/components/info_item_widget.dart";
 import "package:photos/utils/image_util.dart";
-import "package:photos/utils/magic_util.dart";
 
 class FilePropertiesItemWidget extends StatefulWidget {
   final EnteFile file;
   final bool isImage;
   final Map<String, dynamic> exifData;
-  final int currentUserID;
   const FilePropertiesItemWidget(
     this.file,
     this.isImage,
-    this.exifData,
-    this.currentUserID, {
+    this.exifData, {
     super.key,
   });
   @override
@@ -45,15 +41,8 @@ class _FilePropertiesItemWidgetState extends State<FilePropertiesItemWidget> {
           path.basenameWithoutExtension(widget.file.displayName) +
           path.extension(widget.file.displayName).toUpperCase(),
       subtitleSection: _subTitleSection(),
-      editOnTap:
-          widget.file.uploadedFileID == null ||
-              widget.file.ownerID != widget.currentUserID ||
-              widget.file.isTrash
-          ? null
-          : () async {
-              await editFilename(context, widget.file);
-              setState(() {});
-            },
+      // Offline fork: a rename was a server operation. There is no edit
+      // action for the file name.
       useMenuStyle: true,
     );
   }

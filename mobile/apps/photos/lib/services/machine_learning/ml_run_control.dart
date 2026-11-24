@@ -5,8 +5,6 @@ enum MlStopReason {
   appPaused,
   backgroundDeadline,
   controller,
-  logout,
-  modeChanged,
   manual,
   corruptModel,
 }

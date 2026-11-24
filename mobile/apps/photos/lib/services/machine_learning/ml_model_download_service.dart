@@ -1,5 +1,3 @@
-import "dart:async";
-
 import "package:logging/logging.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
@@ -13,9 +11,6 @@ class MLModelDownloadService {
   final _logger = Logger("MLModelDownloadService");
 
   final _downloadModelLock = Lock();
-  final _progressController = StreamController<(String, int, int)>.broadcast();
-
-  Stream<(String, int, int)> get progressStream => _progressController.stream;
 
   Future<String> getAssetsDirectory() async =>
       p.join((await getApplicationSupportDirectory()).path, "assets");

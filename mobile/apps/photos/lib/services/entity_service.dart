@@ -1,39 +1,20 @@
-import 'dart:async';
 import 'dart:convert';
 
 import "package:crypto/crypto.dart";
-import "package:ente_crypto/ente_crypto.dart";
-import 'package:flutter/foundation.dart';
-import 'package:logging/logging.dart';
 import "package:nanoid/nanoid.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/db/entities_db.dart";
 import "package:photos/db/files_db.dart";
-import "package:photos/gateways/entity/entity_gateway.dart";
-import "package:photos/gateways/entity/models/key.dart";
-import "package:photos/gateways/entity/models/type.dart";
+import "package:photos/models/entity_type.dart";
 import "package:photos/models/local_entity_data.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Offline fork: entities (persons, location tags) live only in the local
+// `entities` table of FilesDB. No entity key, no encryption, no server.
 class EntityService {
-  static const int fetchLimit = 500;
-  final _logger = Logger((EntityService).toString());
   final SharedPreferences _prefs;
-  final EntityGateway _gateway;
-  final _config = Configuration.instance;
   late final FilesDB _db = FilesDB.instance;
 
-  EntityService(this._prefs, this._gateway) {
-    debugPrint("EntityService constructor");
-  }
-
-  String _getEntityKeyPrefix(EntityType type) {
-    return "entity_key_" + type.name;
-  }
-
-  String _getEntityHeaderPrefix(EntityType type) {
-    return "entity_key_header_" + type.name;
-  }
+  EntityService(this._prefs);
 
   String _getEntityLastSyncTimePrefix(EntityType type) {
     return "entity_last_sync_time_" + type.name;
@@ -58,12 +39,8 @@ class EntityService {
     EntityType type,
     Map<String, dynamic> jsonMap, {
     String? id,
-    bool addWithCustomID = false,
-    int? expectedUpdatedAt,
   }) async {
     final String plainText = jsonEncode(jsonMap);
-    // Offline fork: entities (persons) live only in the local entities
-    // table. No entity key, no encryption, no server round trip.
     final localData = LocalEntityData(
       id: id ?? "local_${nanoid()}",
       type: type,
@@ -79,50 +56,10 @@ class EntityService {
     await _db.deleteEntities([id]);
   }
 
-  // Offline fork: there is no server, so there is nothing to sync.
-  Future<void> syncEntities() async {}
-
-  Future<int> syncEntity(EntityType type) async => 0;
-
+  // Offline fork: nothing writes this value, so it stays 0. PersonService
+  // uses it as a cache stamp.
   int lastSyncTime(EntityType type) {
     return _prefs.getInt(_getEntityLastSyncTimePrefix(type)) ?? 0;
-  }
-
-  Future<Uint8List> getOrCreateEntityKey(EntityType type) async {
-    late String encryptedKey;
-    late String header;
-    try {
-      if (_prefs.containsKey(_getEntityKeyPrefix(type)) &&
-          _prefs.containsKey(_getEntityHeaderPrefix(type))) {
-        encryptedKey = _prefs.getString(_getEntityKeyPrefix(type))!;
-        header = _prefs.getString(_getEntityHeaderPrefix(type))!;
-      } else {
-        final EntityKey response = await _gateway.getKey(type);
-        encryptedKey = response.encryptedKey;
-        header = response.header;
-        await _prefs.setString(_getEntityKeyPrefix(type), encryptedKey);
-        await _prefs.setString(_getEntityHeaderPrefix(type), header);
-      }
-      final entityKey = CryptoUtil.decryptSync(
-        CryptoUtil.base642bin(encryptedKey),
-        _config.getKey()!,
-        CryptoUtil.base642bin(header),
-      );
-      return entityKey;
-    } on EntityKeyNotFound {
-      _logger.info("EntityKeyNotFound generating key for type $type");
-      final key = CryptoUtil.generateKey();
-      final encryptedKeyData = CryptoUtil.encryptSync(key, _config.getKey()!);
-      encryptedKey = CryptoUtil.bin2base64(encryptedKeyData.encryptedData!);
-      header = CryptoUtil.bin2base64(encryptedKeyData.nonce!);
-      await _gateway.createKey(type, encryptedKey, header);
-      await _prefs.setString(_getEntityKeyPrefix(type), encryptedKey);
-      await _prefs.setString(_getEntityHeaderPrefix(type), header);
-      return key;
-    } catch (e, s) {
-      _logger.severe("Failed to getOrCreateKey for type $type", e, s);
-      rethrow;
-    }
   }
 
   Future<String?> getPreHashForEntities(

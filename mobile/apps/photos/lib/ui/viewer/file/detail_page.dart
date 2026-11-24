@@ -16,13 +16,11 @@ import "package:flutter_svg/flutter_svg.dart";
 import 'package:logging/logging.dart';
 import 'package:photos/core/constants.dart';
 import "package:photos/core/event_bus.dart";
-import "package:photos/events/file_caption_updated_event.dart";
 import "package:photos/events/guest_view_event.dart";
 import "package:photos/events/pause_video_event.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/file/file_type.dart";
-import "package:photos/models/gallery_type.dart";
 import 'package:photos/module/download/file.dart';
 import "package:photos/module/download/thumbnail.dart";
 import "package:photos/service_locator.dart";
@@ -64,7 +62,6 @@ class DetailPageConfiguration {
   final bool showEditAction;
   final bool showGalleryFilmstrip;
   final int? selectionLimit;
-  final GalleryType? galleryType;
   final FutureOr<void> Function(BuildContext context)? onBackPressed;
   final ValueChanged<EnteFile>? onDismissed;
   final ValueChanged<EnteFile>? onSelectionRemoved;
@@ -80,7 +77,6 @@ class DetailPageConfiguration {
     this.showEditAction = true,
     this.showGalleryFilmstrip = false,
     this.selectionLimit = maxPickAssetLimit,
-    this.galleryType,
     this.onBackPressed,
     this.onDismissed,
     this.onSelectionRemoved,
@@ -97,7 +93,6 @@ class DetailPageConfiguration {
     bool? showEditAction,
     bool? showGalleryFilmstrip,
     int? selectionLimit,
-    GalleryType? galleryType,
     FutureOr<void> Function(BuildContext context)? onBackPressed,
     ValueChanged<EnteFile>? onDismissed,
     ValueChanged<EnteFile>? onSelectionRemoved,
@@ -112,7 +107,6 @@ class DetailPageConfiguration {
       showEditAction: showEditAction ?? this.showEditAction,
       showGalleryFilmstrip: showGalleryFilmstrip ?? this.showGalleryFilmstrip,
       selectionLimit: selectionLimit ?? this.selectionLimit,
-      galleryType: galleryType ?? this.galleryType,
       onBackPressed: onBackPressed ?? this.onBackPressed,
       onDismissed: onDismissed ?? this.onDismissed,
       onSelectionRemoved: onSelectionRemoved ?? this.onSelectionRemoved,
@@ -133,7 +127,6 @@ class DetailPage extends StatefulWidget {
 
 class _DetailPageState extends State<DetailPage> {
   final _enableFullScreenNotifier = ValueNotifier(false);
-  final _isInSharedCollectionNotifier = ValueNotifier(false);
   final _showingThumbnailFallbackNotifier = ValueNotifier<String?>(null);
   final _isZoomedNotifier = ValueNotifier(false);
   final _zoomTransformNotifier = ValueNotifier(ZoomTransform.identity);
@@ -156,7 +149,6 @@ class _DetailPageState extends State<DetailPage> {
   @override
   void dispose() {
     _enableFullScreenNotifier.dispose();
-    _isInSharedCollectionNotifier.dispose();
     _showingThumbnailFallbackNotifier.dispose();
     _isZoomedNotifier.dispose();
     _zoomTransformNotifier.dispose();
@@ -170,7 +162,6 @@ class _DetailPageState extends State<DetailPage> {
     // survives body rebuilds.
     return InheritedDetailPageState(
       enableFullScreenNotifier: _enableFullScreenNotifier,
-      isInSharedCollectionNotifier: _isInSharedCollectionNotifier,
       showingThumbnailFallbackNotifier: _showingThumbnailFallbackNotifier,
       isZoomedNotifier: _isZoomedNotifier,
       zoomTransformNotifier: _zoomTransformNotifier,
@@ -205,8 +196,6 @@ class _BodyState extends State<_Body> {
   bool isGuestView = false;
   bool swipeLocked = false;
   late final StreamSubscription<GuestViewEvent> _guestViewEventSubscription;
-  late final StreamSubscription<FileCaptionUpdatedEvent>
-  _captionUpdatedSubscription;
   QrCodeDetectionHelper? _qrHelper;
   final Map<String, File> _renderedFiles = {};
   final _playbackSpeed = ValueNotifier<double>(1.0);
@@ -260,13 +249,6 @@ class _BodyState extends State<_Body> {
       });
       _syncBottomControlsInset();
     });
-    _captionUpdatedSubscription = Bus.instance
-        .on<FileCaptionUpdatedEvent>()
-        .listen((event) {
-          if (event.fileGeneratedID == _selectedFile?.generatedID) {
-            setState(() {});
-          }
-        });
     if (widget.config.mode == DetailPageMode.full) {
       _qrHelper = QrCodeDetectionHelper();
     }
@@ -298,7 +280,6 @@ class _BodyState extends State<_Body> {
   @override
   void dispose() {
     _guestViewEventSubscription.cancel();
-    _captionUpdatedSubscription.cancel();
     _filmstripCoordinator.dispose();
     _pageController.dispose();
     _selectedIndexNotifier.dispose();

@@ -10,7 +10,6 @@ import "package:photos/core/event_bus.dart";
 import "package:photos/db/files_db.dart";
 import "package:photos/db/memories_db.dart";
 import "package:photos/db/offline_files_db.dart";
-import "package:photos/events/diff_sync_complete_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/local_photos_updated_event.dart";
 import "package:photos/events/memories_changed_event.dart";
@@ -76,7 +75,6 @@ class MemoriesCacheService {
 
   final _memoriesUpdateLock = Lock();
   final _memoriesGetLock = Lock();
-  final List<EnteFile> _pendingRemoteSyncDeletedFiles = [];
 
   MemoriesCacheService(this._prefs) {
     _logger.info("MemoriesCacheService constructor");
@@ -99,21 +97,8 @@ class MemoriesCacheService {
               event.source != "moveFrom";
         })
         .listen((event) async {
-          if (event.source == "syncDeleteFromRemote") {
-            _pendingRemoteSyncDeletedFiles.addAll(event.updatedFiles);
-            return;
-          }
           await _invalidateDeletedFiles(event.updatedFiles);
         });
-
-    Bus.instance.on<DiffSyncCompleteEvent>().listen((_) async {
-      if (_pendingRemoteSyncDeletedFiles.isEmpty) {
-        return;
-      }
-      final deletedFiles = List<EnteFile>.of(_pendingRemoteSyncDeletedFiles);
-      _pendingRemoteSyncDeletedFiles.clear();
-      await _invalidateDeletedFiles(deletedFiles);
-    });
 
     Bus.instance.on<LocalPhotosUpdatedEvent>().listen((event) {
       if (_pendingInitialOfflineCacheUpgrade &&

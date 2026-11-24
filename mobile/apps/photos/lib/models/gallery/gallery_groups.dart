@@ -134,8 +134,6 @@ class GalleryGroups {
   final Map<String, double> _groupIdToScrollOffsetMap = {};
   final List<double> _groupScrollOffsets = [];
   final List<({String groupID, String title})> _scrollbarDivisions = [];
-  // Offline fork: there is no account, so there is no current user ID.
-  int? get currentUserID => null;
   final _uuid = const Uuid();
 
   List<String> get groupIDs => _groupIds;
@@ -518,7 +516,6 @@ class GalleryGroups {
                           limitSelectionToOne: limitSelectionToOne,
                           tag: tagPrefix,
                           photoGridSize: crossAxisCount,
-                          currentUserID: currentUserID,
                         ),
                       ),
                     );
@@ -542,7 +539,6 @@ class GalleryGroups {
                         limitSelectionToOne: limitSelectionToOne,
                         tag: tagPrefix,
                         photoGridSize: crossAxisCount,
-                        currentUserID: currentUserID,
                       ),
                     ),
                   );
@@ -646,7 +642,6 @@ class GalleryGroups {
                     tag: tagPrefix,
                     photoGridSize: crossAxisCount,
                     thumbnailSize: thumbnailLargeSize,
-                    currentUserID: currentUserID,
                   ),
                 ),
               );

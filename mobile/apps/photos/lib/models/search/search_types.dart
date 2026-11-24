@@ -3,9 +3,6 @@ import "dart:async";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:photos/core/event_bus.dart";
-import "package:photos/events/collection_updated_event.dart";
-import "package:photos/events/contact_relationships_invalidated_event.dart";
-import "package:photos/events/contacts_changed_event.dart";
 import "package:photos/events/event.dart";
 import "package:photos/events/location_tag_updated_event.dart";
 import "package:photos/events/magic_cache_updated_event.dart";
@@ -230,16 +227,10 @@ extension SectionTypeExtensions on SectionType {
         return [Bus.instance.on<LocationTagUpdatedEvent>()];
       case SectionType.ritual:
         return [];
-      case SectionType.album:
-        return [Bus.instance.on<CollectionUpdatedEvent>()];
       case SectionType.face:
         return [Bus.instance.on<PeopleChangedEvent>()];
       case SectionType.contacts:
-        return [
-          Bus.instance.on<ContactRelationshipsInvalidatedEvent>(),
-          Bus.instance.on<PeopleChangedEvent>(),
-          Bus.instance.on<ContactsChangedEvent>(),
-        ];
+        return [Bus.instance.on<PeopleChangedEvent>()];
       default:
         return [];
     }
@@ -254,11 +245,7 @@ extension SectionTypeExtensions on SectionType {
       case SectionType.ritual:
         return [];
       case SectionType.contacts:
-        return [
-          Bus.instance.on<ContactRelationshipsInvalidatedEvent>(),
-          Bus.instance.on<PeopleChangedEvent>(),
-          Bus.instance.on<ContactsChangedEvent>(),
-        ];
+        return [Bus.instance.on<PeopleChangedEvent>()];
       default:
         return [];
     }

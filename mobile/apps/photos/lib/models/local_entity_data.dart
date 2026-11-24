@@ -1,5 +1,5 @@
 import "package:equatable/equatable.dart";
-import "package:photos/gateways/entity/models/type.dart";
+import "package:photos/models/entity_type.dart";
 
 class LocalEntityData {
   final String id;

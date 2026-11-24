@@ -3,7 +3,6 @@ import 'dart:io';
 
 import "package:adaptive_theme/adaptive_theme.dart";
 import "package:computer/computer.dart";
-import "package:ente_account_deletion/account_deletion.dart";
 import "package:ente_components/ente_components.dart" as components;
 import 'package:ente_crypto/ente_crypto.dart';
 import "package:ente_crypto_api/ente_crypto_api.dart" show registerCryptoApi;
@@ -29,7 +28,6 @@ import 'package:photos/core/configuration.dart';
 import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/errors.dart';
 import 'package:photos/core/event_bus.dart';
-import 'package:photos/core/network/network.dart';
 import 'package:photos/db/files_db.dart';
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/offline_files_db.dart";
@@ -292,17 +290,7 @@ Future<void> _runMinimally(
     await _scheduleHeartBeat(prefs, true);
     await _ensureRustInitialized(via: 'workmanager:$taskId');
 
-    _logger.info("[BG TASK] NetworkClient init $tlog");
-    await NetworkClient.instance.init(packageInfo, prefs);
-    _logger.info("[BG TASK] NetworkClient init done $tlog");
-
-    ServiceLocator.instance.init(
-      prefs,
-      NetworkClient.instance.enteDio,
-      NetworkClient.instance.getDio(),
-      NetworkClient.instance.downloadDio,
-      packageInfo,
-    );
+    ServiceLocator.instance.init(prefs, packageInfo);
     // Offline fork: warm the offline int-ID cache before any service reads it.
     await OfflineFilesDB.instance.refreshIntIdCache();
     MLDataDB.initialize(preferRust: kOfflineRustMlDb);
@@ -416,17 +404,7 @@ Future<void> _init(
     Computer.shared().turnOn(workersCount: 4).ignore();
     CryptoUtil.init();
 
-    _logger.info("NetworkClient init $tlog");
-    await NetworkClient.instance.init(packageInfo, preferences);
-    _logger.info("NetworkClient init done $tlog");
-
-    ServiceLocator.instance.init(
-      preferences,
-      NetworkClient.instance.enteDio,
-      NetworkClient.instance.getDio(),
-      NetworkClient.instance.downloadDio,
-      packageInfo,
-    );
+    ServiceLocator.instance.init(preferences, packageInfo);
 
     // Offline fork: warm the offline int-ID cache before any service reads it.
     await OfflineFilesDB.instance.refreshIntIdCache();
@@ -449,7 +427,6 @@ Future<void> _init(
       appLogoAsset: 'assets/ente-branding.svg',
       appLogoHeight: 18,
     );
-    AccountDeletionSettings.instance.init(host: Configuration.instance);
 
     SearchService.instance.init();
 
@@ -582,18 +559,12 @@ Future<void> _sync(String caller) async {
   }
 }
 
-Future runWithLogs(
-  Function() function, {
-  String prefix = "",
-  Duration? sentryInitTimeout,
-}) async {
+Future runWithLogs(Function() function, {String prefix = ""}) async {
   await SuperLogging.main(
     LogConfig(
       body: function,
       logDirPath: (await getApplicationSupportDirectory()).path + "/logs",
       maxLogFiles: 5,
-      // Offline fork: no Sentry DSN and no tunnel, so no crash report upload.
-      sentryInitTimeout: sentryInitTimeout,
       enableInDebugMode: true,
       prefix: prefix,
     ),

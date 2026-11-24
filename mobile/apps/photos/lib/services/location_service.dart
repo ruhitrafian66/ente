@@ -2,21 +2,17 @@ import "dart:convert";
 import "dart:math";
 
 import "package:computer/computer.dart";
-import "package:connectivity_plus/connectivity_plus.dart";
-import "package:ente_photos_platform/ente_photos_platform.dart";
 import "package:logging/logging.dart";
-import "package:path_provider/path_provider.dart";
 import "package:photos/core/constants.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/location_tag_updated_event.dart";
-import "package:photos/gateways/entity/models/type.dart";
 import "package:photos/models/base_location.dart";
+import "package:photos/models/entity_type.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/local_entity_data.dart";
 import "package:photos/models/location/location.dart";
 import 'package:photos/models/location_tag/location_tag.dart';
 import "package:photos/service_locator.dart";
-import "package:photos/services/native_country_locales.dart";
 import "package:photos/src/rust/api/location_api.dart" as rust;
 import "package:photos/utils/rust_isolate_util.dart";
 
@@ -39,34 +35,8 @@ class LocationService {
   final Logger _logger = Logger((LocationService).toString());
   final Computer _computer = Computer.shared();
 
-  // Refresh discovery if it ran before the city index loaded.
-  bool reloadLocationDiscoverySection = false;
-
-  rust.LocationIndex? _index;
-  Future<rust.LocationIndex?>? _loading;
-  bool _indexLoadFailed = false;
-  bool _retryIndexAfterLoad = false;
-  final _countryNames = <String, CountryNames>{};
-
   // TODO: lau: consider actually using this in location section
   List<BaseLocation> baseLocations = [];
-
-  LocationService() {
-    Connectivity().onConnectivityChanged.listen((connections) {
-      if (!connections.any((result) => result != ConnectivityResult.none)) {
-        return;
-      }
-      if (_loading != null) {
-        _retryIndexAfterLoad = true;
-      } else if (_indexLoadFailed) {
-        _indexLoadFailed = false;
-        _loadIndex();
-      }
-    });
-    Future.delayed(const Duration(seconds: 3), () {
-      _loadIndex();
-    });
-  }
 
   Future<Iterable<LocalEntity<LocationTag>>> _getStoredLocationTags() async {
     final data = await entityService.getEntities(EntityType.location);
@@ -88,120 +58,16 @@ class LocationService {
     return locationTagToOccurrence;
   }
 
-  Future<Map<City, List<EnteFile>>> getFilesInCity(
-    List<EnteFile> allFiles,
-    String query,
-  ) async {
-    final index = await _loadIndex();
-    if (index == null) {
-      if (allFiles.isNotEmpty && query.isEmpty) {
-        reloadLocationDiscoverySection = true;
-      }
-      return {};
-    }
-    final files = allFiles.where((file) => file.hasLocation).toList();
-    final groups = await index.groupCities(
-      coordinates: _coordinates(files),
-      query: query,
-    );
-    return {
-      for (final group in groups)
-        _city(group.city): [
-          for (final position in group.coordinateIndices) files[position],
-        ],
-    };
-  }
-
-  Future<Map<String, List<EnteFile>>> getFilesInCountry(
-    List<EnteFile> allFiles,
-    String query,
-    String locale,
-  ) async {
-    if (query.isEmpty) return {};
-    final index = await _loadIndex();
-    if (index == null) return {};
-    final names = _countryNames[locale] ??= await CountryNamesClient.get(
-      locale,
-      nativeLocales: nativeCountryLocales,
-    );
-    final matchingCodes = names.matchingCodes(query);
-    if (matchingCodes.isEmpty) return {};
-    final files = allFiles.where((file) => file.hasLocation).toList();
-    final groups = await index.groupCountries(
-      coordinates: _coordinates(files),
-      region: names.region,
-    );
-    return {
-      for (final group in groups)
-        if (matchingCodes.contains(group.code))
-          names.names[group.code]!: [
-            for (final position in group.coordinateIndices) files[position],
-          ],
-    };
-  }
-
-  Future<rust.LocationIndex?> getLocationIndex() => _loadIndex();
-
-  Future<List<City>> getCities() async {
-    final index = await _loadIndex();
-    if (index == null) return [];
-    return (await index.cities()).map(_city).toList();
-  }
+  // Offline fork: upstream downloads the city data set (cities.bin) at run
+  // time. The fork has no network, so there is no city index. City and
+  // country search are removed; the callers below get an empty result, as
+  // they did each time the download failed.
+  Future<rust.LocationIndex?> getLocationIndex() async => null;
 
   Future<CitySearchIndex> getCitySearchIndex(
     Iterable<EnteFile> allFiles,
   ) async {
-    final files = allFiles.toList();
-    final groups = await getFilesInCity(files, '');
-    return CitySearchIndex({
-      for (final group in groups.entries)
-        for (final file in group.value) file: group.key,
-    });
-  }
-
-  City _city(rust.LocationCity city) => City(
-    city: city.name,
-    country: city.country,
-    lat: city.latitude,
-    lng: city.longitude,
-  );
-
-  Future<rust.LocationIndex?> _loadIndex() {
-    if (_index != null) return Future.value(_index);
-    if (_indexLoadFailed) return Future.value(null);
-    return _loading ??= _openIndex();
-  }
-
-  Future<rust.LocationIndex?> _openIndex() async {
-    final startTime = DateTime.now();
-    try {
-      final root = (await getApplicationSupportDirectory()).path;
-      _index = await rust.openLocationIndex(assetRoot: root);
-      _logger.info(
-        "Loaded location index in ${DateTime.now().difference(startTime).inMilliseconds}ms, reloadingDiscovery: $reloadLocationDiscoverySection",
-      );
-      if (reloadLocationDiscoverySection) {
-        reloadLocationDiscoverySection = false;
-        Bus.instance.fire(
-          LocationTagUpdatedEvent(LocTagEventType.dataSetLoaded),
-        );
-      }
-      return _index;
-    } catch (e) {
-      _logger.warning("Failed to load location index: $e");
-      return null;
-    } finally {
-      final retryAfterLoad = _retryIndexAfterLoad;
-      _retryIndexAfterLoad = false;
-      _loading = null;
-      if (_index == null) {
-        if (retryAfterLoad) {
-          _loadIndex().ignore();
-        } else {
-          _indexLoadFailed = true;
-        }
-      }
-    }
+    return const CitySearchIndex({});
   }
 
   Future<Iterable<LocalEntity<LocationTag>>> getLocationTags() {

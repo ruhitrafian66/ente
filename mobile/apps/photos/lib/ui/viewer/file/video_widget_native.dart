@@ -71,6 +71,9 @@ class _VideoWidgetNativeState extends State<VideoWidgetNative>
   late final StreamSubscription<GuestViewEvent> _guestViewEventSubscription;
   NativeVideoPlayerController? _controller;
   String? _filePath;
+  // Offline fork: set when the device file cannot be found. The loading
+  // widget then shows an error icon, not an endless spinner.
+  bool _isFileMissing = false;
   String? duration;
   double? aspectRatio;
   final _isPlaybackReady = ValueNotifier(false);
@@ -180,13 +183,17 @@ class _VideoWidgetNativeState extends State<VideoWidgetNative>
 
   void loadOriginal() async {
     final generation = ++_videoLoad;
-    setState(() => _filePath = null);
+    setState(() {
+      _filePath = null;
+      _isFileMissing = false;
+    });
     if (widget.file.isSharedMediaToAppSandbox) {
       final localFile = File(getSharedMediaFilePath(widget.file));
       if (localFile.existsSync()) {
         _setFilePathForNativePlayer(localFile.path);
       } else {
         _logger.warning("Shared media video file is missing");
+        _onFileMissing();
       }
     } else {
       await widget.file.getAsset.then((asset) async {
@@ -197,6 +204,7 @@ class _VideoWidgetNativeState extends State<VideoWidgetNative>
         }
         if (asset == null || !(exists || widget.file.isDeviceTrash)) {
           _logger.warning("Device asset for the video is missing");
+          _onFileMissing();
         } else {
           // ignore: unawaited_futures
           getFile(widget.file, isOrigin: true).then((file) {
@@ -205,6 +213,7 @@ class _VideoWidgetNativeState extends State<VideoWidgetNative>
             }
             if (file == null) {
               _logger.warning("Could not read the local video file");
+              _onFileMissing();
               return;
             }
             _setFilePathForNativePlayer(file.path);
@@ -215,6 +224,11 @@ class _VideoWidgetNativeState extends State<VideoWidgetNative>
         }
       });
     }
+  }
+
+  void _onFileMissing() {
+    if (!mounted) return;
+    setState(() => _isFileMissing = true);
   }
 
   @override
@@ -669,11 +683,13 @@ class _VideoWidgetNativeState extends State<VideoWidgetNative>
               color: Colors.black.withValues(alpha: 0.3),
               border: Border.all(color: strokeFaintDark, width: 1),
             ),
-            child: const EnteLoadingWidget(
-              size: 32,
-              color: fillBaseDark,
-              padding: 0,
-            ),
+            child: _isFileMissing
+                ? const Icon(Icons.error_outline, color: Colors.white)
+                : const EnteLoadingWidget(
+                    size: 32,
+                    color: fillBaseDark,
+                    padding: 0,
+                  ),
           ),
         ),
       ],

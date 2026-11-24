@@ -5,16 +5,13 @@ import "package:flutter/material.dart";
 import "package:intl/intl.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/pause_video_event.dart";
-import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/ui/components/info_item_widget.dart";
-import "package:photos/ui/viewer/date/edit_date_sheet.dart";
 import "package:photos/ui/viewer/gallery/jump_to_date_gallery.dart";
 
 class CreationTimeItem extends StatefulWidget {
   final EnteFile file;
-  final int currentUserID;
-  const CreationTimeItem(this.file, this.currentUserID, {super.key});
+  const CreationTimeItem(this.file, {super.key});
 
   @override
   State<CreationTimeItem> createState() => _CreationTimeItemState();
@@ -25,11 +22,6 @@ class _CreationTimeItemState extends State<CreationTimeItem> {
   Widget build(BuildContext context) {
     final colors = context.componentColors;
     final dateTime = _dateTimeForDisplay(widget.file);
-    final canEdit =
-        (widget.file.ownerID == null ||
-            widget.file.ownerID == widget.currentUserID) &&
-        widget.file.uploadedFileID != null &&
-        !widget.file.isTrash;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () {
@@ -52,20 +44,11 @@ class _CreationTimeItemState extends State<CreationTimeItem> {
             style: TextStyles.mini.copyWith(color: colors.textLight),
           ),
         ]),
-        editOnTap: canEdit ? () => _showDateTimePicker(widget.file) : null,
+        // Offline fork: a date edit was a server operation. There is no edit
+        // action for the date.
         useMenuStyle: true,
       ),
     );
-  }
-
-  void _showDateTimePicker(EnteFile file) async {
-    final DateTime? newDate = await showEditDateSheet(context, [
-      file,
-    ], showHeader: false);
-    if (newDate != null) {
-      widget.file.creationTime = newDate.microsecondsSinceEpoch;
-      setState(() {});
-    }
   }
 
   DateTime _dateTimeForDisplay(EnteFile file) {

@@ -8,9 +8,8 @@ import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/base.dart";
-import "package:photos/events/diff_sync_complete_event.dart";
 import "package:photos/events/people_changed_event.dart";
-import "package:photos/gateways/entity/models/type.dart";
+import "package:photos/models/entity_type.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/local_entity_data.dart";
@@ -80,9 +79,6 @@ class PersonService {
     final bool isFirstInit = _instance == null;
     _instance = PersonService(entityService, faceMLDataDB, prefs);
     if (isFirstInit) {
-      Bus.instance.on<DiffSyncCompleteEvent>().listen((event) {
-        unawaited(instance.sync());
-      });
       Bus.instance.on<PeopleChangedEvent>().listen((event) {
         if (event.type != PeopleEventType.syncDone) {
           _shouldReconcilePeople = true;

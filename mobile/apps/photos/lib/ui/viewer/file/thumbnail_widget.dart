@@ -42,7 +42,6 @@ class ThumbnailWidget extends StatefulWidget {
   // Offline fork: no owner avatar exists; the flag is kept for the callers.
   final bool shouldShowOwnerAvatar;
   // Offline fork: no favourite exists; the flag is kept for the callers.
-  final bool shouldShowFavoriteIcon;
   final Color? placeholderColor;
 
   final bool shouldShowVideoDuration;
@@ -63,7 +62,6 @@ class ThumbnailWidget extends StatefulWidget {
     this.useRequestedThumbnailSizeForLocalCache = false,
     this.useCachedThumbnailAsPlaceholder = false,
     this.gaplessPlayback = false,
-    this.shouldShowFavoriteIcon = true,
     this.placeholderColor,
     this.shouldShowVideoDuration = false,
     this.shouldShowVideoOverlayIcon = true,

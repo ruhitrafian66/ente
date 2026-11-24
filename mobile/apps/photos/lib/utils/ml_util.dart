@@ -23,7 +23,6 @@ import "package:photos/services/machine_learning/ml_run_control.dart";
 import "package:photos/services/search_service.dart";
 import "package:photos/services/sync/origin_fetch_tracker.dart";
 import "package:photos/src/rust/api/ml_indexing_api.dart" as rust_ml;
-import "package:photos/utils/network_util.dart";
 
 final _logger = Logger("MlUtil");
 
@@ -33,9 +32,8 @@ enum MLMode { enteGallery, localGallery }
 
 class IndexStatus {
   final int indexedItems, pendingItems;
-  final bool? hasWifiEnabled;
 
-  IndexStatus(this.indexedItems, this.pendingItems, [this.hasWifiEnabled]);
+  IndexStatus(this.indexedItems, this.pendingItems);
 }
 
 class FileMLInstruction {
@@ -99,11 +97,10 @@ Future<IndexStatus> getIndexStatus() async {
         indexed++;
       }
     }
-    final hasWifiEnabled = await canUseHighBandwidth();
     _logger.info(
-      "IndexStatus: $indexed indexed of $total total (localGallery: true, petActive: $petActive, hasWifiEnabled: $hasWifiEnabled)",
+      "IndexStatus: $indexed indexed of $total total (localGallery: true, petActive: $petActive)",
     );
-    return IndexStatus(indexed, total - indexed, hasWifiEnabled);
+    return IndexStatus(indexed, total - indexed);
   } catch (e, s) {
     _logger.severe('Error getting ML status', e, s);
     rethrow;

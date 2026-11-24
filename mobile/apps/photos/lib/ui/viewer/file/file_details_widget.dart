@@ -5,16 +5,13 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:exif_reader/exif_reader.dart";
 import "package:flutter/material.dart";
-import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
-import "package:photos/core/user_config.dart";
 import "package:photos/events/people_changed_event.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
 import "package:photos/module/metadata/exif.dart";
 import "package:photos/service_locator.dart";
-import 'package:photos/ui/viewer/file/file_caption_widget.dart';
 import "package:photos/ui/viewer/file_details/creation_time_item_widget.dart";
 import 'package:photos/ui/viewer/file_details/exif_item_widgets.dart';
 import "package:photos/ui/viewer/file_details/file_info_faces_item_widget.dart";
@@ -49,7 +46,6 @@ class _FileDetailsWidgetState extends State<FileDetailsWidget> {
   late final StreamSubscription<PeopleChangedEvent> _peopleChangedEvent;
 
   bool _isImage = false;
-  late int _currentUserID;
   bool showExifListTile = false;
   final ValueNotifier<Map<String, IfdTag>?> _exifNotifier = ValueNotifier(null);
   final ValueNotifier<bool> hasLocationData = ValueNotifier(false);
@@ -57,7 +53,6 @@ class _FileDetailsWidgetState extends State<FileDetailsWidget> {
   @override
   void initState() {
     debugPrint('file_details_sheet initState');
-    _currentUserID = Configuration.instance.getUserIDV2();
     hasLocationData.value = widget.file.hasLocation;
     _isImage =
         widget.file.fileType == FileType.image ||
@@ -100,34 +95,17 @@ class _FileDetailsWidgetState extends State<FileDetailsWidget> {
   @override
   Widget build(BuildContext context) {
     final file = widget.file;
-    final bool isFileOwner =
-        file.ownerID == null || file.ownerID == _currentUserID;
-
     final fileDetailsTiles = <Widget>[];
-    final bool canEditCaption = isFileOwner && !file.isTrash;
-    fileDetailsTiles.add(
-      !widget.file.isUploaded ||
-              (!canEditCaption && (widget.file.caption?.isEmpty ?? true))
-          ? const SizedBox(height: 16)
-          : Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 24),
-              child: canEditCaption
-                  ? FileCaptionWidget(file: widget.file)
-                  : FileCaptionReadyOnly(caption: widget.file.caption!),
-            ),
-    );
+    // Offline fork: a caption was server metadata. There is no caption field.
+    fileDetailsTiles.add(const SizedBox(height: 16));
     fileDetailsTiles.addAll([
       MenuGroupComponent(
         items: [
-          CreationTimeItem(file, _currentUserID),
+          CreationTimeItem(file),
           ValueListenableBuilder(
             valueListenable: _exifNotifier,
-            builder: (context, _, _) => FilePropertiesItemWidget(
-              file,
-              _isImage,
-              _exifData,
-              _currentUserID,
-            ),
+            builder: (context, _, _) =>
+                FilePropertiesItemWidget(file, _isImage, _exifData),
           ),
           ValueListenableBuilder(
             valueListenable: _exifNotifier,

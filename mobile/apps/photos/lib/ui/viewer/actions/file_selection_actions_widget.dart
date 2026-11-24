@@ -16,7 +16,6 @@ import 'package:photos/models/device_collection.dart';
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
-import 'package:photos/models/files_split.dart';
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
@@ -267,13 +266,7 @@ class _FileSelectionActionsWidgetState
   }
 
   Future<void> _onDeleteClick() async {
-    // Offline fork: there is no account, so no file has an owner. The split
-    // puts every device file in `pendingUploads`, which the sheet can delete.
-    return showDeleteSheet(
-      context,
-      widget.selectedFiles,
-      FilesSplit.split(widget.selectedFiles.files, -1),
-    );
+    return showDeleteSheet(context, widget.selectedFiles);
   }
 
   Future<void> _onAddFilesToPerson() async {
@@ -355,12 +348,7 @@ class _FileSelectionActionsWidgetState
     if (!mounted) return;
     if (isDeviceSupported) {
       final page = DetailPage(
-        DetailPageConfiguration(
-          selectedFiles,
-          0,
-          "guest_view",
-          galleryType: widget.type,
-        ),
+        DetailPageConfiguration(selectedFiles, 0, "guest_view"),
       );
       await localSettings.setOnGuestView(true);
       if (!mounted) {

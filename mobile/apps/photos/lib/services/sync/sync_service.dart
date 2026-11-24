@@ -14,7 +14,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SyncService {
   final _logger = Logger("SyncService");
   final _localSyncService = LocalSyncService.instance;
-  bool _syncStopRequested = false;
   Completer<bool>? _existingSync;
   SyncStatusUpdate? _lastSyncStatusEvent;
   bool _isInitialized = false;
@@ -42,11 +41,6 @@ class SyncService {
     });
   }
 
-  // Only logout may wait on this future; other uses are prone to sync races.
-  Future<bool> existingSync() async {
-    return _existingSync?.future ?? Future.value(true);
-  }
-
   Future<bool> sync() async {
     if (!_isInitialized) {
       _logger.warning("Sync requested before init, skipping");
@@ -56,7 +50,6 @@ class SyncService {
       _logger.warning("Sync already in progress, skipping.");
       return _existingSync!.future;
     }
-    _syncStopRequested = false;
     _existingSync = Completer<bool>();
     bool successful = false;
     try {
@@ -80,15 +73,6 @@ class SyncService {
       Bus.instance.fire(SyncFinishedEvent());
     }
     return successful;
-  }
-
-  void stopSync() {
-    _logger.info("Sync stop requested");
-    _syncStopRequested = true;
-  }
-
-  bool shouldStopSync() {
-    return _syncStopRequested;
   }
 
   bool isSyncInProgress() {

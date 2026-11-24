@@ -20,7 +20,7 @@ import "package:photos/services/machine_learning/ml_service.dart";
 import "package:photos/services/wake_lock_service.dart";
 import "package:photos/ui/settings/ml/ml_consent_sheet.dart";
 import "package:photos/ui/settings/ml/ml_user_dev_screen.dart";
-import "package:photos/utils/email_util.dart";
+import "package:photos/utils/log_export_util.dart";
 import "package:photos/utils/ml_util.dart";
 
 class MachineLearningSettingsPage extends StatefulWidget {
@@ -327,31 +327,10 @@ class ModelLoadingState extends StatefulWidget {
 }
 
 class _ModelLoadingStateState extends State<ModelLoadingState> {
-  StreamSubscription<(String, int, int)>? _progressStream;
-  final Map<String, (int, int)> _progressMap = {};
   Timer? _timer;
 
   @override
   void initState() {
-    _progressStream = MLModelDownloadService.instance.progressStream.listen((
-      event,
-    ) {
-      final String model = event.$1;
-      String title = "";
-      if (model == "clip-image") {
-        title = "Image Model";
-      } else if (model == "clip-text") {
-        title = "Text Model";
-      } else if (model == "face-detection") {
-        title = "Face Detection Model";
-      } else if (model == "face-embedding") {
-        title = "Face Embedding Model";
-      }
-      if (title.isNotEmpty) {
-        _progressMap[title] = (event.$2, event.$3);
-        setState(() {});
-      }
-    });
     _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
       setState(() {});
     });
@@ -361,7 +340,6 @@ class _ModelLoadingStateState extends State<ModelLoadingState> {
   @override
   void dispose() {
     super.dispose();
-    _progressStream?.cancel();
     _timer?.cancel();
   }
 
@@ -393,25 +371,6 @@ class _ModelLoadingStateState extends State<ModelLoadingState> {
           ),
           trailing: EnteLoadingWidget(size: 12, color: colors.fillDark),
         ),
-        ..._progressMap.entries.map((entry) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: MenuComponent(
-              key: ValueKey(entry.value),
-              title: entry.key,
-              leading: const HugeIcon(
-                icon: HugeIcons.strokeRoundedCloudDownload,
-                size: IconSizes.small,
-              ),
-              trailing: Text(
-                entry.value.$2 > 0
-                    ? '${(entry.value.$1 * 100) ~/ entry.value.$2}%'
-                    : '0%',
-                style: TextStyles.mini.copyWith(color: colors.textLight),
-              ),
-            ),
-          );
-        }),
       ],
     );
   }
@@ -477,7 +436,6 @@ class MLStatusWidgetState extends State<MLStatusWidget> {
               final int indexedFiles = snapshot.data!.indexedItems;
               final int pendingFiles = snapshot.data!.pendingItems;
               final int total = indexedFiles + pendingFiles;
-              final bool hasWifi = snapshot.data!.hasWifiEnabled!;
 
               if (!_isDeviceHealthy && pendingFiles > 0) {
                 return Text(
@@ -518,17 +476,6 @@ class MLStatusWidgetState extends State<MLStatusWidget> {
                           style: TextStyles.mini.copyWith(
                             color: colors.textLight,
                           ),
-                        ),
-                      ),
-                    )
-                  else if (!hasWifi && pendingFiles > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: MenuComponent(
-                        title: context.strings.waitingForWifi,
-                        leading: const HugeIcon(
-                          icon: HugeIcons.strokeRoundedWifi02,
-                          size: IconSizes.small,
                         ),
                       ),
                     ),
@@ -603,16 +550,8 @@ class _MLProcessingIssuesBlurb extends StatelessWidget {
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
                       mlDecryptionRecordStore.logFileIDs();
-                      sendLogs(
-                        context,
-                        context.strings.contactUs,
-                        "support@ente.com",
-                        postShare: () {},
-                        subject: "Machine learning processing issue",
-                        body: context.strings.mlItemsCouldNotBeProcessed(
-                          count: itemCount,
-                        ),
-                      );
+                      // Offline fork: was an e-mail to support with the logs.
+                      showLogsDialog(context);
                     },
                     child: Padding(
                       padding: const EdgeInsets.only(
@@ -623,7 +562,7 @@ class _MLProcessingIssuesBlurb extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            context.strings.contactUs,
+                            context.strings.exportLogs,
                             style: TextStyles.bodyBold.copyWith(
                               color: colors.primary,
                             ),

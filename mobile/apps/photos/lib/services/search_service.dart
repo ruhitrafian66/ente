@@ -300,11 +300,6 @@ class SearchService {
     }
   }
 
-  /// Offline fork: hidden albums do not exist, so no file is hidden.
-  Future<List<EnteFile>> getHiddenFiles() async {
-    return <EnteFile>[];
-  }
-
   void clearCache() {
     invalidateFileCaches();
     unawaited(memoriesCacheService.clearMemoriesCache());
@@ -762,7 +757,6 @@ class SearchService {
     final Map<LocalEntity<LocationTag>, List<EnteFile>> result = {};
     final normalizedQuery = query.toLowerCase();
     if (!context.mounted) return const [];
-    final locale = Localizations.localeOf(context).toLanguageTag();
     final noLocationName = context.strings.noLocation;
     if (!context.mounted) return const [];
     final noLocationTagName = context.strings.noLocationTag;
@@ -856,12 +850,10 @@ class SearchService {
         );
       }
     }
-    final locationTagNames = <String>{};
     for (MapEntry<LocalEntity<LocationTag>, List<EnteFile>> entry
         in result.entries) {
       if (entry.value.isNotEmpty) {
         final name = entry.key.item.name;
-        locationTagNames.add(name);
         searchResults.add(
           GenericSearchResult(
             ResultType.location,
@@ -890,69 +882,8 @@ class SearchService {
         );
       }
     }
-    // TODO: Remove the __city override used by interval and external
-    // suggestion evaluation.
-    final allCitiesSearch = query == '__city';
-    if (allCitiesSearch) {
-      query = '';
-    }
-    if (!allCitiesSearch) {
-      Map<String, List<EnteFile>> countries;
-      try {
-        countries = await locationService.getFilesInCountry(
-          filesWithLocation,
-          query,
-          locale,
-        );
-      } catch (e, s) {
-        _logger.warning("Failed to search countries", e, s);
-        countries = {};
-      }
-      final sortedCountries = countries.keys.toList()
-        ..sort((a, b) => countries[b]!.length.compareTo(countries[a]!.length));
-      for (final country in sortedCountries) {
-        if (!locationTagNames.add(country)) continue;
-        searchResults.add(
-          GenericSearchResult(
-            ResultType.location,
-            country,
-            countries[country]!,
-            hierarchicalSearchFilter: TopLevelGenericFilter(
-              filterName: country,
-              occurrence: kMostRelevantFilter,
-              filterResultType: ResultType.location,
-              matchedUploadedIDs: filesToUploadedFileIDs(countries[country]!),
-            ),
-          ),
-        );
-      }
-    }
-    final results = await locationService.getFilesInCity(
-      filesWithLocation,
-      query,
-    );
-    final List<City> sortedByResultCount = results.keys.toList()
-      ..sort((a, b) => results[b]!.length.compareTo(results[a]!.length));
-    for (final city in sortedByResultCount) {
-      if (!locationTagNames.contains(city.city)) {
-        searchResults.add(
-          GenericSearchResult(
-            ResultType.location,
-            city.city,
-            results[city]!,
-            params: {
-              kLocationParamID: "${city.country}_${city.lat}_${city.lng}",
-            },
-            hierarchicalSearchFilter: TopLevelGenericFilter(
-              filterName: city.city,
-              occurrence: kMostRelevantFilter,
-              filterResultType: ResultType.location,
-              matchedUploadedIDs: filesToUploadedFileIDs(results[city]!),
-            ),
-          ),
-        );
-      }
-    }
+    // Offline fork: the city and country search needed a downloaded city
+    // data set. Only the local location tags are searched.
     return searchResults;
   }
 
@@ -1309,19 +1240,13 @@ class SearchService {
       final filesWithLocation = allFiles
           .where((file) => file.hasLocation)
           .toList();
-      final taggedFiles = <EnteFile>{};
       for (LocalEntity<LocationTag> tag in tagToItemsMap.keys) {
-        final filesInTag = filesInsideLocationTag(
+        tagToItemsMap[tag] = filesInsideLocationTag(
           filesWithLocation,
           tag.item.centerPoint,
           tag.item.radius,
         );
-        tagToItemsMap[tag] = filesInTag;
-        taggedFiles.addAll(filesInTag);
       }
-      final filesWithNoLocTag = filesWithLocation
-          .where((file) => !taggedFiles.contains(file))
-          .toList();
 
       for (MapEntry<LocalEntity<LocationTag>, List<EnteFile>> entry
           in tagToItemsMap.entries) {
@@ -1350,35 +1275,6 @@ class SearchService {
                 locationTag: entry.key.item,
                 occurrence: kMostRelevantFilter,
                 matchedUploadedIDs: filesToUploadedFileIDs(entry.value),
-              ),
-            ),
-          );
-        }
-      }
-      // TODO: lau: Add base location names
-
-      if (limit == null || tagSearchResults.length < limit) {
-        final results = await locationService.getFilesInCity(
-          filesWithNoLocTag,
-          '',
-        );
-        final List<City> sortedByResultCount = results.keys.toList()
-          ..sort((a, b) => results[b]!.length.compareTo(results[a]!.length));
-        for (final city in sortedByResultCount) {
-          if (results[city]!.length <= 1) continue;
-          tagSearchResults.add(
-            GenericSearchResult(
-              ResultType.locationSuggestion,
-              city.city,
-              results[city]!,
-              params: {
-                kLocationParamID: "${city.country}_${city.lat}_${city.lng}",
-              },
-              hierarchicalSearchFilter: TopLevelGenericFilter(
-                filterName: city.city,
-                occurrence: kMostRelevantFilter,
-                filterResultType: ResultType.locationSuggestion,
-                matchedUploadedIDs: filesToUploadedFileIDs(results[city]!),
               ),
             ),
           );

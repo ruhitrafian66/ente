@@ -1,6 +1,5 @@
 import "dart:collection";
 
-import "package:dio/dio.dart";
 import "package:flutter/widgets.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
@@ -26,9 +25,6 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     ServiceLocator.instance.init(
       preferences,
-      Dio(),
-      Dio(),
-      Dio(),
       PackageInfo(
         appName: "Photos",
         packageName: "photos",

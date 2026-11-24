@@ -371,7 +371,6 @@ class _AlbumSlideshowPageState extends State<AlbumSlideshowPage>
                   _currentFile,
                   placeholderColor: Colors.black,
                   shouldShowSyncStatus: false,
-                  shouldShowFavoriteIcon: false,
                   shouldShowVideoOverlayIcon: false,
                 ),
               )

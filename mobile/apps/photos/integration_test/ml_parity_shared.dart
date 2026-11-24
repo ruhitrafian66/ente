@@ -7,7 +7,6 @@ import "package:integration_test/integration_test.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:path_provider/path_provider.dart";
 import "package:photos/core/configuration.dart";
-import "package:photos/core/network/network.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/ml_indexing_isolate.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -232,14 +231,7 @@ Future<void> _ensureModelNetworkContext() async {
 
   final prefs = await SharedPreferences.getInstance();
   final packageInfo = await PackageInfo.fromPlatform();
-  await NetworkClient.instance.init(packageInfo, prefs);
-  ServiceLocator.instance.init(
-    prefs,
-    NetworkClient.instance.enteDio,
-    NetworkClient.instance.getDio(),
-    NetworkClient.instance.downloadDio,
-    packageInfo,
-  );
+  ServiceLocator.instance.init(prefs, packageInfo);
   await Configuration.instance.init(prefs);
   _modelNetworkContextInitialized = true;
 }

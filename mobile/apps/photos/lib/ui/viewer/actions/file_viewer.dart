@@ -11,7 +11,6 @@ import "package:media_extension/media_extension_action_types.dart";
 import "package:photo_manager/photo_manager.dart";
 import "package:photo_manager_image_provider/photo_manager_image_provider.dart";
 import "package:photos/models/file/file.dart";
-import "package:photos/models/gallery_type.dart";
 import "package:photos/models/metadata/file_magic.dart";
 import "package:photos/module/metadata/local_file.dart";
 import "package:photos/services/app_lifecycle_service.dart";
@@ -157,7 +156,6 @@ class FileViewerState extends State<FileViewer> {
         fileSelectedIndex,
         "external_review_gallery",
         isLocalOnlyContext: true,
-        galleryType: GalleryType.localFolder,
         onBackPressed: (_) => _closeViewer(),
       );
     } catch (e, s) {

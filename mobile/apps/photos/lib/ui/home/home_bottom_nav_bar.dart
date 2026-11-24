@@ -167,7 +167,7 @@ class _HomeNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.componentColors;
-    final tabIndices = homeTabIndices(showFeed: false);
+    final tabIndices = homeTabIndices();
     return GNav(
       curve: Curves.easeOutExpo,
       backgroundColor: colors.fillLight,

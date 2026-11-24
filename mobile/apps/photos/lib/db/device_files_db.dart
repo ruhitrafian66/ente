@@ -338,7 +338,6 @@ extension DeviceFiles on FilesDB {
 
   Future<FileLoadResult> getFilesInDeviceCollection(
     DeviceCollection deviceCollection,
-    int? ownerID,
     int startTime,
     int endTime, {
     int? limit,
@@ -353,8 +352,7 @@ extension DeviceFiles on FilesDB {
           WHERE ${FilesDB.columnLocalID} IS NOT NULL AND
           ${FilesDB.columnCreationTime} >= $startTime AND
           ${FilesDB.columnCreationTime} <= $endTime AND
-          (${FilesDB.columnOwnerID} IS NULL OR ${FilesDB.columnOwnerID} =
-          $ownerID ) AND
+          ${FilesDB.columnOwnerID} IS NULL AND
           ${FilesDB.columnLocalID} IN
           (SELECT id FROM device_files where path_id = '${deviceCollection.id}' )
           ORDER BY ${FilesDB.columnCreationTime} $order , ${FilesDB.columnModificationTime} $order

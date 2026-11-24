@@ -17,7 +17,6 @@ import "package:photos/events/force_reload_trash_page_event.dart";
 import 'package:photos/events/local_photos_updated_event.dart';
 import "package:photos/models/button_result.dart";
 import 'package:photos/models/file/file.dart';
-import "package:photos/models/files_split.dart";
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/module/download/file.dart';
 import "package:photos/service_locator.dart";
@@ -575,21 +574,15 @@ Future<void> showMediaManagementHintSheet(BuildContext context) async {
 
 Future<void> showDeleteSheet(
   BuildContext context,
-  SelectedFiles selectedFiles,
-  FilesSplit filesSplit, {
+  SelectedFiles selectedFiles, {
   @visibleForTesting
   Future<void> Function(BuildContext context, List<EnteFile> files)?
   deleteOnDeviceOnlyOverride,
 }) async {
   final l10n = context.strings;
-  if (selectedFiles.files.length != filesSplit.count) {
-    throw AssertionError(
-      "Unexpected state, #{selectedFiles.files.length} != "
-      "${filesSplit.count}",
-    );
-  }
-  final List<EnteFile> deletableFiles =
-      filesSplit.ownedByCurrentUser + filesSplit.pendingUploads;
+  // Offline fork: there is no account, so no file belongs to a different
+  // user. Each selected file is a candidate for the delete.
+  final List<EnteFile> deletableFiles = selectedFiles.files.toList();
 
   Future<bool> deleteOnDeviceOnlyAction(
     BuildContext context,
@@ -602,10 +595,6 @@ Future<void> showDeleteSheet(
     return (await deleteFilesOnDeviceOnly(context, files)).isNotEmpty;
   }
 
-  if (deletableFiles.isEmpty && filesSplit.ownedByOtherUsers.isNotEmpty) {
-    showShortToast(context, l10n.cannotDeleteSharedFiles);
-    return;
-  }
   final localGalleryDeletableFiles = deletableFiles
       .where((file) => file.localID != null)
       .toList();

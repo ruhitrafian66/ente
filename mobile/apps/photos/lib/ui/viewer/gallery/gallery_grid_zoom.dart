@@ -359,11 +359,7 @@ class _GalleryGridZoomState extends State<GalleryGridZoom>
             fromOpacity: item.fromOpacity,
             toOpacity: item.toOpacity,
             fadeDuringReflow: item.fadeDuringReflow,
-            selectionColor: galleryFileSelectionColor(
-              context,
-              first.file,
-              widget.groups.currentUserID,
-            ),
+            selectionColor: galleryFileSelectionColor,
           ),
         );
       }

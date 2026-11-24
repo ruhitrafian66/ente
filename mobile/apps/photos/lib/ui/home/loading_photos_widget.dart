@@ -14,7 +14,7 @@ import 'package:photos/ui/common/bottom_shadow.dart';
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/components/dialog_widget.dart";
 import "package:photos/ui/components/models/button_type.dart";
-import "package:photos/utils/email_util.dart";
+import "package:photos/utils/log_export_util.dart";
 
 class LoadingPhotosWidget extends StatefulWidget {
   final bool isOnboardingFlow;
@@ -232,15 +232,12 @@ class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
                           buttons: [
                             ButtonWidget(
                               buttonType: ButtonType.primary,
-                              labelText: context.strings.contactSupport,
+                              // Offline fork: was "Contact support" (e-mail
+                              // with logs).
+                              labelText: context.strings.exportLogs,
                               buttonAction: ButtonAction.second,
                               onTap: () async {
-                                await sendLogs(
-                                  context,
-                                  context.strings.contactSupport,
-                                  "support@ente.com",
-                                  postShare: () {},
-                                );
+                                showLogsDialog(context);
                               },
                             ),
                           ],

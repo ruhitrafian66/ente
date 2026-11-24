@@ -8,7 +8,6 @@ import "package:path_provider/path_provider.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/ml/db.dart";
 import "package:photos/db/ml/rust_db.dart";
-import "package:photos/events/diff_sync_complete_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/people_changed_event.dart";
 import "package:photos/main.dart" show isIOSBackgroundRefresh, isProcessBg;
@@ -28,7 +27,6 @@ import "package:synchronized/synchronized.dart";
 class RewindService {
   RewindService(SharedPreferences prefs) : _progress = RewindProgress(prefs) {
     Bus.instance.on<PeopleChangedEvent>().listen((_) => _rebuildStory());
-    Bus.instance.on<DiffSyncCompleteEvent>().listen((_) => _rebuildStory());
     Bus.instance
         .on<FilesUpdatedEvent>()
         .where((event) => _visibilityChanges.contains(event.type))

@@ -15,7 +15,6 @@ import 'package:photos/models/selected_files.dart';
 import 'package:photos/ui/viewer/actions/file_selection_overlay_bar.dart';
 import 'package:photos/ui/viewer/gallery/gallery.dart';
 import 'package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart';
-import "package:photos/ui/viewer/gallery/hierarchical_search_gallery.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
 import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
@@ -226,24 +225,7 @@ class _MagicResultScreenState extends State<MagicResultScreen> {
               child: Stack(
                 alignment: Alignment.bottomCenter,
                 children: [
-                  Builder(
-                    builder: (context) {
-                      return ValueListenableBuilder(
-                        valueListenable: InheritedSearchFilterData.of(
-                          context,
-                        ).searchFilterDataProvider!.isSearchingNotifier,
-                        builder: (context, value, _) {
-                          return value
-                              ? HierarchicalSearchGallery(
-                                  tagPrefix: "${widget.heroTag}_files",
-                                  selectedFiles: _selectedFiles,
-                                  appBar: appBar,
-                                )
-                              : gallery;
-                        },
-                      );
-                    },
-                  ),
+                  gallery,
                   FileSelectionOverlayBar(
                     MagicResultScreen.overlayType,
                     _selectedFiles,

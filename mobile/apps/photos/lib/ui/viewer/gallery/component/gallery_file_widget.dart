@@ -1,5 +1,3 @@
-import "dart:async";
-
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -7,8 +5,6 @@ import "package:logging/logging.dart";
 import "package:media_extension/media_extension.dart";
 import "package:media_extension/media_extension_action_types.dart";
 import "package:photos/core/constants.dart";
-import "package:photos/core/event_bus.dart";
-import "package:photos/events/file_uploaded_event.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/gallery_type.dart";
@@ -29,15 +25,9 @@ import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.da
 import "package:photos/ui/viewer/gallery/state/gallery_swipe_helper.dart";
 import "package:photos/ui/viewer/gallery/state/selection_state.dart";
 
-Color galleryFileSelectionColor(
-  BuildContext context,
-  EnteFile file,
-  int? currentUserID,
-) {
-  // Offline fork: every file is a local file of the owner, so there is no
-  // per-owner avatar colour.
-  return Colors.white;
-}
+// Offline fork: every file is a local file of the owner, so there is no
+// per-owner avatar colour.
+const Color galleryFileSelectionColor = Colors.white;
 
 class GalleryFileWidget extends StatefulWidget {
   final EnteFile file;
@@ -46,7 +36,6 @@ class GalleryFileWidget extends StatefulWidget {
   final String tag;
   final int photoGridSize;
   final int? thumbnailSize;
-  final int? currentUserID;
   const GalleryFileWidget({
     required this.file,
     required this.selectedFiles,
@@ -54,7 +43,6 @@ class GalleryFileWidget extends StatefulWidget {
     required this.tag,
     required this.photoGridSize,
     this.thumbnailSize,
-    required this.currentUserID,
     super.key,
   });
 
@@ -69,7 +57,6 @@ class _GalleryFileWidgetState extends State<GalleryFileWidget> {
   late final _heroThumbnailKey = GlobalKey();
   int? _currentPointerId;
   bool _isPointerInside = false;
-  late final StreamSubscription<FileUploadedEvent> _fileUploadedSubscription;
   GalleryThumbnailSnapshots? _snapshots;
 
   @override
@@ -98,21 +85,11 @@ class _GalleryFileWidgetState extends State<GalleryFileWidget> {
     _isFileSelected =
         widget.selectedFiles?.isFileSelected(widget.file) ?? false;
     widget.selectedFiles?.addListener(_selectedFilesListener);
-    _fileUploadedSubscription = Bus.instance.on<FileUploadedEvent>().listen((
-      event,
-    ) {
-      if (event.file.generatedID != null &&
-          event.file.generatedID == widget.file.generatedID &&
-          mounted) {
-        setState(() {});
-      }
-    });
   }
 
   @override
   void dispose() {
     _snapshots?.unregister(widget.file, context);
-    _fileUploadedSubscription.cancel();
     widget.selectedFiles?.removeListener(_selectedFilesListener);
     super.dispose();
   }
@@ -214,17 +191,13 @@ class _GalleryFileWidgetState extends State<GalleryFileWidget> {
                     borderRadius: borderRadius,
                   ),
                 ),
-                Positioned(
+                const Positioned(
                   right: 4,
                   top: 4,
                   child: SelectAllStatusIcon(
                     isSelected: true,
                     size: 16,
-                    selectedFillColor: galleryFileSelectionColor(
-                      context,
-                      widget.file,
-                      widget.currentUserID,
-                    ),
+                    selectedFillColor: galleryFileSelectionColor,
                     selectedTickCutsOut: true,
                   ),
                 ),
@@ -371,7 +344,6 @@ class _GalleryFileWidgetState extends State<GalleryFileWidget> {
             : DetailPageMode.full,
         isLocalOnlyContext: isLocalOnlyContext,
         showGalleryFilmstrip: true,
-        galleryType: galleryType,
         onDismissed: context
             .findAncestorStateOfType<GalleryState>()
             ?.revealFile,

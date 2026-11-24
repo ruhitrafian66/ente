@@ -9,9 +9,6 @@ import "package:flutter_timezone/flutter_timezone.dart";
 import "package:logging/logging.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:permission_handler/permission_handler.dart";
-import "package:photos/core/configuration.dart";
-import "package:photos/services/language_service.dart";
-import "package:photos/services/notification_key_service.dart";
 import "package:photos/services/timezone_aliases.dart";
 import "package:shared_preferences/shared_preferences.dart";
 import 'package:timezone/data/latest_10y.dart' as tzdb;
@@ -20,10 +17,6 @@ import "package:timezone/timezone.dart" as tz;
 class NotificationService {
   static final NotificationService instance =
       NotificationService._privateConstructor();
-  static const String keyShouldShowNotificationsForSharedPhotos =
-      "notifications_enabled_shared_photos";
-  static const String keyShouldShowSocialNotifications =
-      "notifications_enabled_social";
   static const String _keyHasAttemptedNotificationPermission =
       "has_attempted_notification_permission";
 
@@ -42,47 +35,6 @@ class NotificationService {
     _preferences = preferences;
     unawaited(preferences.remove("notification_permission_granted"));
     unawaited(_shareNotificationPreferencesWithNSE());
-  }
-
-  Future<void> handlePushNotification(
-    Map<String, dynamic> data, {
-    required Future<void> Function() onSync,
-  }) async {
-    if (!data.containsKey('notificationCiphertext')) {
-      if (data['action'] == 'sync') await onSync();
-      return;
-    }
-    if (!Platform.isAndroid) return;
-    Map<String, dynamic>? event;
-    try {
-      event = await NotificationKeyService.decrypt(data);
-    } catch (_) {
-      _logger.warning('Could not decrypt notification');
-    }
-    if (event == null) {
-      await _preferences.reload();
-      if (!_preferences.containsKey(Configuration.hasSecureTokenKey) &&
-          !_preferences.containsKey(Configuration.tokenKey)) {
-        return;
-      }
-      if (shouldShowNotificationsForSharedPhotosAndAlbums() &&
-          shouldShowSocialNotifications()) {
-        final strings = await LanguageService.locals;
-        await showNotification(
-          strings.entePhotos,
-          strings.notificationNewActivity,
-          id: -1,
-        );
-      }
-      return;
-    }
-    if (event['eventType'] == 'album_shared' ||
-        event['eventType'] == 'file_liked' ||
-        event['eventType'] == 'file_commented' ||
-        event['eventType'] == 'comment_replied') {
-      _logger.info('Received encrypted ${event['eventType']} push');
-      await onSync();
-    }
   }
 
   bool timezoneInitialized = false;
@@ -277,33 +229,6 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >();
     return await impl?.areNotificationsEnabled() ?? false;
-  }
-
-  bool shouldShowNotificationsForSharedPhotosAndAlbums() {
-    final result = _preferences.getBool(
-      keyShouldShowNotificationsForSharedPhotos,
-    );
-    return result ?? true;
-  }
-
-  Future<void> setShouldShowNotificationsForSharedPhotosAndAlbums(
-    bool value,
-  ) async {
-    await _preferences.setBool(
-      keyShouldShowNotificationsForSharedPhotos,
-      value,
-    );
-    await _shareNotificationPreferencesWithNSE();
-  }
-
-  bool shouldShowSocialNotifications() {
-    final result = _preferences.getBool(keyShouldShowSocialNotifications);
-    return result ?? true;
-  }
-
-  Future<void> setShouldShowSocialNotifications(bool value) async {
-    await _preferences.setBool(keyShouldShowSocialNotifications, value);
-    await _shareNotificationPreferencesWithNSE();
   }
 
   Future<void> _shareNotificationPreferencesWithNSE() async {

@@ -187,7 +187,6 @@ class _GalleryFilmstripThumbnail extends StatelessWidget {
       diskLoadDeferDuration: galleryThumbnailDiskLoadDeferDuration,
       serverLoadDeferDuration: galleryThumbnailServerLoadDeferDuration,
       shouldShowSyncStatus: false,
-      shouldShowFavoriteIcon: false,
       shouldShowVideoOverlayIcon: false,
       shouldShowLivePhotoOverlay: false,
       fit: fit,

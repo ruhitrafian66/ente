@@ -65,6 +65,9 @@ class _VideoWidgetMediaKitState extends State<VideoWidgetMediaKit>
   bool _isGuestView = false;
   int _videoLoad = 0;
   String? _loadedSource;
+  // Offline fork: set when the device file cannot be found. The widget then
+  // shows an error icon, not an endless spinner.
+  bool _isFileMissing = false;
   final _transformationController = TransformationController();
   bool _isZooming = false;
 
@@ -125,6 +128,7 @@ class _VideoWidgetMediaKitState extends State<VideoWidgetMediaKit>
         _setVideoController(localFile.path);
       } else {
         _logger.warning("Shared media video file is missing");
+        _onFileMissing();
       }
     } else {
       await widget.file.getAsset.then((asset) async {
@@ -135,20 +139,30 @@ class _VideoWidgetMediaKitState extends State<VideoWidgetMediaKit>
         }
         if (asset == null || !(exists || widget.file.isDeviceTrash)) {
           _logger.warning("Device asset for the video is missing");
+          _onFileMissing();
         } else {
           // ignore: unawaited_futures
           asset.getMediaUrl().then((url) {
             if (!mounted || generation != _videoLoad) {
               return;
             }
-            _setVideoController(
-              url ??
-                  'https://user-images.githubusercontent.com/28951144/229373695-22f88f13-d18f-4288-9bf1-c3e078d83722.mp4',
-            );
+            // Offline fork: upstream played a sample video from the web
+            // when the device gave no media URL.
+            if (url == null) {
+              _logger.warning("Device asset for the video has no media URL");
+              _onFileMissing();
+              return;
+            }
+            _setVideoController(url);
           });
         }
       });
     }
+  }
+
+  void _onFileMissing() {
+    if (!mounted) return;
+    setState(() => _isFileMissing = true);
   }
 
   @override
@@ -210,12 +224,14 @@ class _VideoWidgetMediaKitState extends State<VideoWidgetMediaKit>
                 isFromMemories: widget.isFromMemories,
                 playbackSpeed: widget.playbackSpeed,
               )
-            : const Center(
-                child: EnteLoadingWidget(
-                  size: 32,
-                  color: fillBaseDark,
-                  padding: 0,
-                ),
+            : Center(
+                child: _isFileMissing
+                    ? const Icon(Icons.error_outline, color: Colors.white)
+                    : const EnteLoadingWidget(
+                        size: 32,
+                        color: fillBaseDark,
+                        padding: 0,
+                      ),
               ),
       ),
     );

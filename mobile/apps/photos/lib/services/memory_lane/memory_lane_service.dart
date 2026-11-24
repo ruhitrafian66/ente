@@ -22,7 +22,6 @@ import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/memory_lane/memory_lane_cache_service.dart";
-import "package:photos/services/search_service.dart";
 import "package:photos/utils/face/face_thumbnail_cache.dart";
 
 class MemoryLaneService {
@@ -224,16 +223,6 @@ class MemoryLaneService {
     if (timeline == null || timeline.entries.isEmpty) {
       return timeline;
     }
-    final hiddenFileIds = (await SearchService.instance.getHiddenFiles())
-        .map((file) => file.uploadedFileID)
-        .whereType<int>()
-        .toSet();
-    if (timeline.entries.any((entry) => hiddenFileIds.contains(entry.fileId))) {
-      _logger.info("Removing timeline with hidden files for $personId");
-      await _invalidateTimeline(personId);
-      schedulePersonRecompute(personId, isCluster: isCluster, force: true);
-      return null;
-    }
     if (timeline.isEligible && !await _areTimelineFaceCropsCached(timeline)) {
       _logger.info("Missing face crops for $personId");
       _queueTimelineCropReadiness(personId, isCluster: isCluster);
@@ -267,13 +256,6 @@ class MemoryLaneService {
       if (person.data.isIgnored || person.data.hideFromMemories) {
         return null;
       }
-    }
-    final hiddenFileIds = (await SearchService.instance.getHiddenFiles())
-        .map((file) => file.uploadedFileID)
-        .whereType<int>()
-        .toSet();
-    if (timeline.entries.any((entry) => hiddenFileIds.contains(entry.fileId))) {
-      return null;
     }
 
     if (!await areFullFaceCropsCached(
@@ -542,17 +524,9 @@ class MemoryLaneService {
         .toSet()
         .toList();
     final fileMap = await _filesDB.getFileIDToFileFromIDs(uniqueFileIds);
-    final hiddenFiles = await SearchService.instance.getHiddenFiles();
-    final hiddenFileIds = hiddenFiles
-        .map((e) => e.uploadedFileID)
-        .whereType<int>()
-        .toSet();
     final counts = <int, int>{};
     for (final faceId in faceIds) {
       final fileId = getFileIdFromFaceId<int>(faceId);
-      if (hiddenFileIds.contains(fileId)) {
-        continue;
-      }
       final file = fileMap[fileId];
       final creationTime = file?.creationTime;
       if (creationTime == null || creationTime <= 0) {
@@ -716,19 +690,11 @@ class MemoryLaneService {
         .toSet()
         .toList();
     final fileMap = await getTimelineFiles(uniqueFileIds);
-    final hiddenFiles = await SearchService.instance.getHiddenFiles();
-    final hiddenFileIds = hiddenFiles
-        .map((e) => e.uploadedFileID)
-        .whereType<int>()
-        .toSet();
 
     final faces = <_TimelineFaceData>[];
     final facesByFileId = <int, Map<String, FaceWithoutEmbedding>>{};
     for (final faceId in faceIds) {
       final fileId = getFileIdFromFaceId<int>(faceId);
-      if (hiddenFileIds.contains(fileId)) {
-        continue;
-      }
       final file = fileMap[fileId];
       if (file == null || file.fileType == FileType.video) {
         continue;

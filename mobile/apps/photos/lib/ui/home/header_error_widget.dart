@@ -5,7 +5,7 @@ import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:photos/core/errors.dart';
 import "package:photos/ui/settings/free_space_options.dart";
-import 'package:photos/utils/email_util.dart';
+import 'package:photos/utils/log_export_util.dart';
 
 class HeaderErrorWidget extends StatelessWidget {
   final Error? _error;
@@ -42,12 +42,8 @@ class HeaderErrorWidget extends StatelessWidget {
           state: BannerComponentState.failure,
           trailingWidget: const Icon(Icons.arrow_forward),
           onTap: () {
-            sendLogs(
-              context,
-              context.strings.raiseTicket,
-              "support@ente.com",
-              subject: context.strings.backupFailed,
-            );
+            // Offline fork: was an e-mail to support with the logs.
+            showLogsDialog(context);
           },
         ),
       );

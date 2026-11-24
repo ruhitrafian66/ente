@@ -1,13 +1,8 @@
-import "package:dio/dio.dart";
-import "package:ente_base/models/accounts.dart";
 import "package:ente_components/ente_components.dart";
 import "package:ente_strings/ente_strings.dart";
 import 'package:ente_ui/components/loading_widget.dart';
-import "package:flutter/foundation.dart";
 import 'package:flutter/material.dart';
 import "package:flutter/services.dart";
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:photos/core/constants.dart';
 import 'package:photos/models/button_result.dart';
 import 'package:photos/models/typedefs.dart';
 import 'package:photos/ui/common/progress_dialog.dart';
@@ -17,7 +12,7 @@ import 'package:photos/ui/components/buttons/button_widget.dart';
 import "package:photos/ui/components/buttons/button_widget_v2.dart";
 import 'package:photos/ui/components/dialog_widget.dart';
 import 'package:photos/ui/components/models/button_type.dart';
-import "package:photos/utils/email_util.dart";
+import "package:photos/utils/log_export_util.dart";
 
 Future<ButtonResult?> showInfoDialog(
   BuildContext context, {
@@ -67,88 +62,15 @@ Future<ButtonResult?> showErrorDialog(
   );
 }
 
-Future<ButtonResult?> showErrorDialogForException({
-  required BuildContext context,
-  required Exception exception,
-  bool isDismissible = true,
-  String apiErrorPrefix = "It looks like something went wrong.",
-  String? message,
-}) async {
-  String errorMessage =
-      message ?? context.strings.tempErrorContactSupportIfPersists;
-  if (exception is DioException &&
-      exception.response != null &&
-      exception.response!.data["code"] != null) {
-    errorMessage =
-        "$apiErrorPrefix\n\nReason: " + exception.response!.data["code"];
-  }
-  return showDialogWidget(
-    context: context,
-    title: context.strings.error,
-    icon: Icons.error_outline_outlined,
-    body: errorMessage,
-    isDismissible: isDismissible,
-    buttons: [
-      ButtonWidget(
-        buttonType: ButtonType.secondary,
-        labelText: context.strings.ok,
-        isInAlert: true,
-      ),
-    ],
-  );
-}
-
-String parseErrorForUI(
-  BuildContext context,
-  String genericError, {
-  Object? error,
-  bool surfaceError = kDebugMode,
-}) {
-  if (error == null) {
-    return genericError;
-  }
-  if (error is AccountsError_Network) {
-    return context.strings.networkConnectionRefusedErr;
-  }
-  if (error is DioException) {
-    final DioException dioError = error;
-    if (dioError.type == DioExceptionType.receiveTimeout ||
-        dioError.type == DioExceptionType.connectionError ||
-        dioError.type == DioExceptionType.sendTimeout ||
-        dioError.type == DioExceptionType.cancel) {
-      if (dioError.error.toString().contains('Failed host lookup')) {
-        return context.strings.networkHostLookUpErr;
-      } else if (dioError.error.toString().contains('SocketException')) {
-        return context.strings.networkConnectionRefusedErr;
-      }
-    }
-  }
-
-  if (error is WebResourceError) {
-    if (error.type == WebResourceErrorType.HOST_LOOKUP ||
-        error.type == WebResourceErrorType.NOT_CONNECTED_TO_INTERNET ||
-        error.type == WebResourceErrorType.NETWORK_CONNECTION_LOST ||
-        error.type == WebResourceErrorType.TIMEOUT) {
-      return context.strings.networkHostLookUpErr;
-    } else if (error.type == WebResourceErrorType.CANNOT_CONNECT_TO_HOST ||
-        error.type == WebResourceErrorType.SERVER_UNREACHABLE) {
-      return context.strings.networkConnectionRefusedErr;
-    }
-  }
-
-  return genericError;
-}
-
 Future<ButtonResult?> showGenericErrorDialog({
   required BuildContext context,
   bool isDismissible = true,
   required Object? error,
 }) async {
-  final errorBody = parseErrorForUI(
-    context,
-    context.strings.itLooksLikeSomethingWentWrongPleaseRetryAfterSome,
-    error: error,
-  );
+  // Offline fork: the body was a network-specific text for network errors.
+  // There is no network, so the generic text is always shown.
+  final errorBody =
+      context.strings.itLooksLikeSomethingWentWrongPleaseRetryAfterSome;
 
   final ButtonResult? result = await showDialogWidget(
     context: context,
@@ -165,15 +87,11 @@ Future<ButtonResult?> showGenericErrorDialog({
       ),
       ButtonWidget(
         buttonType: ButtonType.secondary,
-        labelText: context.strings.contactSupport,
+        // Offline fork: was "Contact support" (e-mail with logs).
+        labelText: context.strings.exportLogs,
         buttonAction: ButtonAction.second,
         onTap: () async {
-          await sendLogs(
-            context,
-            context.strings.contactSupport,
-            "support@ente.com",
-            postShare: () {},
-          );
+          showLogsDialog(context);
         },
       ),
     ],
@@ -181,44 +99,14 @@ Future<ButtonResult?> showGenericErrorDialog({
   return result;
 }
 
-Future<ButtonResult?> showDownloadDecryptionFailedDialog({
-  required BuildContext context,
-}) async {
-  final title = context.strings.downloadFailed;
-  return showDialogWidget(
-    context: context,
-    title: title,
-    icon: Icons.error_outline_outlined,
-    body: context.strings.downloadDecryptionFailedMessage,
-    buttons: [
-      ButtonWidget(
-        buttonType: ButtonType.primary,
-        labelText: context.strings.contactUs,
-        buttonAction: ButtonAction.first,
-        isInAlert: true,
-        onTap: () async {
-          await sendLogs(
-            context,
-            title,
-            supportEmail,
-            subject: title,
-            postShare: () {},
-          );
-        },
-      ),
-    ],
-  );
-}
-
 Future<void> showGenericErrorBottomSheet({
   required BuildContext context,
   required Object? error,
 }) async {
-  final errorBody = parseErrorForUI(
-    context,
-    context.strings.itLooksLikeSomethingWentWrongPleaseRetryAfterSome,
-    error: error,
-  );
+  // Offline fork: the body was a network-specific text for network errors.
+  // There is no network, so the generic text is always shown.
+  final errorBody =
+      context.strings.itLooksLikeSomethingWentWrongPleaseRetryAfterSome;
   await showAlertBottomSheet(
     context,
     title: context.strings.error,
@@ -227,14 +115,10 @@ Future<void> showGenericErrorBottomSheet({
     buttons: [
       ButtonWidgetV2(
         buttonType: ButtonTypeV2.secondary,
-        labelText: context.strings.contactSupport,
+        // Offline fork: was "Contact support" (e-mail with logs).
+        labelText: context.strings.exportLogs,
         onTap: () async {
-          await sendLogs(
-            context,
-            context.strings.contactSupport,
-            "support@ente.com",
-            postShare: () {},
-          );
+          showLogsDialog(context);
         },
       ),
     ],

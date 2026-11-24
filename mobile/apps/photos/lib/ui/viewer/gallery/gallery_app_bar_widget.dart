@@ -411,7 +411,6 @@ class _GalleryAppBarWidgetState extends State<GalleryAppBarWidget> {
     }
     final filesResult = await FilesDB.instance.getFilesInDeviceCollection(
       deviceCollection,
-      null,
       galleryLoadStartTime,
       galleryLoadEndTime,
     );

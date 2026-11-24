@@ -21,7 +21,6 @@ import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/viewer/actions/file_selection_overlay_bar.dart";
 import "package:photos/ui/viewer/gallery/gallery.dart";
 import "package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart";
-import "package:photos/ui/viewer/gallery/hierarchical_search_gallery.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
 import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
@@ -193,47 +192,31 @@ class _LocationGalleryWidgetState extends State<LocationGalleryWidget> {
               children: [
                 Builder(
                   builder: (context) {
-                    return ValueListenableBuilder(
-                      valueListenable: InheritedSearchFilterData.of(
-                        context,
-                      ).searchFilterDataProvider!.isSearchingNotifier,
-                      builder: (context, value, _) {
-                        return value
-                            ? HierarchicalSearchGallery(
-                                tagPrefix: "${widget.tagPrefix}_files",
-                                selectedFiles: _selectedFiles,
-                                appBar: appBar,
-                              )
-                            : Gallery(
-                                appBar: appBar,
-                                loadingWidget: Column(
-                                  children: [
-                                    EnteLoadingWidget(
-                                      color: getEnteColorScheme(
-                                        context,
-                                      ).strokeMuted,
-                                    ),
-                                  ],
-                                ),
-                                asyncLoader:
-                                    (
-                                      creationStartTime,
-                                      creationEndTime, {
-                                      limit,
-                                      asc,
-                                    }) async {
-                                      return snapshot.data!;
-                                    },
-                                reloadEvent: Bus.instance
-                                    .on<LocalPhotosUpdatedEvent>(),
-                                removalEventTypes: const {
-                                  EventType.deletedFromRemote,
-                                  EventType.deletedFromEverywhere,
-                                },
-                                selectedFiles: _selectedFiles,
-                                tagPrefix: "${widget.tagPrefix}_files",
-                              );
+                    return Gallery(
+                      appBar: appBar,
+                      loadingWidget: Column(
+                        children: [
+                          EnteLoadingWidget(
+                            color: getEnteColorScheme(context).strokeMuted,
+                          ),
+                        ],
+                      ),
+                      asyncLoader:
+                          (
+                            creationStartTime,
+                            creationEndTime, {
+                            limit,
+                            asc,
+                          }) async {
+                            return snapshot.data!;
+                          },
+                      reloadEvent: Bus.instance.on<LocalPhotosUpdatedEvent>(),
+                      removalEventTypes: const {
+                        EventType.deletedFromRemote,
+                        EventType.deletedFromEverywhere,
                       },
+                      selectedFiles: _selectedFiles,
+                      tagPrefix: "${widget.tagPrefix}_files",
                     );
                   },
                 ),

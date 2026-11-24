@@ -48,7 +48,6 @@ class _DeviceFolderPageState extends State<DeviceFolderPage> {
     final generation = ++_loadGeneration;
     final result = await FilesDB.instance.getFilesInDeviceCollection(
       widget.deviceCollection,
-      null,
       creationStartTime,
       creationEndTime,
       limit: limit,

@@ -11,7 +11,6 @@ import "package:logging/logging.dart";
 import "package:path_provider/path_provider.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/offline_files_db.dart";
-import "package:photos/events/file_uploaded_event.dart";
 import "package:photos/events/magic_cache_updated_event.dart";
 import "package:photos/events/tab_changed_event.dart";
 import "package:photos/main.dart" show isIOSBackgroundRefresh;
@@ -23,6 +22,7 @@ import "package:photos/models/search/generic_search_result.dart";
 import "package:photos/models/search/hierarchical/hierarchical_search_filter.dart";
 import "package:photos/models/search/hierarchical/magic_filter.dart";
 import "package:photos/models/search/search_types.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/semantic_search/semantic_search_service.dart";
 import "package:photos/services/search_service.dart";
@@ -250,10 +250,6 @@ class MagicCacheService {
 
   MagicCacheService(this._prefs) {
     _logger.info("MagicCacheService constructor");
-    Bus.instance.on<FileUploadedEvent>().listen((event) {
-      queueUpdate("File uploaded");
-      _scheduleBackgroundUpdate();
-    });
     Bus.instance.on<TabChangedEvent>().listen((event) {
       if (event.source == TabChangedEventSource.pageView &&
           event.selectedIndex == searchTabIndex) {
@@ -283,7 +279,9 @@ class MagicCacheService {
     return lastMagicCacheUpdateTime * 1000;
   }
 
-  bool get enableDiscover => hasGrantedMLConsent;
+  // Offline fork: the Discover section needs CLIP. Without the CLIP models
+  // each update fails, so the section is off when `kOfflineRunClip` is false.
+  bool get enableDiscover => kOfflineRunClip && hasGrantedMLConsent;
 
   void queueUpdate(String reason) {
     _pendingUpdateReason.add(reason);

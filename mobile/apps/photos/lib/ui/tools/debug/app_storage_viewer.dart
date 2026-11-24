@@ -4,7 +4,6 @@ import 'package:ente_components/ente_components.dart';
 import 'package:ente_pure_utils/ente_pure_utils.dart';
 import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import "package:logging/logging.dart";
 import 'package:path_provider/path_provider.dart';
 import 'package:photos/core/configuration.dart';
@@ -42,8 +41,9 @@ class _AppStorageViewerState extends State<AppStorageViewer> {
     final String tempDownload = Configuration.instance.getTempDirectory();
     final String cacheDirectory = Configuration.instance
         .getThumbnailCacheDirectory();
-    final imageCachePath =
-        appTemporaryDirectory.path + "/" + DefaultCacheManager.key;
+    // Offline fork: "libCachedImageData" is the folder name of the default
+    // flutter_cache_manager cache (`DefaultCacheManager.key`).
+    final imageCachePath = appTemporaryDirectory.path + "/libCachedImageData";
     if (!mounted) return;
     paths.addAll([
       PathStorageItem.name(

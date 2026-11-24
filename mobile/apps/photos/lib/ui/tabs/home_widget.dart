@@ -92,7 +92,7 @@ class _HomeWidgetState extends State<HomeWidget> {
   _christmasBannerEventSubscription;
 
   // Offline fork: there is no feed tab.
-  List<int> get _tabIndices => homeTabIndices(showFeed: false);
+  List<int> get _tabIndices => homeTabIndices();
 
   @override
   void initState() {

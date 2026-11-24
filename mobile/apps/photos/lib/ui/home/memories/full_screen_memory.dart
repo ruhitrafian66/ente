@@ -2,7 +2,6 @@ import "dart:async";
 import "dart:math";
 import "dart:ui";
 
-import "package:connectivity_plus/connectivity_plus.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_components/theme/text_styles.dart" as component;
 import "package:ente_pure_utils/ente_pure_utils.dart";
@@ -11,11 +10,9 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/details_sheet_event.dart";
-import "package:photos/events/file_caption_updated_event.dart";
 import "package:photos/events/pause_video_event.dart";
 import "package:photos/events/reset_zoom_of_photo_view_event.dart";
 import "package:photos/events/resume_video_event.dart";
-import "package:photos/events/retry_failed_image_load_event.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
@@ -72,11 +69,6 @@ class FullScreenMemoryDataUpdater extends StatefulWidget {
 class _FullScreenMemoryDataUpdaterState
     extends State<FullScreenMemoryDataUpdater> {
   late ValueNotifier<int> indexNotifier;
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-  // Seeded from checkConnectivity() before the listener attaches, so a real
-  // offline→online recovery (fire retry) is distinguishable from a WiFi↔
-  // cellular handoff where the old requests are still healthy.
-  bool _wasConnected = false;
 
   @override
   void initState() {
@@ -92,7 +84,6 @@ class _FullScreenMemoryDataUpdaterState
       widget.memories.length == initialIndex + 1,
     );
     _warmThumbnailWindow(initialIndex);
-    unawaited(_setupConnectivityListener());
   }
 
   @override
@@ -106,42 +97,6 @@ class _FullScreenMemoryDataUpdaterState
     if (indexNotifier.value != safeIndex) {
       indexNotifier.value = safeIndex;
     }
-  }
-
-  Future<void> _setupConnectivityListener() async {
-    try {
-      final initialResults = await Connectivity().checkConnectivity();
-      _wasConnected = initialResults.any(
-        (result) => result != ConnectivityResult.none,
-      );
-    } catch (_) {
-      // Prefer a spurious retry over a missed one if the check fails.
-      _wasConnected = false;
-    }
-    if (!mounted) return;
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      results,
-    ) {
-      final hasConnection = results.any(
-        (result) => result != ConnectivityResult.none,
-      );
-      if (!hasConnection) {
-        _wasConnected = false;
-        return;
-      }
-      if (!_wasConnected) {
-        _wasConnected = true;
-        final currentIndex = indexNotifier.value;
-        Bus.instance.fire(RetryFailedImageLoadEvent());
-        // Re-kick on a microtask so the event handler runs first and clears
-        // the stale map entries; a synchronous call would re-bump the
-        // refcounts before the cancellation.
-        scheduleMicrotask(() {
-          if (!mounted) return;
-          _warmThumbnailWindow(currentIndex);
-        });
-      }
-    });
   }
 
   // Wide rolling window; thumbnails are tiny and gate the auto-advance timer.
@@ -163,7 +118,6 @@ class _FullScreenMemoryDataUpdaterState
 
   @override
   void dispose() {
-    _connectivitySubscription?.cancel();
     indexNotifier.dispose();
     super.dispose();
   }
@@ -291,8 +245,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
 
   late final StreamSubscription<DetailsSheetEvent>
   _detailSheetEventSubscription;
-  late final StreamSubscription<FileCaptionUpdatedEvent>
-  _captionUpdatedSubscription;
 
   @override
   void initState() {
@@ -321,21 +273,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
         }
       },
     );
-    _captionUpdatedSubscription = Bus.instance
-        .on<FileCaptionUpdatedEvent>()
-        .listen((event) {
-          if (!mounted) return;
-          final inheritedData = FullScreenMemoryData.of(context);
-          if (inheritedData == null) return;
-          final index = inheritedData.indexNotifier.value;
-          if (!_isValidMemoryIndex(index, inheritedData.memories.length)) {
-            return;
-          }
-          if (inheritedData.memories[index].file.generatedID ==
-              event.fileGeneratedID) {
-            setState(() {});
-          }
-        });
   }
 
   @override
@@ -372,7 +309,6 @@ class _FullScreenMemoryState extends State<FullScreenMemory> {
     _itemIndexNotifier?.removeListener(_activateCurrentItemMusic);
     hasPointerOnScreenNotifier.removeListener(_hasPointerListener);
     _detailSheetEventSubscription.cancel();
-    _captionUpdatedSubscription.cancel();
     super.dispose();
   }
 
@@ -1261,7 +1197,6 @@ class _MemoryBlur extends StatelessWidget {
               currentFile,
               placeholderColor: Colors.black,
               shouldShowSyncStatus: false,
-              shouldShowFavoriteIcon: false,
               shouldShowVideoOverlayIcon: false,
             ),
           ),

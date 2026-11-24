@@ -33,82 +33,78 @@ void callbackDispatcher() {
       taskStopwatch,
     );
 
-    await runWithLogs(
-      () async {
-        try {
-          BgTaskUtils.$.info('Task started $tlog');
-          if (!isPushRefresh && await BackgroundTasks.nativeEnabled(prefs)) {
-            await BackgroundTasks.configure();
-            failure = null;
-            return;
-          }
-          if (isIOSProcessingTask) {
-            await BgTaskUtils.scheduleIOSBackgroundProcessingTask();
-          }
-          ownsPipeline = await BgTaskUtils.acquireBackgroundPipeline(
-            taskName,
-            taskStopwatch,
-            startupElapsed: startupElapsed,
-          );
-          if (!ownsPipeline) {
-            BgTaskUtils.$.info('Skipping $taskName, background pipeline busy');
-            failure = null;
-            return;
-          }
-          if (!isPushRefresh && await BackgroundTasks.nativeEnabled(prefs)) {
-            await BackgroundTasks.configure();
-            failure = null;
-            return;
-          }
-          if (isIOSProcessingTask) {
-            await BgTaskUtils.markProcessingTaskStart(prefs);
-          }
-          final Duration taskBudget = BgTaskUtils.taskTimeoutFor(taskName);
-          final accountForStartup =
-              Platform.isIOS ||
-              taskName == BgTaskUtils.androidBackgroundProcessingTask;
-          final elapsed = startupElapsed + taskStopwatch.elapsed;
-          final Duration remainingBudget = accountForStartup
-              ? taskBudget - elapsed
-              : taskBudget;
-          final mlSelfStop = BgTaskUtils.mlSelfStopFor(taskName);
-          await runBackgroundTask(
-            taskName,
-            tlog,
-            mlSelfStop: accountForStartup ? mlSelfStop - elapsed : mlSelfStop,
-            mlLockWait: BgTaskUtils.mlLockWaitFor(taskName),
-          ).timeout(
-            remainingBudget.isNegative ? Duration.zero : remainingBudget,
-            onTimeout: () async {
-              timedOut = true;
-              BgTaskUtils.$.warning(
-                "TLE, committing seppuku for taskID: $taskName",
-              );
-              await BgTaskUtils.releaseResourcesForKill(taskName, prefs);
-            },
-          );
-          if (timedOut) {
-            failure = "Task timed out";
-          } else {
-            BgTaskUtils.$.info('Task run successful $tlog');
-            failure = null;
-          }
-        } catch (e) {
-          BgTaskUtils.$.warning('Task error: $e');
-          if (ownsPipeline) {
-            await BgTaskUtils.releaseResourcesForKill(taskName, prefs);
-          }
-          failure = e.toString();
-        } finally {
-          // A timed-out run may still be draining, so its marker stays set.
-          if (ownsPipeline && !timedOut && isIOSProcessingTask) {
-            await BgTaskUtils.clearProcessingTaskStart(prefs);
-          }
+    await runWithLogs(() async {
+      try {
+        BgTaskUtils.$.info('Task started $tlog');
+        if (!isPushRefresh && await BackgroundTasks.nativeEnabled(prefs)) {
+          await BackgroundTasks.configure();
+          failure = null;
+          return;
         }
-      },
-      prefix: "[bg]",
-      sentryInitTimeout: const Duration(seconds: 5),
-    ).onError((_, _) {
+        if (isIOSProcessingTask) {
+          await BgTaskUtils.scheduleIOSBackgroundProcessingTask();
+        }
+        ownsPipeline = await BgTaskUtils.acquireBackgroundPipeline(
+          taskName,
+          taskStopwatch,
+          startupElapsed: startupElapsed,
+        );
+        if (!ownsPipeline) {
+          BgTaskUtils.$.info('Skipping $taskName, background pipeline busy');
+          failure = null;
+          return;
+        }
+        if (!isPushRefresh && await BackgroundTasks.nativeEnabled(prefs)) {
+          await BackgroundTasks.configure();
+          failure = null;
+          return;
+        }
+        if (isIOSProcessingTask) {
+          await BgTaskUtils.markProcessingTaskStart(prefs);
+        }
+        final Duration taskBudget = BgTaskUtils.taskTimeoutFor(taskName);
+        final accountForStartup =
+            Platform.isIOS ||
+            taskName == BgTaskUtils.androidBackgroundProcessingTask;
+        final elapsed = startupElapsed + taskStopwatch.elapsed;
+        final Duration remainingBudget = accountForStartup
+            ? taskBudget - elapsed
+            : taskBudget;
+        final mlSelfStop = BgTaskUtils.mlSelfStopFor(taskName);
+        await runBackgroundTask(
+          taskName,
+          tlog,
+          mlSelfStop: accountForStartup ? mlSelfStop - elapsed : mlSelfStop,
+          mlLockWait: BgTaskUtils.mlLockWaitFor(taskName),
+        ).timeout(
+          remainingBudget.isNegative ? Duration.zero : remainingBudget,
+          onTimeout: () async {
+            timedOut = true;
+            BgTaskUtils.$.warning(
+              "TLE, committing seppuku for taskID: $taskName",
+            );
+            await BgTaskUtils.releaseResourcesForKill(taskName, prefs);
+          },
+        );
+        if (timedOut) {
+          failure = "Task timed out";
+        } else {
+          BgTaskUtils.$.info('Task run successful $tlog');
+          failure = null;
+        }
+      } catch (e) {
+        BgTaskUtils.$.warning('Task error: $e');
+        if (ownsPipeline) {
+          await BgTaskUtils.releaseResourcesForKill(taskName, prefs);
+        }
+        failure = e.toString();
+      } finally {
+        // A timed-out run may still be draining, so its marker stays set.
+        if (ownsPipeline && !timedOut && isIOSProcessingTask) {
+          await BgTaskUtils.clearProcessingTaskStart(prefs);
+        }
+      }
+    }, prefix: "[bg]").onError((_, _) {
       failure = "Didn't finished correctly!";
       return;
     });
