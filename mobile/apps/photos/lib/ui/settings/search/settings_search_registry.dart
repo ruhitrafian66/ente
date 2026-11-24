@@ -12,7 +12,7 @@ import "package:photos/ui/settings/about/about_us_page.dart";
 import "package:photos/ui/settings/account/account_settings_page.dart";
 import "package:photos/ui/settings/appearance/appearance_settings_page.dart";
 import "package:photos/ui/settings/backup/backup_settings_page.dart";
-import "package:photos/ui/settings/backup/free_space_options.dart";
+import "package:photos/ui/settings/free_space_options.dart";
 import "package:photos/ui/settings/gallery_settings_screen.dart";
 import "package:photos/ui/settings/memories_settings_screen.dart";
 import "package:photos/ui/settings/ml/machine_learning_settings_page.dart";

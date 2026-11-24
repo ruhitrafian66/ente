@@ -26,7 +26,7 @@ import 'package:photos/ui/components/buttons/button_widget.dart';
 import 'package:photos/ui/components/models/button_type.dart';
 import 'package:photos/ui/notification/toast.dart';
 import "package:photos/ui/payment/subscription.dart";
-import "package:photos/ui/settings/backup/free_space_options.dart";
+import "package:photos/ui/settings/free_space_options.dart";
 import 'package:photos/utils/dialog_util.dart';
 import "package:photos/utils/share_util.dart";
 import "package:receive_sharing_intent/receive_sharing_intent.dart";

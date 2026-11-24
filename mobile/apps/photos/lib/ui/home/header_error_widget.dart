@@ -5,7 +5,7 @@ import "package:ente_strings/ente_strings.dart";
 import 'package:flutter/material.dart';
 import 'package:photos/core/errors.dart';
 import 'package:photos/ui/payment/subscription.dart';
-import "package:photos/ui/settings/backup/free_space_options.dart";
+import "package:photos/ui/settings/free_space_options.dart";
 import 'package:photos/utils/email_util.dart';
 
 class HeaderErrorWidget extends StatelessWidget {

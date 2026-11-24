@@ -121,9 +121,10 @@ Verified on the S25 (release build, 2026-11-23):
 Found on the device and fixed in code:
 - The "x out of N photos processed" counter stayed at 0, because `getIndexStatus` counted only files with faces AND CLIP. It now counts face-indexed files when `kOfflineRunClip` is false. The fixed build is installed but the fix is NOT yet confirmed on screen (the phone was locked).
 
+Verified by the owner on the S25 (2026-11-24): "The people section is verified working correctly." The agent did not see the individual actions; which of them the owner exercised is not recorded.
+
 NOT yet verified on the device:
-- The People section: whether clusters appear, and every People action (name, rename, merge, person-to-person merge, ignore, split, remove photo, cover). This is the main open check.
-- `clusterAllImages() finished, in 0 seconds` was logged at the end of a pass. It may be normal (already clustered) or may mean no faces were clustered. Check the face and cluster counts first when testing People.
+- The corrected index counter (not confirmed on screen by the agent).
 - App lock, memories, widgets, background (WorkManager) indexing, delete from gallery, video playback.
 
 Open issues seen in the log (not fixed):
@@ -135,8 +136,8 @@ Open issues seen in the log (not fixed):
 - Unit tests for the PNG service were not re-run after two late edits in `png_to_jpg_service.dart` (they compiled and ran on the device).
 
 Next steps, in order:
-1. With the owner's go-ahead on the phone: confirm the counter, then test the People section end to end.
-2. Removal stage 0 (move `free_space_options.dart` out of `ui/settings/backup/`, record flag values), then stages 1 to 7 from the plan, one checkpoint commit per stage, device check after the risky ones (stage 2 and 4).
+1. Removal stage 0 is done (`free_space_options.dart` now lives in `lib/ui/settings/`; flag values are recorded in the plan, section 4c-flags).
+2. Removal stages 1 to 7 from the plan, one checkpoint commit per stage, device check after the risky ones (stage 2 and 4).
 3. Final APK without the logcat define.
 4. ArcFace R50 option.
 
