@@ -99,6 +99,7 @@ Upstream already had an account-free "local gallery" mode (`AppMode.localGallery
 - Video faces: one thumbnail frame per video is acceptable. No frame sampling.
 - Full removal of network and account code was chosen over keeping it switched off ("Full removal" option: also upload, sync, server collections, keys, gateways). Follow `mobile/apps/photos/docs/offline-fork-removal-plan.md` stage by stage; `flutter analyze` must be clean after each stage. Keep the `EnteFile` fields and the `FilesDB` schema and migrations untouched (the plan explains why).
 - Unused monorepo projects are deleted (done for top-level dirs; `mobile/apps/auth`, `mobile/apps/locker`, unused packages and Rust crates still to go).
+- Person folder sort (requested 2026-11-24, in progress): a toggle, off by default, that MOVES images into `Pictures/People/<name>/`. Owner's choices: move, not copy; named persons only; images from all folders that Android lets the app move; a photo with several named persons goes to the folder of the largest face. Every move is recorded so "Restore all" can undo it. Code: `lib/services/person_folders/`, `lib/db/person_folders_db.dart`, `lib/ui/tools/person_folders_page.dart`. Never run it on the owner's phone without an explicit request.
 - Local checkpoint commits are fine at the agent's discretion. Never push unless asked.
 - The owner said to wait with the final APK until the removal is done. Test builds for the phone are wanted and were made.
 - For complex subagent tasks use Fable 5.2 at medium or high effort. Start subagents one after the other on this Mac, and tell them not to run analyzer, tests, Gradle or cargo.
@@ -107,6 +108,8 @@ Upstream already had an account-free "local gallery" mode (`AppMode.localGallery
 ## Status (update this section as work lands)
 
 Last update: 2026-11-24.
+
+In progress: removal stage 1 (five workers strip references to the stage 1 kill list; then the integrator deletes the kill-list files and runs the analyzer). The worker brief is the "Stage 1" section of the plan. Also in progress: the person folder sort feature (new files only; hook edits in `main.dart`, `ml_service.dart` and the tools screen are applied after stage 1 lands).
 
 Commits on `offline-faces` (local only, not pushed): `788c382` checkpoint with all features, analyzer clean; `7f949a1` index counter fix, logcat option, device test notes. Run `git log --oneline` for anything newer.
 
