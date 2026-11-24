@@ -1,5 +1,7 @@
 # Rust
 
+> Offline fork note: this workspace holds only the photos bridge (`bindings/frb/photos`, `bindings/frb/log`), the crates it needs (`assets`, `core`, `exif`, `image`, `location`, `ml`, `photos`, `vecdb`) and `tools/codegen`. The CLI, the WASM / UniFFI / N-API bindings, `crates/test-support`, `ente_core::http` and `Session` are deleted. The guidance below is upstream text; the parts about those deleted things do not apply. Do not change the behaviour or the optimisation settings of `crates/ml` and `crates/image`.
+
 ## Testing
 
 - All code must be tested end to end.

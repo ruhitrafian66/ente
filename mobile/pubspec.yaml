@@ -27,7 +27,6 @@ workspace:
   - packages/ente_icons
   - packages/ente_pure_utils
   - packages/ente_qr
-  - packages/frb
   - packages/local_auth_linux
   - packages/lock_screen
   - packages/native_video_editor

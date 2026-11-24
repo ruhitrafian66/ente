@@ -44,10 +44,6 @@ for (const dependencyKind of [
     "build-dependencies",
     `target.'cfg(target_arch = "wasm32")'.dependencies`,
 ]) {
-    result = run({ localDependency: "apps/cli", dependencyKind });
-    assert.equal(result.status, 1, result.stderr);
-    assert.match(result.stderr, /crosses the Rust app boundary/);
-
     result = run({
         domainName: "core",
         localDependency: "crates/product",
@@ -62,25 +58,6 @@ for (const dependencyKind of [
 
 result = run({ localDependency: "crates/product" });
 assert.equal(result.status, 0, result.stderr);
-
-for (const [dependencyKind, status] of [
-    ["dependencies", 1],
-    ["dev-dependencies", 0],
-    ["build-dependencies", 1],
-    [`target.'cfg(target_arch = "wasm32")'.dev-dependencies`, 0],
-]) {
-    result = run({
-        domainName: "core",
-        localDependency: "crates/test-support",
-        dependencyKind,
-    });
-    assert.equal(result.status, status, result.stderr);
-    if (status === 1)
-        assert.match(
-            result.stderr,
-            /ente-core must not depend on other domain crates/,
-        );
-}
 
 result = run({
     source: '// wasm_bindgen::JsValue is isolated here.\npub const NOTE: &str = "uniffi::export";\n',
@@ -113,7 +90,7 @@ for (const dependencyKind of [
     assert.equal(result.status, 1, result.stderr);
     assert.match(
         result.stderr,
-        /use ente-core::http instead of a direct reqwest dependency/,
+        /only ente-assets may depend on reqwest/,
     );
 }
 
@@ -121,10 +98,10 @@ result = run({ framework: "reqwest", bindingDependencyKind: "dependencies" });
 assert.equal(result.status, 1, result.stderr);
 assert.match(
     result.stderr,
-    /rust\/bindings\/wasm\/lib\/Cargo\.toml: use ente-core::http/,
+    /rust\/bindings\/wasm\/lib\/Cargo\.toml: only ente-assets may depend/,
 );
 
-for (const domainName of ["core", "assets"]) {
+for (const domainName of ["assets"]) {
     result = run({
         framework: "reqwest",
         dependencyKind: "dependencies",
@@ -144,36 +121,12 @@ for (const framework of ["argon2", "aes-gcm", "ring"]) {
 
 for (const [framework, domainName] of [
     ["argon2", "core"],
-    ["srp", "accounts"],
     ["keyring", "domain"],
 ]) {
     result = run({ framework, domainName });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, "");
 }
-
-result = run({
-    projections: {
-        "rust/bindings/wasm/lib/src/projection.rs":
-            "pub struct Output;\npub enum Error { Other }\n",
-        "rust/bindings/frb/lib/src/projection.rs":
-            "pub fn operation() {}\npub enum LockerError { Other }\n",
-    },
-});
-assert.equal(result.status, 1, result.stderr);
-assert.match(result.stderr, /projection\.rs: Output precedes Error/);
-assert.match(result.stderr, /projection\.rs: operation precedes LockerError/);
-
-result = run({
-    projections: {
-        "rust/bindings/wasm/lib/src/projection.rs":
-            "pub enum Error { Other }\npub struct Output;\n",
-        "rust/bindings/frb/lib/src/projection.rs":
-            "pub enum LockerError { Other }\npub fn operation() {}\n",
-    },
-});
-assert.equal(result.status, 0, result.stderr);
-assert.equal(result.stderr, "");
 
 function run({
     source = "pub fn domain() {}\n",
@@ -185,7 +138,6 @@ function run({
     dependencyKind = "dev-dependencies",
     domainName = "domain",
     bindingDependencyKind,
-    projections = {},
 } = {}) {
     const root = mkdtempSync(join(tmpdir(), "ente-rust-dependencies-"));
     try {
@@ -235,9 +187,6 @@ function run({
                 "rust/bindings/wasm/lib/src/lib.rs",
                 "pub fn binding() {}\n",
             );
-            for (const [path, source] of Object.entries(projections)) {
-                write(root, path, source);
-            }
             if (framework) {
                 write(
                     root,

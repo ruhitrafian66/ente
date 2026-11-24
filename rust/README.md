@@ -1,29 +1,20 @@
 # Rust
 
-Cargo workspace for Ente's Rust code.
+Cargo workspace for the Rust code of the Ente Photos offline fork. It holds only what the Flutter app links through `bindings/frb/photos`:
+
+- `bindings/frb/photos`, `bindings/frb/log`: the Flutter Rust Bridge crate and its log sink.
+- `crates/ml`, `crates/image`: on-device ML and image decode.
+- `crates/photos`, `crates/vecdb`, `crates/location`, `crates/exif`, `crates/assets`, `crates/core`: the libraries those need.
+- `tools/codegen`: the `cargo codegen` alias (see `.cargo/config.toml`).
 
 ## Development
 
 ```sh
-cargo fmt        # Format
-cargo clippy     # Lint
-cargo build      # Build
-cargo test --workspace --exclude ente-cli  # Test libraries with SQLite
-cargo test -p ente-cli                     # Test CLI with SQLCipher
-
-cargo run -p ente-cli -- --help   # Run the Ente Rust CLI
+cargo check -p ente-photos-frb --features flutter   # Type-check the bridge crate with its generated code
+cargo test --workspace                              # Test the libraries
+cargo codegen frb photos                            # Regenerate the bridge (Rust and Dart) for the photos app
 ```
 
-CI runs with `RUSTFLAGS="-D warnings"` so warnings will cause checks to fail.
+Run `cargo codegen frb photos` whenever the exported surface under `bindings/frb/photos/src/api` changes. It writes `bindings/frb/photos/src/frb_generated.rs` and `mobile/apps/photos/lib/src/rust` (both git-ignored).
 
-Other useful commands:
-
-```sh
-cargo codegen native  # Regenerate bindings used by native apps
-cargo codegen frb     # Regenerate bindings used by Flutter apps
-cargo codegen napi    # Regenerate bindings used by Desktop (Electron) apps
-
-# Run integration tests against a local Museum
-cargo test --workspace --exclude ente-cli --features museum,ente-ml/ml-assets
-cargo test -p ente-cli --features museum
-```
+`scripts/lint.sh` runs the checks in `checks/`, `cargo fmt --check`, `cargo clippy` and `cargo audit`.

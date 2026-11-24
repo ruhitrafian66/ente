@@ -1,1 +1,0 @@
-- Fixed database write failures causing later chat changes to be lost.

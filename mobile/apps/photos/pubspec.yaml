@@ -31,8 +31,6 @@ dependencies:
     path: plugins/ente_crypto
   ente_crypto_api:
     path: ../../packages/ente_crypto_api
-  ente_frb:
-    path: ../../packages/frb
   ente_icons:
     path: ../../packages/ente_icons
   ente_lock_screen:

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 const requestedRoot = resolve(process.argv[2]);
@@ -18,7 +18,6 @@ const metadata = JSON.parse(
     ),
 );
 const root = resolve(metadata.workspace_root, "..");
-const apps = resolve(root, "rust/apps");
 const bindings = resolve(root, "rust/bindings");
 const crates = resolve(root, "rust/crates");
 const framework =
@@ -28,24 +27,10 @@ const domain = metadata.packages.filter((pkg) =>
     pathFromRoot(pkg.manifest_path).startsWith("rust/crates/"),
 );
 
-const httpOwners = sorted("httpOwners", [
-    "rust/apps/cli/Cargo.toml",
-    "rust/crates/assets/Cargo.toml",
-    "rust/crates/core/Cargo.toml",
-    "rust/tools/location-dataset/Cargo.toml",
-]);
+// Offline fork: the asset downloader is the only HTTP code left.
+const httpOwners = sorted("httpOwners", ["rust/crates/assets/Cargo.toml"]);
 const cryptoOwner = "rust/crates/core/Cargo.toml";
-const cryptoExceptions = sorted("cryptoExceptions", [
-    "aes rust/crates/auth/Cargo.toml",
-    "aes-gcm rust/crates/auth/Cargo.toml",
-    "argon2 rust/crates/auth/Cargo.toml",
-    "hkdf rust/crates/ensu-crypto/Cargo.toml",
-    "hmac rust/crates/auth/Cargo.toml",
-    "hmac rust/crates/legacy/Cargo.toml",
-    "pbkdf2 rust/crates/auth/Cargo.toml",
-    "scrypt rust/crates/auth/Cargo.toml",
-    "srp rust/crates/accounts/Cargo.toml",
-]);
+const cryptoExceptions = sorted("cryptoExceptions", []);
 const cryptoName =
     /^(?:aes|argon2|bcrypt|chacha|crypto[-_]|curve25519|ecdsa|ed25519|hkdf|hmac|hpke|kyber|libcrux|ml-kem|p256|pbkdf|poly1305|salsa|scrypt|secp256|sodium|x25519|ring$|srp$)/;
 
@@ -54,7 +39,7 @@ for (const pkg of metadata.packages) {
     for (const { name, path } of pkg.dependencies) {
         if (name === "reqwest" && !httpOwners.has(manifest)) {
             console.error(
-                `${manifest}: use ente-core::http instead of a direct reqwest dependency`,
+                `${manifest}: only ente-assets may depend on reqwest`,
             );
             process.exitCode = 1;
         }
@@ -80,19 +65,9 @@ if (!domain.length) {
 for (const pkg of domain) {
     const manifest = pathFromRoot(pkg.manifest_path);
     for (const dependency of pkg.dependencies) {
-        if (inside(apps, dependency.path)) {
-            console.error(
-                `${manifest}: dependency ${JSON.stringify(dependency.name)} crosses the Rust app boundary`,
-            );
-            process.exitCode = 1;
-        }
         if (
             manifest === "rust/crates/core/Cargo.toml" &&
-            inside(crates, dependency.path) &&
-            !(
-                dependency.kind === "dev" &&
-                dependency.path === resolve(crates, "test-support")
-            )
+            inside(crates, dependency.path)
         ) {
             console.error(
                 `${manifest}: ente-core must not depend on other domain crates (${dependency.name})`,
@@ -128,34 +103,6 @@ for (const manifest of git(
     if (registered.has(manifest)) continue;
     console.error(
         `${manifest}: domain crate is not registered in the Cargo workspace`,
-    );
-    process.exitCode = 1;
-}
-
-for (const path of git(
-    "ls-files",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-    "-z",
-    "--",
-    "rust/bindings/wasm/lib/src",
-    "rust/bindings/frb/lib/src",
-)
-    .split("\0")
-    .filter(
-        (path) => path.endsWith(".rs") && existsSync(resolve(root, path)),
-    )) {
-    const source = readFileSync(resolve(root, path), "utf8");
-    const declarations = [
-        ...source.matchAll(
-            /^\s*pub\s+(?:async\s+)?(?:struct|enum|type|fn)\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
-        ),
-    ].map((match) => match[1]);
-    const error = declarations.find((name) => name.endsWith("Error"));
-    if (!error || declarations[0] === error) continue;
-    console.error(
-        `${path}: ${declarations[0]} precedes ${error}; put boundary errors before exported types and functions`,
     );
     process.exitCode = 1;
 }

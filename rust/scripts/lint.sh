@@ -8,10 +8,6 @@ python3 checks/cargo-versions/check.py ..
 python3 checks/cargo-versions/test.py
 python3 checks/cargo-workspace-dependencies/check.py ..
 python3 checks/cargo-workspace-dependencies/test.py
-node checks/cli-env-vars/check.mjs ..
-node checks/cli-env-vars/test.mjs
-node checks/cli-test-sleeps/check.mjs ..
-node checks/cli-test-sleeps/test.mjs
 node checks/dependency-boundaries/check.mjs ..
 node checks/dependency-boundaries/test.mjs
 node checks/library-leaks/check.mjs ..
@@ -19,5 +15,5 @@ node checks/library-leaks/test.mjs
 node checks/lint-exceptions/check.mjs ..
 node checks/lint-exceptions/test.mjs
 cargo fmt --check
-cargo clippy --locked --all-targets --features museum,ente-ml/ml-assets
+cargo clippy --locked --all-targets --features ente-ml/ml-assets
 cargo audit
