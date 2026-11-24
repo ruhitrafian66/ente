@@ -108,7 +108,7 @@ Upstream already had an account-free "local gallery" mode (`AppMode.localGallery
 
 Last update: 2026-11-24.
 
-Commits: `788c382` (checkpoint with all features, analyzer clean). After it, uncommitted or newer: the index counter fix (`lib/utils/ml_util.dart`), the logcat option (`super_logging.dart`, `offline_fork.dart`), this file.
+Commits on `offline-faces` (local only, not pushed): `788c382` checkpoint with all features, analyzer clean; `7f949a1` index counter fix, logcat option, device test notes. Run `git log --oneline` for anything newer.
 
 Verified on the S25 (release build, 2026-11-23):
 - Install under `io.ente.photos.offline`, label "Ente Offline". First start opens the gallery with no sign-up screen.
@@ -136,10 +136,9 @@ Open issues seen in the log (not fixed):
 
 Next steps, in order:
 1. With the owner's go-ahead on the phone: confirm the counter, then test the People section end to end.
-2. Commit the pending fixes.
-3. Removal stage 0 (move `free_space_options.dart` out of `ui/settings/backup/`, record flag values), then stages 1 to 7 from the plan, one checkpoint commit per stage, device check after the risky ones (stage 2 and 4).
-4. Final APK without the logcat define.
-5. ArcFace R50 option.
+2. Removal stage 0 (move `free_space_options.dart` out of `ui/settings/backup/`, record flag values), then stages 1 to 7 from the plan, one checkpoint commit per stage, device check after the risky ones (stage 2 and 4).
+3. Final APK without the logcat define.
+4. ArcFace R50 option.
 
 ## Notes for the removal (from the plan and the device run)
 
