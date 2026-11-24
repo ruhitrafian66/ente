@@ -14,6 +14,7 @@ import "package:photos/events/diff_sync_complete_event.dart";
 import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/people_changed_event.dart";
 import "package:photos/main.dart" show isIOSBackgroundRefresh, isProcessBg;
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/notification_service.dart";
 import "package:photos/services/rewind/rewind_asset_store.dart";
@@ -176,7 +177,7 @@ class RewindService {
 
   String? _unavailableReason(DateTime now) {
     if (!RewindEdition.isAvailable(now)) {
-      return "not available (flag ${flagService.rewind})";
+      return "not available (flag $kOfflineRewind)";
     }
     if (_owner == null) return "no owner";
     if (!_hasSyncedLibrary) return "library has not synced yet";

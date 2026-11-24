@@ -12,6 +12,7 @@ import "package:photos/db/ml/usearch_cluster_centroid_vector_db.dart";
 import "package:photos/events/embedding_updated_event.dart";
 import "package:photos/generated/protos/ente/common/vector.pb.dart";
 import "package:photos/models/ml/clip.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/compute_controller.dart";
 import "package:photos/services/machine_learning/ml_process_lock.dart";
@@ -87,8 +88,7 @@ mixin MLDataDBOrchestration implements IMLDataDB<int> {
     await upsertClusterSummaryRows(summary);
     _markClusterSummaryMutated();
 
-    if (!flagService.enableVectorDb ||
-        !await clusterCentroidVectorDB.isReady()) {
+    if (!kOfflineEnableVectorDb || !await clusterCentroidVectorDB.isReady()) {
       return;
     }
 
@@ -148,8 +148,7 @@ mixin MLDataDBOrchestration implements IMLDataDB<int> {
     await deleteClusterSummaryRow(clusterID);
     _markClusterSummaryMutated();
 
-    if (!flagService.enableVectorDb ||
-        !await clusterCentroidVectorDB.isReady()) {
+    if (!kOfflineEnableVectorDb || !await clusterCentroidVectorDB.isReady()) {
       await deleteClusterCentroidVectorIdMapping(clusterID);
       return;
     }
@@ -743,7 +742,7 @@ mixin MLDataDBOrchestration implements IMLDataDB<int> {
     final vectorizableEmbeddings = _vectorizableClipEmbeddings(embeddings);
     await insertClipRows(embeddings);
     if (embeddings.length == 1) {
-      if (flagService.enableVectorDb &&
+      if (kOfflineEnableVectorDb &&
           vectorizableEmbeddings.isNotEmpty &&
           await clipVectorDB.isReady()) {
         await _withClipVectorWriteRecovery(
@@ -757,7 +756,7 @@ mixin MLDataDBOrchestration implements IMLDataDB<int> {
         );
       }
     } else {
-      if (flagService.enableVectorDb &&
+      if (kOfflineEnableVectorDb &&
           vectorizableEmbeddings.isNotEmpty &&
           await clipVectorDB.isReady()) {
         await _withClipVectorWriteRecovery(
@@ -779,7 +778,7 @@ mixin MLDataDBOrchestration implements IMLDataDB<int> {
   @override
   Future<void> deleteClipEmbeddings(List<int> fileIDs) async {
     await deleteClipRows(fileIDs);
-    if (flagService.enableVectorDb && await clipVectorDB.isReady()) {
+    if (kOfflineEnableVectorDb && await clipVectorDB.isReady()) {
       await _withClipVectorWriteRecovery(
         operation: "deleteClipEmbeddings",
         writeOperation: () async {
@@ -793,7 +792,7 @@ mixin MLDataDBOrchestration implements IMLDataDB<int> {
   @override
   Future<void> deleteClipIndexes() async {
     await deleteAllClipRows();
-    if (flagService.enableVectorDb && await clipVectorDB.isReady()) {
+    if (kOfflineEnableVectorDb && await clipVectorDB.isReady()) {
       await _withClipVectorWriteRecovery(
         operation: "deleteClipIndexes",
         writeOperation: () async {

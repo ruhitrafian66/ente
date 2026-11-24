@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:io";
 import "dart:math";
 import "dart:ui";
 
@@ -30,14 +29,11 @@ import "package:photos/ui/home/memories/custom_listener.dart";
 import "package:photos/ui/home/memories/memory_music_session.dart";
 import "package:photos/ui/home/memories/memory_progress_indicator.dart";
 import "package:photos/ui/home/memories/memory_share_sheet.dart";
-import "package:photos/ui/home/memories/memory_video_export_sheet.dart";
 import "package:photos/ui/home/memories/memory_viewer_constants.dart";
 import "package:photos/ui/viewer/file/file_widget.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
 import "package:photos/ui/viewer/gallery/jump_to_date_gallery.dart";
-import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/share_util.dart";
-import "package:share_plus/share_plus.dart";
 
 const _memoryCaptionHorizontalInset = 16.0;
 const _memoryCaptionActionBarGap = 4.0;
@@ -816,9 +812,6 @@ class BottomIcons extends StatelessWidget {
     }
     final fullScreenState = context
         .findAncestorStateOfType<_FullScreenMemoryState>();
-    final memoryTitle =
-        context.findAncestorWidgetOfExactType<FullScreenMemory>()?.title ??
-        context.strings.memories;
 
     return Positioned(
       left: 0,
@@ -856,7 +849,7 @@ class BottomIcons extends StatelessWidget {
               ),
               onPressed: () async {
                 await fullScreenState._runWithViewerPaused(
-                  () => _shareMemory(context, inheritedData, memoryTitle),
+                  () => _shareMemory(context, inheritedData),
                 );
               },
             ),
@@ -1376,7 +1369,6 @@ class _MemoriesZoomWidgetState extends State<MemoriesZoomWidget>
 Future<void> _shareMemory(
   BuildContext context,
   FullScreenMemoryData inheritedData,
-  String memoryTitle,
 ) async {
   if (inheritedData.memories.isEmpty) return;
   final currentIndex = _clampedMemoryIndex(
@@ -1393,49 +1385,5 @@ Future<void> _shareMemory(
     return;
   }
 
-  switch (result.action) {
-    case MemoryShareSheetAction.shareVideo:
-      await _shareMemoryVideo(context, result.selectedMemories, memoryTitle);
-    case MemoryShareSheetAction.shareItems:
-      await share(context, Memory.filesFromMemories(result.selectedMemories));
-  }
-}
-
-Future<void> _shareMemoryVideo(
-  BuildContext context,
-  List<Memory> memories,
-  String memoryTitle,
-) async {
-  final memoryAudio = MemoryAudioScope.maybeOf(context, listen: false);
-  final musicTrack = memoryAudio == null || memoryAudio.isMusicMuted
-      ? null
-      : memoryAudio.controller?.activeTrack;
-  final File? video;
-  try {
-    video = await showMemoryVideoExportSheet(
-      context,
-      files: Memory.filesFromMemories(memories),
-      musicTrack: musicTrack,
-      muteVideos: memoryAudio?.isVideoMuted ?? false,
-      title: memoryTitle,
-    );
-  } catch (e) {
-    if (context.mounted) {
-      await showGenericErrorBottomSheet(context: context, error: e);
-    }
-    return;
-  }
-  if (video == null || !context.mounted) return;
-  try {
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(video.path, mimeType: "video/mp4")],
-        sharePositionOrigin: shareButtonRect(context, null),
-      ),
-    );
-  } catch (e) {
-    if (context.mounted) {
-      await showGenericErrorBottomSheet(context: context, error: e);
-    }
-  }
+  await share(context, Memory.filesFromMemories(result.selectedMemories));
 }

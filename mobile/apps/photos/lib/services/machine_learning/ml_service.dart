@@ -898,7 +898,6 @@ class MLService {
   void _logStatus() {
     final String status =
         '''
-    isInternalUser: ${flagService.internalUser}
     Local indexing: ${localSettings.isMLLocalIndexingEnabled}
     canRunMLController: $_mlControllerStatus
     activeOperation: ${MlProcessLock.instance.activeOperation?.name}

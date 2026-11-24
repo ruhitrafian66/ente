@@ -1,24 +1,18 @@
 import "dart:async";
-import "dart:developer";
-import "dart:io";
 
 import "package:ente_components/ente_components.dart";
 import "package:ente_components/hugeicons.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:exif_reader/exif_reader.dart";
-import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:photos/core/configuration.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/core/user_config.dart";
 import "package:photos/events/people_changed_event.dart";
-import "package:photos/models/ffmpeg/ffprobe_props.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
-import "package:photos/module/download/file.dart";
 import "package:photos/module/metadata/exif.dart";
-import "package:photos/module/metadata/video.dart";
 import "package:photos/service_locator.dart";
 import 'package:photos/ui/viewer/file/file_caption_widget.dart';
 import "package:photos/ui/viewer/file_details/creation_time_item_widget.dart";
@@ -26,7 +20,6 @@ import 'package:photos/ui/viewer/file_details/exif_item_widgets.dart';
 import "package:photos/ui/viewer/file_details/file_info_faces_item_widget.dart";
 import "package:photos/ui/viewer/file_details/file_properties_item_widget.dart";
 import "package:photos/ui/viewer/file_details/location_tags_widget.dart";
-import "package:photos/ui/viewer/file_details/video_exif_item.dart";
 
 class FileDetailsWidget extends StatefulWidget {
   final EnteFile file;
@@ -60,9 +53,6 @@ class _FileDetailsWidgetState extends State<FileDetailsWidget> {
   bool showExifListTile = false;
   final ValueNotifier<Map<String, IfdTag>?> _exifNotifier = ValueNotifier(null);
   final ValueNotifier<bool> hasLocationData = ValueNotifier(false);
-  final ValueNotifier<FFProbeProps?> _videoMetadataNotifier = ValueNotifier(
-    null,
-  );
 
   @override
   void initState() {
@@ -90,8 +80,6 @@ class _FileDetailsWidgetState extends State<FileDetailsWidget> {
               _exifData["exposureTime"] != null ||
               _exifData["ISO"] != null;
         });
-      } else if (flagService.internalUser && widget.file.isVideo) {
-        getMediaInfo();
       }
       getExif(widget.file).then((exif) {
         _exifNotifier.value = exif;
@@ -101,24 +89,10 @@ class _FileDetailsWidgetState extends State<FileDetailsWidget> {
     super.initState();
   }
 
-  Future<void> getMediaInfo() async {
-    final File? originFile = await getFile(widget.file, isOrigin: true);
-    if (originFile == null) return;
-    final properties = await getVideoProps(originFile);
-    if (!mounted) return;
-    _videoMetadataNotifier.value = properties;
-    if (kDebugMode) {
-      log("videoCustomProps ${properties.toString()}");
-      log("PropData ${properties?.propData.toString()}");
-    }
-    setState(() {});
-  }
-
   @override
   void dispose() {
     _exifNotifier.dispose();
     hasLocationData.dispose();
-    _videoMetadataNotifier.dispose();
     _peopleChangedEvent.cancel();
     super.dispose();
   }
@@ -202,20 +176,6 @@ class _FileDetailsWidgetState extends State<FileDetailsWidget> {
         ),
         const SizedBox(height: Spacing.xxl),
       ]);
-    } else if (file.isVideo) {
-      final items = <Widget>[
-        if (flagService.internalUser && !file.isDeviceTrash)
-          ValueListenableBuilder(
-            valueListenable: _videoMetadataNotifier,
-            builder: (context, value, _) => VideoExifRowItem(file, value),
-          ),
-      ];
-      if (items.isNotEmpty) {
-        fileDetailsTiles.addAll([
-          MenuGroupComponent(items: items),
-          const SizedBox(height: Spacing.xxl),
-        ]);
-      }
     }
 
     return SafeArea(

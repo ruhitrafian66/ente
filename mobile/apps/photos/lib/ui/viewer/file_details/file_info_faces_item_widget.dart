@@ -18,8 +18,7 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/face/face_with_embedding.dart";
 import "package:photos/models/ml/face/person.dart";
 import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart"
-    show flagService, isLocalGalleryMode;
+import "package:photos/service_locator.dart" show isLocalGalleryMode;
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart"
@@ -198,7 +197,7 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
 
     // Offline fork: manual tagging works locally, keyed by `mlFileID`.
     if ((!isLocalGalleryMode || kOfflineFork) &&
-        flagService.manualTagFileToPerson &&
+        kOfflineManualTagFileToPerson &&
         widget.file.mlFileID != null) {
       children.add(_buildAddFaceThumbnail(onTap: _openAddFilesToPersonPage));
     }
@@ -302,7 +301,7 @@ class _FacesItemWidgetState extends State<FacesItemWidget> {
     final showManualTagOption =
         (!isLocalGalleryMode || kOfflineFork) &&
         widget.file.mlFileID != null &&
-        flagService.manualTagFileToPerson &&
+        kOfflineManualTagFileToPerson &&
         reason == NoFacesReason.noFacesFound;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

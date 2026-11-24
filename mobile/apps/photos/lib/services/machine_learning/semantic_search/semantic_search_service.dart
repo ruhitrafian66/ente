@@ -12,6 +12,7 @@ import "package:photos/db/offline_files_db.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/ml/clip.dart";
 import "package:photos/models/ml/ml_versions.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/ml_computer.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
@@ -66,7 +67,7 @@ class SemanticSearchService {
   }
 
   Future<void> _scheduleWarmup({required bool delayTextModelLoad}) async {
-    if (flagService.usearchForSearch) {
+    if (kOfflineUsearchForSearch) {
       unawaited(_prepareVectorDbForSearch());
     }
 
@@ -79,12 +80,12 @@ class SemanticSearchService {
 
   Future<void> _prepareVectorDbForSearchInternal() async {
     try {
-      if (!flagService.usearchForSearch) return;
-      if (!flagService.hasGrantedMLConsent) return;
+      if (!kOfflineUsearchForSearch) return;
+      if (!kOfflineRemoteMlConsent) return;
       if (!await _vectorDB.isReady()) {
         await Future.delayed(_vectorDbMigrationDelay);
-        if (!flagService.usearchForSearch) return;
-        if (!flagService.hasGrantedMLConsent) return;
+        if (!kOfflineUsearchForSearch) return;
+        if (!kOfflineRemoteMlConsent) return;
         await _mlDataDB.checkMigrateFillClipVectorDB();
       }
       if (await _vectorDB.isReady()) {
@@ -101,11 +102,6 @@ class SemanticSearchService {
   // latest query's results.
   Future<(String, List<EnteFile>)> searchScreenQuery(String query) async {
     if (!isMagicSearchEnabledAndReady()) {
-      if (flagService.internalUser) {
-        _logger.info(
-          "ML global consent: $hasGrantedMLConsent, loaded: $_textModelIsLoaded ",
-        );
-      }
       return (query, <EnteFile>[]);
     }
     if (_searchScreenRequest != null) {
@@ -417,8 +413,8 @@ class SemanticSearchService {
   }
 
   Future<bool> _canUseVectorDbForSearch() async {
-    if (!flagService.usearchForSearch) return false;
-    if (!flagService.hasGrantedMLConsent) return false;
+    if (!kOfflineUsearchForSearch) return false;
+    if (!kOfflineRemoteMlConsent) return false;
     if (await _vectorDB.isReady()) return true;
     // Keep interactive search responsive: prepare/migrate in the background and
     // immediately fall back to a full similarity scan for this request.

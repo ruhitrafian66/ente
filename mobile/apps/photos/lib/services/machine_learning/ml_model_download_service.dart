@@ -6,7 +6,7 @@ import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart"
-    show flagService, hasGrantedMLConsent, isLocalGalleryMode, localSettings;
+    show hasGrantedMLConsent, isLocalGalleryMode, localSettings;
 import "package:photos/services/machine_learning/bundled_ml_models.dart";
 import "package:photos/services/machine_learning/ml_exceptions.dart";
 import "package:photos/src/rust/api/ml_indexing_api.dart" as rust_ml;
@@ -172,7 +172,7 @@ class MLModelDownloadService {
 
   bool get _shouldDownloadPetModels {
     if (kOfflineFork) return false;
-    return flagService.petEnabled && localSettings.petRecognitionEnabled;
+    return kOfflineRunPets && localSettings.petRecognitionEnabled;
   }
 
   void _listenForHighBandwidthModelDownloadRetry({

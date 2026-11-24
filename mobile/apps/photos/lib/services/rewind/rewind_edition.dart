@@ -1,4 +1,4 @@
-import "package:photos/service_locator.dart";
+import "package:photos/offline_fork.dart";
 
 class RewindEdition {
   const RewindEdition._();
@@ -8,9 +8,9 @@ class RewindEdition {
   static final DateTime availableUntil = DateTime(2027, 1, 18);
 
   static bool isAvailable(DateTime now) {
-    if (!flagService.rewind || !now.isBefore(availableUntil)) {
+    if (!kOfflineRewind || !now.isBefore(availableUntil)) {
       return false;
     }
-    return flagService.internalUser || !now.isBefore(availableFrom);
+    return !now.isBefore(availableFrom);
   }
 }

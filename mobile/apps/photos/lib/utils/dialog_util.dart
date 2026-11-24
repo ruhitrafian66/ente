@@ -10,7 +10,6 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:photos/core/constants.dart';
 import 'package:photos/models/button_result.dart';
 import 'package:photos/models/typedefs.dart';
-import "package:photos/service_locator.dart";
 import 'package:photos/ui/common/progress_dialog.dart';
 import 'package:photos/ui/components/action_sheet_widget.dart';
 import "package:photos/ui/components/alert_bottom_sheet.dart";
@@ -137,33 +136,6 @@ String parseErrorForUI(
     }
   }
 
-  if (!(flagService.internalUser && kDebugMode)) {
-    return genericError;
-  }
-  String errorInfo = "";
-  if (error is DioException) {
-    final DioException dioError = error;
-    if (dioError.type == DioExceptionType.badResponse) {
-      if (dioError.response?.data["code"] != null) {
-        errorInfo = "Reason: " + dioError.response!.data["code"];
-      } else {
-        errorInfo = "Reason: " + dioError.response!.data.toString();
-      }
-    } else if (dioError.type == DioExceptionType.badCertificate) {
-      errorInfo = "Reason: " + dioError.error.toString();
-    } else {
-      errorInfo = "Reason: " + dioError.type.toString();
-    }
-  } else {
-    if (kDebugMode) {
-      errorInfo = error.toString();
-    } else {
-      errorInfo = error.toString().split('Source stack')[0];
-    }
-  }
-  if (errorInfo.isNotEmpty) {
-    return "$genericError\n\n$errorInfo";
-  }
   return genericError;
 }
 

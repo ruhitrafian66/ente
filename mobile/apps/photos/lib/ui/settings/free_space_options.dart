@@ -5,11 +5,9 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/foundation.dart" show kDebugMode;
 import "package:flutter/material.dart";
 import "package:photos/offline_fork.dart";
-import "package:photos/service_locator.dart";
 import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/exact_duplicates_page.dart";
 import "package:photos/ui/tools/person_folders_page.dart";
-import "package:photos/ui/tools/photo_review/review_old_photos_page.dart";
 import "package:photos/ui/tools/png_to_jpg_page.dart";
 import "package:photos/ui/tools/similar_images_page.dart";
 import "package:photos/ui/viewer/gallery/large_files_page.dart";
@@ -102,16 +100,7 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
     }
 
     final options = <Widget>[
-      if (flagService.internalUser)
-        _buildFreeSpaceOption(
-          title: l10n.oldPhotos,
-          subtitle: l10n.oldPhotosDesc,
-          icon: HugeIcons.strokeRoundedClock02,
-          onTap: () async {
-            await routeToPage(context, const ReviewOldPhotosPage());
-          },
-        ),
-      if (flagService.enableVectorDb)
+      if (kOfflineEnableVectorDb)
         _buildFreeSpaceOption(
           title: l10n.similarImages,
           subtitle: l10n.useMLToFindSimilarImages,

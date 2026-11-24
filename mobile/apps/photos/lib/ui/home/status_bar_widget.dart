@@ -41,7 +41,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
   bool _showErrorBanner = false;
   bool _showMlBanner =
       !hasGrantedMLConsent &&
-      (isLocalGalleryMode || flagService.hasSyncedAccountFlags()) &&
+      isLocalGalleryMode &&
       !localSettings.hasSeenMLEnablingBanner;
   Error? _syncError;
 

@@ -12,7 +12,6 @@ import 'package:photos/core/constants.dart';
 import "package:photos/models/file/file.dart";
 import "package:photos/models/selected_files.dart";
 import "package:photos/models/similar_files.dart";
-import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/similar_images_service.dart";
 import "package:photos/theme/colors.dart";
 import 'package:photos/theme/ente_theme.dart';
@@ -651,11 +650,6 @@ class _SimilarImagesPageState extends State<SimilarImagesPage> {
       return;
     } catch (e, s) {
       _logger.severe("Failed to get similar files", e, s);
-      if (_isDisposed) return;
-      if (flagService.internalUser) {
-        if (!mounted) return;
-        await showGenericErrorDialog(context: context, error: e);
-      }
       if (_isDisposed) return;
       if (!mounted) return;
       Navigator.of(context).pop();

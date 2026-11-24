@@ -309,7 +309,7 @@ Future<void> _runMinimally(
     if (kOfflineFork) {
       await OfflineFilesDB.instance.refreshIntIdCache();
     }
-    MLDataDB.initialize(preferRust: flagService.rustMlDb);
+    MLDataDB.initialize(preferRust: kOfflineRustMlDb);
     NotificationService.instance.init(prefs);
 
     _logger.info("(for debugging) Configuration init $tlog");
@@ -351,8 +351,7 @@ Future<void> _runMinimally(
     await rewindService.refresh();
 
     if (shouldStop?.call() ?? false) return;
-    if ((isLocalGalleryMode || flagService.enableMLInBackground) &&
-        hasGrantedMLConsent) {
+    if (hasGrantedMLConsent) {
       await controller.init();
       final canRunML = controller.requestCompute(ml: true);
       if (!canRunML) {
@@ -449,7 +448,7 @@ Future<void> _init(
     if (!isBackground) {
       await localSettings.migrateGalleryLayoutPreferences();
     }
-    MLDataDB.initialize(preferRust: flagService.rustMlDb);
+    MLDataDB.initialize(preferRust: kOfflineRustMlDb);
 
     _logger.info("Configuration init $tlog");
     await Configuration.instance.init(preferences);
@@ -566,7 +565,7 @@ void logLocalSettings() {
   final settings = {
     'Show memories': memoriesCacheService.showAnyMemories,
     'Smart memories enabled': localSettings.isSmartMemoriesEnabled,
-    'ML enabled': flagService.hasGrantedMLConsent,
+    'ML enabled': kOfflineRemoteMlConsent,
     'ML local indexing enabled': localSettings.isMLLocalIndexingEnabled,
     'Multipart upload enabled': localSettings.userEnabledMultiplePart,
     'Gallery grid size': localSettings.getPhotoGridSize(),

@@ -269,8 +269,7 @@ class _BodyState extends State<_Body> {
             setState(() {});
           }
         });
-    if (flagService.qrFeatureEnabled &&
-        widget.config.mode == DetailPageMode.full) {
+    if (widget.config.mode == DetailPageMode.full) {
       _qrHelper = QrCodeDetectionHelper();
     }
 
@@ -434,14 +433,11 @@ class _BodyState extends State<_Body> {
                   if (widget.config.mode != DetailPageMode.full) {
                     return const SizedBox.shrink();
                   }
-                  if (flagService.ocrOverlayEnabled) {
-                    return InlineTextDetection(
-                      file: _files![selectedIndex],
-                      controller: _inlineTextDetectionController,
-                      isGuestView: isGuestView,
-                    );
-                  }
-                  return const SizedBox.shrink();
+                  return InlineTextDetection(
+                    file: _files![selectedIndex],
+                    controller: _inlineTextDetectionController,
+                    isGuestView: isGuestView,
+                  );
                 },
               ),
               ValueListenableBuilder(
@@ -649,8 +645,7 @@ class _BodyState extends State<_Body> {
           qrDetectionsNotifier: _qrHelper?.qrDetectionsNotifier,
           playbackSpeed: _playbackSpeed,
           onTextSelectionStart:
-              flagService.ocrOverlayEnabled &&
-                  widget.config.mode == DetailPageMode.full &&
+              widget.config.mode == DetailPageMode.full &&
                   !file.isLiveOrMotionPhoto
               ? (details) => _inlineTextDetectionController
                     .startTextSelectionAt(file, details.globalPosition)

@@ -1,8 +1,6 @@
 import "dart:math";
 
 import "package:collection/collection.dart";
-import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:logging/logging.dart';
 import 'package:photos/db/files_db.dart';
 import 'package:photos/models/file/file.dart';
@@ -278,18 +276,6 @@ class PeopleHomeWidgetService {
       androidClass: ANDROID_CLASS_NAME,
       iOSClass: IOS_CLASS_NAME,
     );
-
-    if (flagService.internalUser) {
-      await Fluttertoast.showToast(
-        msg: "[i][ppl] ${message ?? "PeopleHomeWidget updated"}",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        timeInSecForIosWeb: 1,
-        backgroundColor: Colors.black,
-        textColor: Colors.white,
-        fontSize: 16.0,
-      );
-    }
 
     _logger.info("Home Widget updated: ${message ?? "standard update"}");
   }

@@ -67,9 +67,7 @@ class MemoryLaneService {
   Set<String> _topNClusters = {};
 
   bool __isFeatureEnabled = false;
-  // TODO: this should be removed, but flagService does not fire MLConsentChangedEvent on remote flags sync
-  bool get isFeatureEnabled =>
-      hasGrantedMLConsent && __isFeatureEnabled && flagService.facesTimeline;
+  bool get isFeatureEnabled => hasGrantedMLConsent && __isFeatureEnabled;
   bool _initialized = false;
 
   Timer? _startupBackfillTimer;

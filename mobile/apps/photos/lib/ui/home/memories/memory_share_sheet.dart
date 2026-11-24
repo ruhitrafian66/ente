@@ -7,13 +7,12 @@ import "package:flutter/material.dart";
 import "package:photos/models/file_load_result.dart";
 import "package:photos/models/memories/memory.dart";
 import "package:photos/models/selected_files.dart";
-import "package:photos/service_locator.dart";
 import "package:photos/ui/viewer/gallery/gallery.dart";
 import "package:photos/ui/viewer/gallery/state/boundary_reporter_mixin.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_boundaries_provider.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
 
-enum MemoryShareSheetAction { shareVideo, shareItems }
+enum MemoryShareSheetAction { shareItems }
 
 class MemoryShareSheetResult {
   final MemoryShareSheetAction action;
@@ -187,7 +186,6 @@ class _MemoryShareSelectionSheetState
     StringsLocalizations l10n, {
     required double maxHeight,
   }) {
-    final canShareVideo = flagService.memoryVideoExportEnabled;
     return [
       _MemoryShareSheetBoundary(
         position: BoundaryPosition.bottom,
@@ -197,23 +195,9 @@ class _MemoryShareSelectionSheetState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (canShareVideo) ...[
-                  _buildAction(
-                    l10n.shareAsVideo,
-                    MemoryShareSheetAction.shareVideo,
-                    leading: const HugeIcon(
-                      icon: HugeIcons.strokeRoundedVideo01,
-                      size: IconSizes.small,
-                    ),
-                  ),
-                  const SizedBox(height: Spacing.md),
-                ],
                 _buildAction(
                   l10n.shareItemCount(count: _selectedFiles.files.length),
                   MemoryShareSheetAction.shareItems,
-                  variant: canShareVideo
-                      ? ButtonComponentVariant.secondary
-                      : ButtonComponentVariant.primary,
                 ),
               ],
             ),
@@ -223,19 +207,13 @@ class _MemoryShareSelectionSheetState
     ];
   }
 
-  Widget _buildAction(
-    String label,
-    MemoryShareSheetAction action, {
-    ButtonComponentVariant variant = ButtonComponentVariant.primary,
-    Widget? leading,
-  }) {
+  Widget _buildAction(String label, MemoryShareSheetAction action) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Spacing.xl),
       child: ButtonComponent(
         label: label,
-        variant: variant,
+        variant: ButtonComponentVariant.primary,
         density: ButtonComponentDensity.compact,
-        leading: leading,
         isDisabled: !_hasSelection,
         shouldSurfaceExecutionStates: false,
         onTap: _hasSelection ? () => _complete(action) : null,

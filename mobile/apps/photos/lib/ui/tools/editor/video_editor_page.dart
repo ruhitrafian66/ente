@@ -16,7 +16,6 @@ import "package:photos/events/local_photos_updated_event.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/location/location.dart";
 import "package:photos/module/metadata/local_file.dart";
-import "package:photos/service_locator.dart";
 import "package:photos/services/sync/sync_service.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/common/linear_progress_dialog.dart";
@@ -33,7 +32,6 @@ import "package:photos/ui/tools/editor/video_editor/video_editor_main_actions.da
 import "package:photos/ui/tools/editor/video_editor/video_editor_player_control.dart";
 import "package:photos/ui/tools/editor/video_editor/video_editor_widgets.dart";
 import "package:photos/ui/tools/editor/video_rotate_page.dart";
-import 'package:photos/ui/tools/editor/video_speed_page.dart';
 import "package:photos/ui/tools/editor/video_trim_page.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/utils/gallery_save_title.dart";
@@ -60,13 +58,9 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
 
   VideoEditorController? _controller;
 
-  late bool _useNativeExport;
-
   @override
   void initState() {
     super.initState();
-
-    _useNativeExport = flagService.useNativeVideoEditor;
 
     _controller = VideoEditorController.file(widget.ioFile);
     unawaited(_initializeController());
@@ -164,38 +158,6 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          if (flagService.internalUser)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    "Native (i)",
-                                    style: getEnteTextTheme(context).mini
-                                        .copyWith(color: colorScheme.textMuted),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Transform.scale(
-                                    scale: 0.8,
-                                    child: Switch(
-                                      value: _useNativeExport,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _useNativeExport = value;
-                                        });
-                                      },
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          if (flagService.internalUser)
-                            const SizedBox(height: 8),
                           VideoEditorMainActions(
                             children: [
                               VideoEditorBottomAction(
@@ -220,15 +182,6 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
                                   VideoRotatePage(controller: _controller!),
                                 ),
                               ),
-                              if (flagService.videoEditorSpeedEnabled)
-                                VideoEditorBottomAction(
-                                  label: "${context.strings.speed} (i)",
-                                  hugeIcon:
-                                      HugeIcons.strokeRoundedDashboardSpeed02,
-                                  onPressed: () => _openSubEditor(
-                                    VideoSpeedPage(controller: _controller!),
-                                  ),
-                                ),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -247,11 +200,7 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
     if (!await ensurePhotoLibraryAddPermission(context)) return;
     if (!mounted) return;
 
-    final shouldUseNative = flagService.internalUser
-        ? _useNativeExport
-        : flagService.useNativeVideoEditor;
-
-    _logEditState(shouldUseNative: shouldUseNative);
+    _logEditState();
 
     _isExporting.value = true;
 
@@ -272,10 +221,7 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
     );
 
     try {
-      final result = await _performExport(
-        shouldUseNative: shouldUseNative,
-        dialogKey: dialogKey,
-      );
+      final result = await _performExport(dialogKey: dialogKey);
       await _handleExportCompletion(result, dialogKey);
     } catch (e, s) {
       _logger.severe("Unexpected error in export process", e, s);
@@ -291,39 +237,32 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
   }
 
   Future<File> _performExport({
-    required bool shouldUseNative,
     required GlobalKey<LinearProgressDialogState> dialogKey,
   }) async {
-    if (shouldUseNative) {
-      try {
-        return await _runNativeExportWithRetry(dialogKey: dialogKey);
-      } catch (nativeError, stackTrace) {
-        if (nativeError is NativeVideoEditorException) {
-          _logger.warning(
-            "Native export failed, attempting FFmpeg fallback (code=${nativeError.code}, details=${nativeError.details})",
-            nativeError,
-          );
-        } else {
-          _logger.warning(
-            "Native export failed, attempting FFmpeg fallback",
-            nativeError,
-          );
-        }
-
-        if (flagService.internalUser && mounted) {
-          showShortToast(context, "(i) Switching to FFmpeg fallback");
-        }
-
-        if (dialogKey.currentState != null) {
-          dialogKey.currentState!.setProgress(0.0);
-        }
-
-        _logger.fine(
-          "Falling back to FFmpeg after native failure",
+    try {
+      return await _runNativeExportWithRetry(dialogKey: dialogKey);
+    } catch (nativeError, stackTrace) {
+      if (nativeError is NativeVideoEditorException) {
+        _logger.warning(
+          "Native export failed, attempting FFmpeg fallback (code=${nativeError.code}, details=${nativeError.details})",
           nativeError,
-          stackTrace,
+        );
+      } else {
+        _logger.warning(
+          "Native export failed, attempting FFmpeg fallback",
+          nativeError,
         );
       }
+
+      if (dialogKey.currentState != null) {
+        dialogKey.currentState!.setProgress(0.0);
+      }
+
+      _logger.fine(
+        "Falling back to FFmpeg after native failure",
+        nativeError,
+        stackTrace,
+      );
     }
 
     return await _runFfmpegExportWithRetry(dialogKey: dialogKey);
@@ -533,12 +472,10 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
     return Navigator.of(context).push(_VideoEditorSubPageRoute(child));
   }
 
-  void _logEditState({required bool shouldUseNative}) {
+  void _logEditState() {
     final controller = _controller;
     if (controller == null) {
-      _logger.info(
-        "Export requested but controller not ready (native=$shouldUseNative)",
-      );
+      _logger.info("Export requested but controller not ready (native=true)");
       return;
     }
 
@@ -563,7 +500,7 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
         "${controller.preferredCropAspectRatio != null ? ", aspectRatio=${controller.preferredCropAspectRatio!.toStringAsFixed(3)}" : ""}";
 
     _logger.info(
-      "Export starting (native=$shouldUseNative) rotation=$rotation°, "
+      "Export starting (native=true) rotation=$rotation°, "
       "trim={startMs:$startTrimMs, endMs:$endTrimMs, durationMs:$trimmedDurationMs, "
       "minMs:0, maxMs:$videoDurationMs, "
       "videoDurationMs:$videoDurationMs} "

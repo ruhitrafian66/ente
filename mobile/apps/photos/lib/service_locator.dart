@@ -1,5 +1,4 @@
 import "package:dio/dio.dart";
-import "package:ente_feature_flag/ente_feature_flag.dart";
 import "package:ente_install_source/ente_install_source.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:photos/core/configuration.dart";
@@ -9,6 +8,7 @@ import "package:photos/db/ml/db.dart";
 import "package:photos/events/ml_consent_changed_event.dart";
 import "package:photos/gateways/entity/entity_gateway.dart";
 import "package:photos/gateways/users/users_gateway.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/services/backup_preference_service.dart";
 import "package:photos/services/entity_service.dart";
 import "package:photos/services/location_service.dart";
@@ -66,17 +66,6 @@ class ServiceLocator {
 
 EndpointConfig get endpointConfig => ServiceLocator.instance.endpointConfig;
 
-FlagService? _flagService;
-
-FlagService get flagService {
-  _flagService ??= FlagService(
-    ServiceLocator.instance.prefs,
-    ServiceLocator.instance.enteDio,
-    Configuration.instance.getToken,
-  );
-  return _flagService!;
-}
-
 LocalSettings get localSettings => ServiceLocator.instance.localSettings;
 
 BackupSettings get backupSettings => ServiceLocator.instance.backupSettings;
@@ -91,19 +80,10 @@ MlDecryptionRecordStore get mlDecryptionRecordStore =>
 // access may still be used.
 bool get isLocalGalleryMode => localSettings.isLocalGalleryMode;
 
-bool get hasGrantedMLConsent {
-  if (isLocalGalleryMode) {
-    return localSettings.localGalleryMLConsent;
-  }
-  return flagService.hasGrantedMLConsent;
-}
+bool get hasGrantedMLConsent => localSettings.localGalleryMLConsent;
 
 Future<void> setMLConsent(bool enabled) async {
-  if (isLocalGalleryMode) {
-    await localSettings.setLocalGalleryMLConsent(enabled);
-  } else {
-    await flagService.setMLConsent(enabled);
-  }
+  await localSettings.setLocalGalleryMLConsent(enabled);
   Bus.instance.fire(MLConsentChangedEvent(enabled));
 }
 
@@ -160,7 +140,7 @@ RustMemoriesComputer? _rustMemoriesComputer;
 RustMemoriesComputer get rustMemoriesComputer =>
     _rustMemoriesComputer ??= RustMemoriesComputer();
 MemoriesComputer get memoriesComputer {
-  if (flagService.rustMemories && MLDataDB.isRustBackend) {
+  if (kOfflineRustMemories && MLDataDB.isRustBackend) {
     return rustMemoriesComputer;
   }
   return _dartMemoriesComputer ??= DartMemoriesComputer();

@@ -123,7 +123,7 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
   static final TaskQueue<String> largeLocalThumbnailQueue = _initLargeQueue();
 
   static TaskQueue<String> _initSmallQueue() {
-    final maxConcurrent = flagService.internalUser ? 45 : 15;
+    const maxConcurrent = 15;
     const timeoutSeconds = 60;
     const maxSize = 200;
 
@@ -140,7 +140,7 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
   }
 
   static TaskQueue<String> _initLargeQueue() {
-    final maxConcurrent = flagService.internalUser ? 15 : 5;
+    const maxConcurrent = 5;
     const timeoutSeconds = 60;
     const maxSize = 200;
 

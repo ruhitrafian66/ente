@@ -238,7 +238,7 @@ class RustMemoriesComputer implements MemoriesComputer {
         for (final log in oldCache?.specialShownLogs ?? <SpecialShownLog>[])
           rust.ShownSpecial(key: log.key, lastTimeShown: log.lastTimeShown),
       ],
-      showsSpecials: flagService.newMemories,
+      showsSpecials: false, // Offline fork: former `newMemories` flag.
       surfaceAll: surfaceAll,
       localGalleryMode: isLocalGalleryMode,
       seed: _seed(),

@@ -8,7 +8,6 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import "package:logging/logging.dart";
 import 'package:path_provider/path_provider.dart';
 import 'package:photos/core/configuration.dart';
-import "package:photos/service_locator.dart";
 import 'package:photos/ui/tools/debug/path_storage_viewer.dart';
 
 class AppStorageViewer extends StatefulWidget {
@@ -21,14 +20,12 @@ class AppStorageViewer extends StatefulWidget {
 class _AppStorageViewerState extends State<AppStorageViewer> {
   final List<PathStorageItem> paths = [];
   late String iosTempDirectoryPath;
-  late bool internalUser;
   int _refreshCounterKey = 0;
   final Logger _logger = Logger("_AppStorageViewerState");
 
   @override
   void initState() {
     super.initState();
-    internalUser = flagService.internalUser;
     addPath();
   }
 
@@ -43,8 +40,6 @@ class _AppStorageViewerState extends State<AppStorageViewer> {
         "${appTemporaryDirectory.path}/image_manager_disk_cache/";
 
     final String tempDownload = Configuration.instance.getTempDirectory();
-    final String personFaceThumbnails = Configuration.instance
-        .getPersonFaceThumbnailCacheDirectory();
     final String cacheDirectory = Configuration.instance
         .getThumbnailCacheDirectory();
     final imageCachePath =
@@ -77,21 +72,6 @@ class _AppStorageViewerState extends State<AppStorageViewer> {
     ];
     if (!Platform.isAndroid) {
       directoryStatePath.add(iosTempDirectoryPath);
-    }
-    if (internalUser) {
-      paths.addAll([
-        PathStorageItem.name(appDocumentsDirectory.path, "Documents"),
-        PathStorageItem.name(appSupportDirectory.path, "Support"),
-        PathStorageItem.name(appTemporaryDirectory.path, "Temp"),
-        PathStorageItem.name(
-          personFaceThumbnails,
-          "Face thumbnails",
-          allowCacheClear: true,
-        ),
-      ]);
-      if (!Platform.isAndroid) {
-        paths.add(PathStorageItem.name(iosTempDirectoryPath, "/tmp"));
-      }
     }
     prettyStringDirectoryStats(directoryStatePath).ignore();
     if (mounted) {
@@ -141,7 +121,6 @@ class _AppStorageViewerState extends State<AppStorageViewer> {
             for (var index = 0; index < paths.length; index++)
               PathStorageViewer(
                 paths[index],
-                enableDoubleTapClear: internalUser,
                 key: ValueKey("$index-$_refreshCounterKey"),
               ),
           ],

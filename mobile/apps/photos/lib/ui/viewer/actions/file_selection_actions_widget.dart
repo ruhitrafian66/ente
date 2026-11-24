@@ -187,7 +187,7 @@ class _FileSelectionActionsWidgetState
         );
       }
 
-      if (flagService.manualTagFileToPerson &&
+      if (kOfflineManualTagFileToPerson &&
           widget.type.showAddToPersonOption()) {
         items.add(
           SelectionSheetAction(

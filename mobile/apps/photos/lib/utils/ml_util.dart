@@ -69,7 +69,7 @@ Future<IndexStatus> getIndexStatus() async {
         ? MLDataDB.localGalleryInstance
         : MLDataDB.instance;
     final bool petActive =
-        flagService.petEnabled &&
+        kOfflineRunPets &&
         localSettings.petRecognitionEnabled &&
         (localGallery || localSettings.isMLLocalIndexingEnabled);
     // Offline fork: CLIP does not run, so "fully indexed" (faces AND CLIP)
@@ -141,9 +141,7 @@ Future<List<FileMLInstruction>> getLocalGalleryFilesForMlIndexing() async {
   final Map<int, int> clipIndexedFileIDs = await mlDataDB
       .clipIndexedFileWithVersion();
   final bool petEnabled =
-      kOfflineRunPets &&
-      flagService.petEnabled &&
-      localSettings.petRecognitionEnabled;
+      kOfflineRunPets && localSettings.petRecognitionEnabled;
   final Map<int, int> petIndexedFileIDs = petEnabled
       ? await mlDataDB.petIndexedFileIds()
       : const {};

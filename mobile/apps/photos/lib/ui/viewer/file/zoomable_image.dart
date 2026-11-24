@@ -19,7 +19,7 @@ import 'package:photos/models/file/file.dart';
 import 'package:photos/module/download/file.dart';
 import 'package:photos/module/download/thumbnail.dart';
 import "package:photos/module/metadata/exif.dart";
-import "package:photos/service_locator.dart" show flagService;
+import "package:photos/offline_fork.dart";
 import "package:photos/src/rust/api/image_processing_api.dart" as rust_image;
 import "package:photos/states/detail_page_state.dart";
 import "package:photos/ui/actions/file/file_actions.dart";
@@ -441,7 +441,7 @@ class _ZoomableImageState extends State<ZoomableImage> {
   bool _isAndroidHeic() => Platform.isAndroid && _isHeic();
 
   bool _shouldUseRustHeicDecoder() =>
-      _isAndroidHeic() && flagService.useRustForHeicDecoder;
+      _isAndroidHeic() && kOfflineUseRustForHeicDecoder;
 
   Future<ImageProvider<Object>?> _tryDecodeHeicWithRust(
     File file, {

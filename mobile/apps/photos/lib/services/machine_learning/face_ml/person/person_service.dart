@@ -693,18 +693,7 @@ class PersonService {
       for (var cluster in personData.assigned) {
         faceCount += cluster.faces.length;
         for (var faceId in cluster.faces) {
-          if (faceIdToClusterID.containsKey(faceId)) {
-            if (flagService.internalUser) {
-              final otherPersonID =
-                  clusterToPersonID[faceIdToClusterID[faceId]!];
-              if (otherPersonID != e.id) {
-                final otherPerson = await getPerson(otherPersonID!);
-                logger.warning(
-                  "Face $faceId is already assigned to person $otherPersonID (${otherPerson!.data.name}) and person ${e.id} (${personData.name})",
-                );
-              }
-            }
-          } else {
+          if (!faceIdToClusterID.containsKey(faceId)) {
             faceIdToClusterID[faceId] = cluster.id;
           }
         }
