@@ -926,8 +926,11 @@ class _PhotoManagerPlatform implements PersonFolderPlatform {
       videoOption: const FilterOption(
         needTitle: true,
         sizeConstraint: SizeConstraint(ignoreSize: true),
+        // The Android side of photo_manager reads the limit as a 32-bit
+        // number of milliseconds (24.8 days at most). A larger value makes
+        // getAssetPathList throw a ClassCastException.
         durationConstraint: DurationConstraint(
-          max: Duration(days: 365),
+          max: Duration(days: 24),
           allowNullable: true,
         ),
       ),
