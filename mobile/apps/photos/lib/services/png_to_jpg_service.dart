@@ -55,10 +55,26 @@ class PngToJpgService {
 
   final _logger = Logger("PngToJpgService");
 
+  /// Why the last [scan] left out files that have a .png name, with counts.
+  /// The page shows it, so that a missing file can be explained.
+  Map<String, int> lastScanLeftOut = const {};
+  final Map<String, int> _leftOut = {};
+
+  static const leftOutOtherFormat = "Android reports another format";
+  static const leftOutNotReadable = "The app cannot read the file";
+  static const leftOutEmpty = "Empty file";
+  static const leftOutNotPng = "Not a real PNG";
+
+  Null _leaveOut(String reason) {
+    _leftOut[reason] = (_leftOut[reason] ?? 0) + 1;
+    return null;
+  }
+
   /// Finds the PNG images on the device, largest first.
   Future<List<PngScanItem>> scan({
     void Function(int done, int total)? onProgress,
   }) async {
+    _leftOut.clear();
     final allFiles = await SearchService.instance.getAllFilesForSearch();
     // The same asset is listed once for each device folder.
     final byLocalID = <String, EnteFile>{};
@@ -84,23 +100,30 @@ class PngToJpgService {
     items.sort(
       (a, b) => b.candidate.sizeBytes.compareTo(a.candidate.sizeBytes),
     );
-    _logger.info("Found ${items.length} PNG files");
+    lastScanLeftOut = Map.unmodifiable(_leftOut);
+    _logger.info(
+      "Found ${items.length} PNG files of ${files.length} with a .png name; "
+      "left out: $lastScanLeftOut",
+    );
     return items;
   }
 
   Future<PngScanItem?> _inspect(EnteFile file) async {
     try {
       final asset = await AssetEntity.fromId(file.localID!);
-      if (asset == null || asset.type != AssetType.image) return null;
+      if (asset == null) return _leaveOut(leftOutNotReadable);
+      if (asset.type != AssetType.image) return _leaveOut(leftOutOtherFormat);
       final title = asset.title ?? file.title;
-      if (!looksLikePng(title: title, mimeType: asset.mimeType)) return null;
+      if (!looksLikePng(title: title, mimeType: asset.mimeType)) {
+        return _leaveOut(leftOutOtherFormat);
+      }
       final source = await asset.originFile;
-      if (source == null) return null;
+      if (source == null) return _leaveOut(leftOutNotReadable);
       final sizeBytes = await source.length();
-      if (sizeBytes <= 0) return null;
+      if (sizeBytes <= 0) return _leaveOut(leftOutEmpty);
       // The extension and the mime type can be wrong. The signature is not.
       final header = parsePngHeader(await _readPrefix(source.path, 64));
-      if (header == null) return null;
+      if (header == null) return _leaveOut(leftOutNotPng);
 
       final creationTime = file.creationTime ?? 0;
       return PngScanItem(
@@ -121,7 +144,7 @@ class PngToJpgService {
       );
     } catch (e, s) {
       _logger.warning("Could not inspect a PNG candidate", e, s);
-      return null;
+      return _leaveOut(leftOutNotReadable);
     }
   }
 

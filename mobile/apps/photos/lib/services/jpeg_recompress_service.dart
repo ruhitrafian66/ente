@@ -25,6 +25,8 @@ import "package:photos/services/png_to_jpg_core.dart" show SavedJpeg;
 import "package:photos/services/search_service.dart";
 import "package:photos/services/sync/local_sync_service.dart";
 import "package:photos/src/rust/api/image_processing_api.dart" as rust_image;
+import "package:photos/ui/settings/file_access_section.dart"
+    show hasAllFilesAccess;
 
 /// A large JPEG found on the device, with the gallery file that shows its
 /// thumbnail.
@@ -163,6 +165,7 @@ class JpegRecompressService {
               ? DateTime.fromMicrosecondsSinceEpoch(creationTime)
               : asset.createDateTime,
           relativePath: asset.relativePath,
+          canWriteAnyFolder: await hasAllFilesAccess(),
         ),
       );
     } catch (e, s) {

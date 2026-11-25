@@ -3,6 +3,7 @@ import "package:ente_components/hugeicons.dart";
 import "package:ente_pure_utils/ente_pure_utils.dart";
 import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
+import "package:photos/ui/settings/file_access_section.dart";
 import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/exact_duplicates_page.dart";
 import "package:photos/ui/tools/jpeg_recompress_page.dart";
@@ -47,6 +48,15 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
         ),
         const SizedBox(height: Spacing.sm),
         _buildReviewOptions(context, l10n),
+        const SizedBox(height: Spacing.lg),
+        Text(
+          "File access", // Offline fork: not localized
+          style: TextStyles.display3.copyWith(
+            color: context.componentColors.textBase,
+          ),
+        ),
+        const SizedBox(height: Spacing.sm),
+        const FileAccessSection(),
         const SizedBox(height: Spacing.lg),
         _buildFreeSpaceOption(
           title: l10n.manageDeviceStorage,

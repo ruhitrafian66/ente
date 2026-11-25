@@ -449,6 +449,10 @@ class JpegCandidate {
   /// MediaStore RELATIVE_PATH of the folder, for example "DCIM/Camera/".
   final String? relativePath;
 
+  /// The app has "All files access", so a save is tried in every folder. A
+  /// save that Android refuses fails the file and keeps the original.
+  final bool canWriteAnyFolder;
+
   const JpegCandidate({
     required this.id,
     required this.title,
@@ -461,6 +465,7 @@ class JpegCandidate {
     this.trailerBytes = 0,
     required this.captureTime,
     required this.relativePath,
+    this.canWriteAnyFolder = false,
   });
 
   double get bitsPerPixel =>
@@ -487,7 +492,7 @@ class JpegCandidate {
         quality < kJpegRecompressMinSourceQuality) {
       return JpegSkipReason.alreadyCompressed;
     }
-    if (!isImageFolderWritable(relativePath)) {
+    if (!canWriteAnyFolder && !isImageFolderWritable(relativePath)) {
       return JpegSkipReason.folderNotWritable;
     }
     return null;

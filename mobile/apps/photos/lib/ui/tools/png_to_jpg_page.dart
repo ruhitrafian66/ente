@@ -319,6 +319,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
           style: TextStyles.large.copyWith(color: colors.textBase),
           textAlign: TextAlign.center,
         ),
+        _buildLeftOut(),
         if (_scanError != null) ...[
           const SizedBox(height: Spacing.sm),
           Text(
@@ -330,6 +331,22 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
           ),
         ],
       ],
+    );
+  }
+
+  /// Offline fork: why files with a .png name are not in the list.
+  Widget _buildLeftOut() {
+    final leftOut = PngToJpgService.instance.lastScanLeftOut;
+    if (leftOut.isEmpty) return const SizedBox.shrink();
+    final colors = context.componentColors;
+    return Padding(
+      padding: const EdgeInsets.only(top: Spacing.xs),
+      child: Text(
+        "Not listed: ${[for (final e in leftOut.entries) "${e.value} × ${e.key}"].join(", ")}. "
+        "The list has only the PNG files that Android shows to the app "
+        "(Settings > Free up space > File access).",
+        style: TextStyles.mini.copyWith(color: colors.textLight),
+      ),
     );
   }
 
@@ -383,6 +400,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
                       "only if it is at least 10% smaller than the PNG.",
                       style: TextStyles.mini.copyWith(color: colors.textLight),
                     ),
+                    _buildLeftOut(),
                   ],
                 ),
               ),
