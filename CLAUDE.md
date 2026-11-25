@@ -65,6 +65,7 @@ Run from `mobile/apps/photos` unless noted.
 
 The owner's S25 is connected over adb (serial `<serial>`). It is their daily phone with their real photo library (about 2,240 files).
 
+- Do not access the phone without the owner's explicit permission (owner, 2026-11-25). The install of a new build is the only adb action with standing permission. Media queries, file reads, logcat, screenshots and UI input each need a request. A question about the owner's photos is not a request to read the phone.
 - Installs need no request any more (standing order of 2026-11-25, see "Decisions"). A UI session still needs the owner's request: the owner does the tests.
 - Never tap Delete, Convert or a merge confirmation on the device. Open the tools only up to that step, unless the owner asks for more.
 - The phone locks after a short idle time. The agent cannot and must not unlock it; ask the owner. A black screenshot means the screen is off (`adb shell dumpsys power | grep mWakefulness`).
