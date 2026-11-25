@@ -14,6 +14,7 @@ import "package:photos/models/ml/ml_versions.dart";
 import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/ml_computer.dart";
+import "package:photos/services/machine_learning/ml_model_download_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/machine_learning/semantic_search/clip_similarity_scan.dart";
 import "package:photos/services/machine_learning/semantic_search/query_result.dart";
@@ -63,9 +64,9 @@ class SemanticSearchService {
   }
 
   Future<void> _scheduleWarmup({required bool delayTextModelLoad}) async {
-    // Offline fork: the CLIP models are not bundled. Without them the text
-    // model load fails each time, so skip the warm-up.
-    if (!kOfflineRunClip) return;
+    // Offline fork: the CLIP models are not bundled. Until they are on the
+    // device the text model load fails each time, so skip the warm-up.
+    if (!await MLModelDownloadService.instance.activateClipFromDisk()) return;
     if (kOfflineUsearchForSearch) {
       unawaited(_prepareVectorDbForSearch());
     }

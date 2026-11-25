@@ -12,6 +12,7 @@ import "package:photos/db/ml/db.dart";
 import "package:photos/events/notification_event.dart";
 import "package:photos/events/tab_changed_event.dart";
 import "package:photos/models/home_tab.dart";
+import "package:photos/offline_fork.dart";
 import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/ml_indexing_isolate.dart";
 import "package:photos/services/machine_learning/ml_model_download_service.dart";
@@ -485,11 +486,82 @@ class MLStatusWidgetState extends State<MLStatusWidget> {
             return const EnteLoadingWidget();
           },
         ),
+        const SizedBox(height: 8),
+        const _ClipModelRow(),
         if (decryptionIssueCount > 0) ...[
           const SizedBox(height: 8),
           _MLProcessingIssuesBlurb(itemCount: decryptionIssueCount),
         ],
       ],
+    );
+  }
+}
+
+/// Offline fork: state of the CLIP (magic search) models, and the only place
+/// that starts their download. Not localized.
+class _ClipModelRow extends StatefulWidget {
+  const _ClipModelRow();
+
+  @override
+  State<_ClipModelRow> createState() => _ClipModelRowState();
+}
+
+class _ClipModelRowState extends State<_ClipModelRow> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(MLModelDownloadService.instance.activateClipFromDisk());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.componentColors;
+    return ValueListenableBuilder<ClipModelStatus>(
+      valueListenable: MLModelDownloadService.instance.clipStatus,
+      builder: (context, status, _) {
+        if (status.phase == ClipModelPhase.off) {
+          return const SizedBox.shrink();
+        }
+        final megabytes = (kOfflineClipDownloadBytes / (1024 * 1024)).round();
+        final (String subtitle, String trailing) = switch (status.phase) {
+          ClipModelPhase.notDownloaded => (
+            "Search by image content. Tap to download the model "
+                "($megabytes MB) from models.ente.com.",
+            "Download",
+          ),
+          ClipModelPhase.downloading => (
+            "The download continues while the app is open.",
+            "${(status.fraction * 100).round()}%",
+          ),
+          ClipModelPhase.ready => ("The model is on this device.", "Ready"),
+          ClipModelPhase.failed => (
+            "The download failed. Tap to try again.",
+            "Retry",
+          ),
+          ClipModelPhase.off => ("", ""),
+        };
+        final canStart =
+            status.phase == ClipModelPhase.notDownloaded ||
+            status.phase == ClipModelPhase.failed;
+        return MenuComponent(
+          title: "Magic search model",
+          subtitle: subtitle,
+          subtitleMaxLines: 3,
+          leading: const HugeIcon(
+            icon: HugeIcons.strokeRoundedCloudDownload,
+            size: IconSizes.small,
+          ),
+          trailing: Text(
+            trailing,
+            style: TextStyles.mini.copyWith(
+              color: canStart ? colors.primary : colors.textLight,
+            ),
+          ),
+          onTap: canStart
+              ? () => MLModelDownloadService.instance.requestClipDownload()
+              : null,
+        );
+      },
     );
   }
 }

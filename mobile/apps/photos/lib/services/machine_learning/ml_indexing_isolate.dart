@@ -185,6 +185,8 @@ class MLIndexingIsolate extends SuperIsolate {
     return {
       "assetsDir": await MLModelDownloadService.instance.getAssetsDirectory(),
       "preparePets": kOfflineRunPets && localSettings.petRecognitionEnabled,
+      // Offline fork: load the CLIP image model only when it is on disk.
+      "runClip": MLModelDownloadService.instance.isClipActive,
       "enableWebGpu": await webGpuExecutionPolicy.isEligible(),
     };
   }

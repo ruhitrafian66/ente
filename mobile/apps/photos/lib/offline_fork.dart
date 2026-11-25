@@ -1,12 +1,21 @@
 // Central switches for the offline fork of Ente Photos.
 //
-// This fork always runs in local gallery mode, never signs in to an Ente
-// account, and never uses the network. See CLAUDE.md at the repository root.
+// This fork always runs in local gallery mode and never signs in to an Ente
+// account. Its only network use is the one-time download of the CLIP models
+// (`MLModelDownloadService`), which the owner starts on the ML settings page.
+// See CLAUDE.md at the repository root.
 
-/// Only the face models ship inside the APK. CLIP (semantic search), pet
-/// recognition and OCR need models that are not bundled, so they stay off.
-const bool kOfflineRunClip = false;
+/// Only the face models ship inside the APK. The CLIP models (semantic
+/// search, Discover) are downloaded once from `models.ente.com` when the
+/// owner asks for it. This switch only permits CLIP; code must read
+/// `MLModelDownloadService.instance.isClipActive`, which is true when the
+/// models are on the device. Pet recognition and OCR stay off.
+const bool kOfflineRunClip = true;
 const bool kOfflineRunPets = false;
+
+/// Bytes of the CLIP download (MobileCLIP-S2 image model, text model and
+/// vocabulary; see `model_asset_spec` in `rust/crates/ml/src/assets.rs`).
+const int kOfflineClipDownloadBytes = 143057352 + 67144712 + 3194984;
 
 /// The OCR models (text selection in the photo viewer) are not bundled, and
 /// the app cannot download them. When false, no file is eligible for OCR.

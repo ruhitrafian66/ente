@@ -154,11 +154,11 @@
         </receiver>
     </application>
 
-    <!-- Offline fork: the app never uses the network. This marker removes
-         INTERNET from the merged manifest, also when a plugin adds it.
-         The debug and profile manifests add it again for Flutter tooling. -->
-    <uses-permission android:name="android.permission.INTERNET"
-        tools:node="remove" />
+    <!-- Offline fork: INTERNET is back for one purpose only: the one-time
+         download of the CLIP models from models.ente.com, which the owner
+         starts on the ML settings page (MLModelDownloadService). No other
+         code in the app opens a connection. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.MANAGE_MEDIA" />
     <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />

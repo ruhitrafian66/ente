@@ -18,6 +18,7 @@ import "package:photos/service_locator.dart";
 import "package:photos/services/machine_learning/face_ml/face_alignment/alignment_result.dart";
 import "package:photos/services/machine_learning/face_ml/face_detection/detection.dart";
 import "package:photos/services/machine_learning/ml_exceptions.dart";
+import "package:photos/services/machine_learning/ml_model_download_service.dart";
 import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/machine_learning/ml_run_control.dart";
 import "package:photos/services/search_service.dart";
@@ -64,9 +65,11 @@ Future<IndexStatus> getIndexStatus() async {
     final mlDataDB = MLDataDB.localGalleryInstance;
     final bool petActive =
         kOfflineRunPets && localSettings.petRecognitionEnabled;
-    // Offline fork: CLIP does not run, so "fully indexed" (faces AND CLIP)
-    // never becomes true. Count a file as done when its faces are indexed.
-    final Set<int> indexedFileKeys = kOfflineRunClip
+    // Offline fork: while the CLIP models are not on the device, "fully
+    // indexed" (faces AND CLIP) never becomes true. Count a file as done
+    // when its faces are indexed.
+    final Set<int> indexedFileKeys =
+        MLModelDownloadService.instance.isClipActive
         ? await mlDataDB.getFullyIndexedFileIds(includePets: petActive)
         : (await mlDataDB.faceIndexedFileIds()).keys.toSet();
     final enteFiles = await SearchService.instance.getAllFilesForSearch();
@@ -158,7 +161,7 @@ Future<List<FileMLInstruction>> getLocalGalleryFilesForMlIndexing() async {
       faceMlVersion,
     );
     final shouldRunClip =
-        kOfflineRunClip &&
+        MLModelDownloadService.instance.isClipActive &&
         _shouldRunIndexingWithFileId(
           localIntId,
           clipIndexedFileIDs,
