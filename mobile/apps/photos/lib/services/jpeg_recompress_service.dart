@@ -34,11 +34,19 @@ class JpegScanItem {
   final JpegCandidate candidate;
   final EnteFile file;
 
-  const JpegScanItem({required this.candidate, required this.file});
+  /// When the file was last changed on the device (MediaStore
+  /// DATE_MODIFIED). The page sorts by it.
+  final DateTime modified;
+
+  const JpegScanItem({
+    required this.candidate,
+    required this.file,
+    required this.modified,
+  });
 }
 
 class JpegScanResult {
-  /// Every JPEG that is large for its pixel count, largest first. The page
+  /// Every JPEG that is large for its pixel count, last modified first. The page
   /// separates the ones with a skip reason.
   final List<JpegScanItem> items;
 
@@ -91,9 +99,8 @@ class JpegRecompressService {
       items.addAll(batch.whereType<JpegScanItem>());
       onProgress?.call(end, files.length);
     }
-    items.sort(
-      (a, b) => b.candidate.sizeBytes.compareTo(a.candidate.sizeBytes),
-    );
+    // Newest change first.
+    items.sort((a, b) => b.modified.compareTo(a.modified));
     _logger.info(
       "Checked ${files.length} JPEG files, ${items.length} are large for "
       "their pixel count",
@@ -150,6 +157,7 @@ class JpegRecompressService {
       final creationTime = file.creationTime ?? 0;
       return JpegScanItem(
         file: file,
+        modified: asset.modifiedDateTime,
         candidate: JpegCandidate(
           id: asset.id,
           title: title ?? p.basename(source.path),

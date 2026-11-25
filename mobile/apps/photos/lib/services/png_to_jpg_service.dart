@@ -30,7 +30,15 @@ class PngScanItem {
   final PngCandidate candidate;
   final EnteFile file;
 
-  const PngScanItem({required this.candidate, required this.file});
+  /// When the file was last changed on the device (MediaStore
+  /// DATE_MODIFIED). The page sorts by it.
+  final DateTime modified;
+
+  const PngScanItem({
+    required this.candidate,
+    required this.file,
+    required this.modified,
+  });
 }
 
 /// Removes the given gallery files from the device in one request. Returns
@@ -70,7 +78,7 @@ class PngToJpgService {
     return null;
   }
 
-  /// Finds the PNG images on the device, largest first.
+  /// Finds the PNG images on the device, last modified first.
   Future<List<PngScanItem>> scan({
     void Function(int done, int total)? onProgress,
   }) async {
@@ -97,9 +105,8 @@ class PngToJpgService {
       items.addAll(batch.whereType<PngScanItem>());
       onProgress?.call(end, files.length);
     }
-    items.sort(
-      (a, b) => b.candidate.sizeBytes.compareTo(a.candidate.sizeBytes),
-    );
+    // Newest change first.
+    items.sort((a, b) => b.modified.compareTo(a.modified));
     lastScanLeftOut = Map.unmodifiable(_leftOut);
     _logger.info(
       "Found ${items.length} PNG files of ${files.length} with a .png name; "
@@ -128,6 +135,7 @@ class PngToJpgService {
       final creationTime = file.creationTime ?? 0;
       return PngScanItem(
         file: file,
+        modified: asset.modifiedDateTime,
         candidate: PngCandidate(
           id: asset.id,
           title: title ?? p.basename(source.path),

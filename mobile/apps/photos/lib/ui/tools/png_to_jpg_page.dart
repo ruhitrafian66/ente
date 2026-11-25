@@ -431,7 +431,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "Largest first",
+                    "Last modified first",
                     style: TextStyles.mini.copyWith(color: colors.textLight),
                   ),
                   GestureDetector(
