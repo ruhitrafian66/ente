@@ -45,15 +45,43 @@ class JpegScanItem {
   });
 }
 
+/// What the scan did with the JPEG files of one device folder.
+class JpegFolderReport {
+  /// MediaStore RELATIVE_PATH, for example "Pictures/People/Ann/".
+  final String folder;
+
+  /// Outcome (one of the `JpegRecompressService.outcome...` texts) to the
+  /// number of files.
+  final Map<String, int> counts;
+
+  const JpegFolderReport({required this.folder, required this.counts});
+
+  int get total => counts.values.fold(0, (a, b) => a + b);
+
+  int get listed => counts[JpegRecompressService.outcomeListed] ?? 0;
+}
+
 class JpegScanResult {
-  /// Every JPEG that is large for its pixel count, last modified first. The page
-  /// separates the ones with a skip reason.
+  /// Every JPEG that is large for its pixel count, last modified first. The
+  /// page separates the ones with a skip reason.
   final List<JpegScanItem> items;
 
   /// How many JPEG files the scan looked at.
   final int checked;
 
-  const JpegScanResult({required this.items, required this.checked});
+  /// One entry for each folder that has a file with a JPEG name, by name.
+  final List<JpegFolderReport> folders;
+
+  /// Image files that the scan did not look at, because their name is not a
+  /// JPEG name: file extension (for example ".png") to the number of files.
+  final Map<String, int> otherImageTypes;
+
+  const JpegScanResult({
+    required this.items,
+    required this.checked,
+    this.folders = const [],
+    this.otherImageTypes = const {},
+  });
 }
 
 /// Removes the given gallery files from the device in one request. Returns
@@ -73,19 +101,46 @@ class JpegRecompressService {
 
   final _logger = Logger("JpegRecompressService");
 
+  static const outcomeListed = "Large for its pixels";
+  static const outcomeNormal = "Normal size for its pixels";
+  static const outcomeNotReadable = "The app cannot read the file";
+  static const outcomeOtherFormat = "Android reports another format";
+  static const outcomeNotJpeg = "Not readable as JPG";
+
+  /// Folder to outcome to count, for the scan that is in progress.
+  final Map<String, Map<String, int>> _outcomes = {};
+
+  void _note(String? folder, String outcome) {
+    final counts = _outcomes.putIfAbsent(
+      folder == null || folder.isEmpty ? "(unknown folder)" : folder,
+      () => {},
+    );
+    counts[outcome] = (counts[outcome] ?? 0) + 1;
+  }
+
   /// Finds the JPEG images that are large for their pixel count.
   Future<JpegScanResult> scan({
     void Function(int done, int total)? onProgress,
   }) async {
+    _outcomes.clear();
     final allFiles = await SearchService.instance.getAllFilesForSearch();
     // The same asset is listed once for each device folder.
     final byLocalID = <String, EnteFile>{};
+    final otherTypes = <String, int>{};
+    final seenOther = <String>{};
     for (final file in allFiles) {
       final localID = file.localID;
       if (localID == null ||
           localID.startsWith(sharedMediaIdentifier) ||
-          file.fileType != FileType.image ||
-          !hasJpegExtension(file.title)) {
+          file.fileType != FileType.image) {
+        continue;
+      }
+      if (!hasJpegExtension(file.title)) {
+        if (seenOther.add(localID)) {
+          final extension = p.extension(file.title ?? "").toLowerCase();
+          final key = extension.isEmpty ? "(no extension)" : extension;
+          otherTypes[key] = (otherTypes[key] ?? 0) + 1;
+        }
         continue;
       }
       byLocalID.putIfAbsent(localID, () => file);
@@ -95,17 +150,35 @@ class JpegRecompressService {
     final items = <JpegScanItem>[];
     for (var i = 0; i < files.length; i += _scanConcurrency) {
       final end = min(i + _scanConcurrency, files.length);
-      final batch = await Future.wait(files.sublist(i, end).map(_inspect));
+      final batch = await Future.wait(
+        files.sublist(i, end).map((file) => _inspect(file, report: true)),
+      );
       items.addAll(batch.whereType<JpegScanItem>());
       onProgress?.call(end, files.length);
     }
     // Newest change first.
     items.sort((a, b) => b.modified.compareTo(a.modified));
+    final folders = [
+      for (final entry in _outcomes.entries)
+        JpegFolderReport(
+          folder: entry.key,
+          counts: Map.unmodifiable(entry.value),
+        ),
+    ]..sort((a, b) => a.folder.toLowerCase().compareTo(b.folder.toLowerCase()));
     _logger.info(
-      "Checked ${files.length} JPEG files, ${items.length} are large for "
-      "their pixel count",
+      "Checked ${files.length} JPEG files in ${folders.length} folders, "
+      "${items.length} are large for their pixel count; other image types: "
+      "$otherTypes",
     );
-    return JpegScanResult(items: items, checked: files.length);
+    for (final folder in folders) {
+      _logger.info("JPEG scan, ${folder.folder}: ${folder.counts}");
+    }
+    return JpegScanResult(
+      items: items,
+      checked: files.length,
+      folders: folders,
+      otherImageTypes: Map.unmodifiable(otherTypes),
+    );
   }
 
   /// Reads one JPEG that the user chose in the viewer. Unlike the scan, it
@@ -116,14 +189,29 @@ class JpegRecompressService {
     return _inspect(file, onlyLarge: false);
   }
 
-  Future<JpegScanItem?> _inspect(EnteFile file, {bool onlyLarge = true}) async {
+  /// [report] counts the outcome for the folder report of a scan.
+  Future<JpegScanItem?> _inspect(
+    EnteFile file, {
+    bool onlyLarge = true,
+    bool report = false,
+  }) async {
+    String? folder = file.deviceFolder;
+    Null out(String outcome) {
+      if (report) _note(folder, outcome);
+      return null;
+    }
+
     try {
       final asset = await AssetEntity.fromId(file.localID!);
-      if (asset == null || asset.type != AssetType.image) return null;
+      if (asset == null) return out(outcomeNotReadable);
+      folder = asset.relativePath ?? folder;
+      if (asset.type != AssetType.image) return out(outcomeOtherFormat);
       final title = asset.title ?? file.title;
-      if (!looksLikeJpeg(title: title, mimeType: asset.mimeType)) return null;
+      if (!looksLikeJpeg(title: title, mimeType: asset.mimeType)) {
+        return out(outcomeOtherFormat);
+      }
       final source = await asset.originFile;
-      if (source == null) return null;
+      if (source == null) return out(outcomeNotReadable);
       final sizeBytes = await source.length();
       // The media library dimensions are enough for the first filter, so
       // most files are not opened at all.
@@ -135,15 +223,17 @@ class JpegRecompressService {
             width: asset.width,
             height: asset.height,
           )) {
-        return null;
+        return out(outcomeNormal);
       }
-      if (onlyLarge && sizeBytes < kJpegRecompressMinBytes) return null;
+      if (onlyLarge && sizeBytes < kJpegRecompressMinBytes) {
+        return out(outcomeNormal);
+      }
 
       // A large file: read it once to find the real image size, the quality
       // and the bytes after the end of the image.
       final bytes = await source.readAsBytes();
       final header = parseJpegHeader(bytes);
-      if (header == null) return null;
+      if (header == null) return out(outcomeNotJpeg);
       final primaryEnd = findJpegPrimaryEnd(bytes) ?? bytes.length;
       if (onlyLarge &&
           !isLargeForItsPixels(
@@ -151,8 +241,9 @@ class JpegRecompressService {
             width: header.width,
             height: header.height,
           )) {
-        return null;
+        return out(outcomeNormal);
       }
+      if (report) _note(folder, outcomeListed);
 
       final creationTime = file.creationTime ?? 0;
       return JpegScanItem(
@@ -178,7 +269,7 @@ class JpegRecompressService {
       );
     } catch (e, s) {
       _logger.warning("Could not inspect a JPEG candidate", e, s);
-      return null;
+      return out(outcomeNotReadable);
     }
   }
 

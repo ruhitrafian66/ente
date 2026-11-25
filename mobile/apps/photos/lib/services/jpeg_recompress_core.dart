@@ -81,8 +81,8 @@ const List<int> _standardLumaTable = [
 
 bool hasJpegExtension(String? title) {
   if (title == null) return false;
-  final extension = p.extension(title).toLowerCase();
-  return extension == ".jpg" || extension == ".jpeg";
+  const extensions = {".jpg", ".jpeg", ".jpe", ".jfif"};
+  return extensions.contains(p.extension(title).toLowerCase());
 }
 
 /// Cheap pre-filter from what the media library exposes. A reported mime type
@@ -160,13 +160,19 @@ JpegHeaderInfo? parseJpegHeader(Uint8List bytes) {
 
   var offset = 2;
   while (offset + 4 <= bytes.length) {
-    if (bytes[offset] != 0xFF) return null;
+    // Some writers leave stray bytes between two segments. Decoders skip
+    // them, so this parser does too.
+    if (bytes[offset] != 0xFF) {
+      offset++;
+      continue;
+    }
     final marker = bytes[offset + 1];
     if (marker == 0xFF) {
       offset++;
       continue;
     }
-    if (marker == 0xD8 ||
+    if (marker == 0x00 ||
+        marker == 0xD8 ||
         marker == 0x01 ||
         (marker >= 0xD0 && marker <= 0xD7)) {
       offset += 2;

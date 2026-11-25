@@ -14,6 +14,7 @@ import "package:logging/logging.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/services/jpeg_recompress_core.dart";
 import "package:photos/services/jpeg_recompress_service.dart";
+import "package:photos/ui/tools/jpeg_scan_report_page.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
 import "package:photos/utils/delete_file_util.dart";
@@ -42,6 +43,7 @@ class _JpegRecompressPageState extends State<JpegRecompressPage> {
   /// Large JPEGs that the tool leaves alone, by reason.
   Map<JpegSkipReason, int> _skipped = {};
   int _checked = 0;
+  JpegScanResult? _scanResult;
   final Set<String> _selected = {};
   int _quality = kJpegRecompressDefaultQuality;
   Object? _scanError;
@@ -98,6 +100,7 @@ class _JpegRecompressPageState extends State<JpegRecompressPage> {
         _items = items;
         _skipped = skipped;
         _checked = result.checked;
+        _scanResult = result;
         _selected
           ..clear()
           ..addAll(items.map((item) => item.candidate.id));
@@ -110,6 +113,7 @@ class _JpegRecompressPageState extends State<JpegRecompressPage> {
         _items = [];
         _skipped = {};
         _checked = 0;
+        _scanResult = null;
         _selected.clear();
         _scanError = e;
         _stage = _Stage.ready;
@@ -356,14 +360,35 @@ class _JpegRecompressPageState extends State<JpegRecompressPage> {
 
   Widget _buildSkippedLines() {
     final colors = context.componentColors;
-    if (_skipped.isEmpty) return const SizedBox.shrink();
     final lines = [
       for (final entry in _skipped.entries)
         "${entry.value} × ${entry.key.label}",
     ];
-    return Text(
-      "Large, but not offered: ${lines.join(", ")}",
-      style: TextStyles.mini.copyWith(color: colors.textLight),
+    final result = _scanResult;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (lines.isNotEmpty)
+          Text(
+            "Large, but not offered: ${lines.join(", ")}",
+            style: TextStyles.mini.copyWith(color: colors.textLight),
+          ),
+        if (result != null && result.folders.isNotEmpty)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () =>
+                routeToPage(context, JpegScanReportPage(result: result)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+              child: Text(
+                "Checked $_checked JPG files in ${result.folders.length} "
+                "folders. Show the result for each folder",
+                style: TextStyles.mini.copyWith(color: colors.primary),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
