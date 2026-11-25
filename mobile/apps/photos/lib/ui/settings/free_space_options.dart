@@ -7,6 +7,7 @@ import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/exact_duplicates_page.dart";
 import "package:photos/ui/tools/person_folders_page.dart";
 import "package:photos/ui/tools/png_to_jpg_page.dart";
+import "package:photos/ui/tools/video_compress_page.dart";
 import "package:photos/ui/viewer/gallery/trash_page.dart";
 
 class FreeUpSpaceOptionsScreen extends StatefulWidget {
@@ -79,6 +80,15 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
           icon: HugeIcons.strokeRoundedImageCrop,
           onTap: () async {
             await routeToPage(context, const PngToJpgPage());
+          },
+        ),
+        _buildFreeSpaceOption(
+          title: "Compress videos", // Offline fork: not localized
+          subtitle:
+              "Re-encode large videos as HEVC to save space", // Offline fork: not localized
+          icon: HugeIcons.strokeRoundedVideo01,
+          onTap: () async {
+            await routeToPage(context, const VideoCompressPage());
           },
         ),
         _buildFreeSpaceOption(

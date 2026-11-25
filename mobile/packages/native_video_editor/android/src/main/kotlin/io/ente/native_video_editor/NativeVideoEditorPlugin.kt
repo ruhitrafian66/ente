@@ -6,6 +6,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.ExportException
 import io.ente.native_video_editor.core.FrameStreamEncoder
 import io.ente.native_video_editor.core.FrameStreamRequest
+import io.ente.native_video_editor.core.VideoCompressRequest
+import io.ente.native_video_editor.core.VideoCompressResult
+import io.ente.native_video_editor.core.VideoCompressor
 import io.ente.native_video_editor.core.VideoExportEngine
 import io.ente.native_video_editor.core.VideoFrameExtractor
 import io.ente.native_video_editor.core.VideoMetadataReader
@@ -20,6 +23,8 @@ import io.ente.native_video_editor.core.SlideshowItem
 import io.ente.native_video_editor.core.SlideshowMotion
 import io.ente.native_video_editor.core.SlideshowMusic
 import io.ente.native_video_editor.core.VideoMetadata
+import io.ente.native_video_editor.core.VideoProbe
+import io.ente.native_video_editor.core.VideoProbeReader
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
@@ -55,6 +60,8 @@ class NativeVideoEditorPlugin : FlutterPlugin, MethodCallHandler, EventChannel.S
     private lateinit var metadataReader: VideoMetadataReader
     private lateinit var frameExtractor: VideoFrameExtractor
     private lateinit var videoExporter: VideoExportEngine
+    private lateinit var videoCompressor: VideoCompressor
+    private val probeReader = VideoProbeReader()
     private lateinit var messenger: BinaryMessenger
     private val frameStream = AtomicReference<FrameStreamEncoder?>()
     private val isOpeningFrameStream = AtomicBoolean(false)
@@ -76,6 +83,7 @@ class NativeVideoEditorPlugin : FlutterPlugin, MethodCallHandler, EventChannel.S
         metadataReader = VideoMetadataReader()
         frameExtractor = VideoFrameExtractor(binding.applicationContext, metadataReader)
         videoExporter = VideoExportEngine(binding.applicationContext, metadataReader)
+        videoCompressor = VideoCompressor(binding.applicationContext)
     }
 
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
@@ -92,6 +100,8 @@ class NativeVideoEditorPlugin : FlutterPlugin, MethodCallHandler, EventChannel.S
             "cancelFrameExtraction" -> cancelFrameExtraction(call, result, pluginScope)
             "processVideo" -> processVideo(call, result, pluginScope)
             "exportSlideshow" -> exportSlideshow(call, result, pluginScope)
+            "probeVideo" -> probeVideo(call, result, pluginScope)
+            "compressVideo" -> compressVideo(call, result, pluginScope)
             "cancelProcessing" -> cancelProcessing(result, pluginScope)
             "openFrameStream" -> openFrameStream(call, result, pluginScope)
             "finishFrameStream" -> finishFrameStream(result, pluginScope)
@@ -297,6 +307,69 @@ class NativeVideoEditorPlugin : FlutterPlugin, MethodCallHandler, EventChannel.S
                 replyError(result, "PROCESS_CANCELLED", "Export slideshow", error, pluginScope)
             } catch (error: Exception) {
                 replyError(result, "PROCESS_ERROR", "Export slideshow", error, pluginScope)
+            } finally {
+                if (currentExportJob == coroutineContext[Job]) currentExportJob = null
+            }
+        }
+        currentExportJob = job
+        job.start()
+    }
+
+    // Offline fork: container facts for the "Compress videos" tool.
+    private fun probeVideo(call: MethodCall, result: Result, pluginScope: CoroutineScope) {
+        val videoPath = call.argument<String>("videoPath")
+        if (videoPath.isNullOrBlank()) {
+            result.error("INVALID_ARGS", "Missing video path", null)
+            return
+        }
+
+        pluginScope.launch {
+            try {
+                val probe = withContext(Dispatchers.IO) { probeReader.read(videoPath) }
+                if (canReply(pluginScope)) result.success(probe.toChannelMap())
+            } catch (error: LinkageError) {
+                replyError(result, "INFO_LINKAGE_ERROR", "Probe video", error, pluginScope)
+            } catch (error: Exception) {
+                replyError(result, "INFO_ERROR", "Probe video", error, pluginScope)
+            }
+        }
+    }
+
+    // Offline fork: whole-file HEVC re-encode. Shares the export slot with
+    // processVideo, so cancelProcessing stops it too.
+    private fun compressVideo(call: MethodCall, result: Result, pluginScope: CoroutineScope) {
+        if (currentExportJob?.isActive == true) {
+            result.error("CONCURRENT_EXPORT", "A video export is already active", null)
+            return
+        }
+        val request = runCatching {
+            VideoCompressRequest(
+                inputPath = requireNotNull(call.argument<String>("inputPath")),
+                outputPath = requireNotNull(call.argument<String>("outputPath")),
+                videoBitrate = requireNotNull(call.argument<Number>("videoBitrate")).toInt(),
+                iFrameIntervalSeconds = requireNotNull(
+                    call.argument<Number>("iFrameIntervalSeconds")
+                ).toFloat(),
+                creationTimeMs = call.argument<Number>("creationTimeMs")?.toLong()
+            )
+        }.getOrNull()
+        if (request == null) {
+            result.error("INVALID_ARGS", "Invalid video compression arguments", null)
+            return
+        }
+
+        val job = pluginScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val compressed = videoCompressor.compress(request) { progress ->
+                    if (canReply(pluginScope)) progressEventSink?.success(progress)
+                }
+                if (canReply(pluginScope)) result.success(compressed.toChannelMap())
+            } catch (error: LinkageError) {
+                replyError(result, "PROCESS_LINKAGE_ERROR", "Compress video", error, pluginScope)
+            } catch (error: CancellationException) {
+                replyError(result, "PROCESS_CANCELLED", "Compress video", error, pluginScope)
+            } catch (error: Exception) {
+                replyError(result, "PROCESS_ERROR", "Compress video", error, pluginScope)
             } finally {
                 if (currentExportJob == coroutineContext[Job]) currentExportJob = null
             }
@@ -547,6 +620,35 @@ class NativeVideoEditorPlugin : FlutterPlugin, MethodCallHandler, EventChannel.S
         put("rotation", rotationDegrees)
         bitrate?.let { put("bitrate", it) }
         frameRate?.let { put("frameRate", it) }
+    }
+
+    private fun VideoProbe.toChannelMap(): Map<String, Any> = buildMap {
+        videoMimeType?.let { put("videoMimeType", it) }
+        put("width", width)
+        put("height", height)
+        put("rotation", rotationDegrees)
+        put("duration", durationMs)
+        frameRate?.let { put("frameRate", it.toDouble()) }
+        frameCount?.let { put("frameCount", it) }
+        videoBitrate?.let { put("videoBitrate", it) }
+        audioBitrate?.let { put("audioBitrate", it) }
+        put("videoTrackCount", videoTrackCount)
+        put("audioTrackCount", audioTrackCount)
+        put("otherTrackCount", otherTrackCount)
+        put("isHdr", isHdr)
+    }
+
+    private fun VideoCompressResult.toChannelMap(): Map<String, Any> = buildMap {
+        put("outputPath", outputPath)
+        put("fileSizeBytes", fileSizeBytes)
+        videoMimeType?.let { put("videoMimeType", it) }
+        videoEncoderName?.let { put("videoEncoderName", it) }
+        put("averageVideoBitrate", averageVideoBitrate)
+        put("videoFrameCount", videoFrameCount)
+        put("width", width)
+        put("height", height)
+        put("isVideoReEncoded", isVideoReEncoded)
+        put("isAudioReEncoded", isAudioReEncoded)
     }
 
     private fun VideoFrameExtractionResult.toChannelMap(): Map<String, Any> = mapOf(

@@ -108,6 +108,134 @@ class NativeVideoInfo {
   final double? frameRate;
 }
 
+/// Offline fork: what the container says about a video file.
+class NativeVideoProbe {
+  const NativeVideoProbe({
+    required this.videoMimeType,
+    required this.width,
+    required this.height,
+    required this.rotationDegrees,
+    required this.duration,
+    required this.frameRate,
+    required this.frameCount,
+    required this.videoBitrate,
+    required this.audioBitrate,
+    required this.videoTrackCount,
+    required this.audioTrackCount,
+    required this.otherTrackCount,
+    required this.isHdr,
+  });
+
+  factory NativeVideoProbe.fromMap(Map<dynamic, dynamic> map) {
+    int intOf(String key) {
+      final value = map[key];
+      if (value is! num) {
+        throw FormatException('Missing numeric video probe value: $key');
+      }
+      return value.toInt();
+    }
+
+    num? positive(String key) {
+      final value = map[key];
+      return value is num && value > 0 ? value : null;
+    }
+
+    final mimeType = map['videoMimeType'];
+    return NativeVideoProbe(
+      videoMimeType: mimeType is String ? mimeType : null,
+      width: intOf('width'),
+      height: intOf('height'),
+      rotationDegrees: intOf('rotation'),
+      duration: Duration(milliseconds: intOf('duration')),
+      frameRate: positive('frameRate')?.toDouble(),
+      frameCount: positive('frameCount')?.toInt(),
+      videoBitrate: positive('videoBitrate')?.toInt(),
+      audioBitrate: positive('audioBitrate')?.toInt(),
+      videoTrackCount: intOf('videoTrackCount'),
+      audioTrackCount: intOf('audioTrackCount'),
+      otherTrackCount: intOf('otherTrackCount'),
+      isHdr: map['isHdr'] == true,
+    );
+  }
+
+  final String? videoMimeType;
+
+  /// Encoded pixels, before the rotation is applied.
+  final int width;
+  final int height;
+  final int rotationDegrees;
+  final Duration duration;
+  final double? frameRate;
+  final int? frameCount;
+
+  /// Bits per second of the first video / audio track, when the container
+  /// states it.
+  final int? videoBitrate;
+  final int? audioBitrate;
+  final int videoTrackCount;
+  final int audioTrackCount;
+
+  /// Tracks that are neither video nor audio. A re-encode drops them.
+  final int otherTrackCount;
+  final bool isHdr;
+}
+
+/// Offline fork: what the encoder reports for a finished [compressVideo].
+class VideoCompressResult {
+  const VideoCompressResult({
+    required this.outputPath,
+    required this.fileSizeBytes,
+    required this.videoMimeType,
+    required this.videoEncoderName,
+    required this.averageVideoBitrate,
+    required this.videoFrameCount,
+    required this.width,
+    required this.height,
+    required this.isVideoReEncoded,
+    required this.isAudioReEncoded,
+  });
+
+  factory VideoCompressResult.fromMap(Map<dynamic, dynamic> map) {
+    final outputPath = map['outputPath'];
+    final fileSizeBytes = map['fileSizeBytes'];
+    if (outputPath is! String || fileSizeBytes is! num) {
+      throw const FormatException(
+        'Video compression returned an invalid result',
+      );
+    }
+    int intOf(String key) {
+      final value = map[key];
+      return value is num ? value.toInt() : 0;
+    }
+
+    final mimeType = map['videoMimeType'];
+    final encoderName = map['videoEncoderName'];
+    return VideoCompressResult(
+      outputPath: outputPath,
+      fileSizeBytes: fileSizeBytes.toInt(),
+      videoMimeType: mimeType is String ? mimeType : null,
+      videoEncoderName: encoderName is String ? encoderName : null,
+      averageVideoBitrate: intOf('averageVideoBitrate'),
+      videoFrameCount: intOf('videoFrameCount'),
+      width: intOf('width'),
+      height: intOf('height'),
+      isVideoReEncoded: map['isVideoReEncoded'] == true,
+      isAudioReEncoded: map['isAudioReEncoded'] == true,
+    );
+  }
+
+  final String outputPath;
+  final int fileSizeBytes;
+  final String? videoMimeType;
+  final String? videoEncoderName;
+  final int averageVideoBitrate;
+  final int videoFrameCount;
+  final int width;
+  final int height;
+  final bool isVideoReEncoded;
+  final bool isAudioReEncoded;
+}
+
 class VideoFrameRequest {
   const VideoFrameRequest({
     required this.inputPath,
@@ -679,6 +807,57 @@ class NativeVideoEditor {
       'videoPath': videoPath,
     }, operation: 'inspect video');
     return NativeVideoInfo.fromMap(result);
+  }
+
+  /// Offline fork: container facts of a video (codec, tracks, HDR). Nothing is
+  /// decoded.
+  static Future<NativeVideoProbe> probeVideo(String videoPath) async {
+    _ensureInputPathExists(videoPath);
+    final result = await _invokeMap('probeVideo', {
+      'videoPath': videoPath,
+    }, operation: 'probe video');
+    return NativeVideoProbe.fromMap(result);
+  }
+
+  /// Offline fork: re-encodes the whole video to HEVC at [videoBitrate] (bits
+  /// per second) into an MP4 at [outputPath]. The audio is copied when the
+  /// MP4 container accepts its format. [creationTime] becomes the creation
+  /// time of the new file. [cancelProcessing] stops the encode; the call then
+  /// throws with the code `PROCESS_CANCELLED`.
+  static Future<VideoCompressResult> compressVideo({
+    required String inputPath,
+    required String outputPath,
+    required int videoBitrate,
+    double iFrameIntervalSeconds = 1.0,
+    DateTime? creationTime,
+    void Function(double progress)? onProgress,
+  }) async {
+    _ensureInputPathExists(inputPath);
+    _validateOutputPath(inputPath: inputPath, outputPath: outputPath);
+    _ensureOutputDirectoryExists(outputPath);
+    if (videoBitrate <= 0) {
+      throw ArgumentError.value(videoBitrate, 'videoBitrate');
+    }
+    if (!iFrameIntervalSeconds.isFinite || iFrameIntervalSeconds <= 0) {
+      throw ArgumentError.value(iFrameIntervalSeconds, 'iFrameIntervalSeconds');
+    }
+    final progressSubscription = onProgress == null
+        ? null
+        : _progressChannel.receiveBroadcastStream().listen((dynamic event) {
+            if (event is num) onProgress(event.toDouble());
+          }, onError: (_) {});
+    try {
+      final result = await _invokeMap('compressVideo', {
+        'inputPath': inputPath,
+        'outputPath': outputPath,
+        'videoBitrate': videoBitrate,
+        'iFrameIntervalSeconds': iFrameIntervalSeconds,
+        'creationTimeMs': ?creationTime?.millisecondsSinceEpoch,
+      }, operation: 'compress video');
+      return VideoCompressResult.fromMap(result);
+    } finally {
+      await progressSubscription?.cancel();
+    }
   }
 
   static Future<void> cancelProcessing() async {
