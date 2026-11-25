@@ -385,6 +385,16 @@ void main() {
       expect(jpgNameForPng("Shot.PNG"), "Shot.jpg");
       expect(jpgNameForPng("a.b.png"), "a.b.jpg");
       expect(jpgNameForPng("noext"), "noext.jpg");
+      // A PNG that has a JPG name keeps its base name.
+      expect(jpgNameForPng("photo.jpg"), "photo.jpg");
+      expect(jpgNameForPng("photo.JPEG"), "photo.jpg");
+    });
+
+    test("a PNG with a JPG name gets a counter, not its own name", () async {
+      expect(
+        await pickJpgName("photo.jpg", (n) async => n == "photo.jpg"),
+        "photo (1).jpg",
+      );
     });
 
     test("adds a counter when the name is taken", () async {

@@ -223,9 +223,23 @@ int estimateSavingBytes({
 // Output naming
 // ---------------------------------------------------------------------------
 
-/// "Screenshot_1.png" -> "Screenshot_1.jpg".
+const Set<String> _imageExtensions = {
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".jpe",
+  ".jfif",
+  ".webp",
+  ".heic",
+  ".gif",
+  ".bmp",
+};
+
+/// "Screenshot_1.png" -> "Screenshot_1.jpg". A PNG with a wrong extension
+/// ("photo.jpg") also gives "photo.jpg"; [pickJpgName] then adds a counter,
+/// because the original still has that name.
 String jpgNameForPng(String pngTitle) {
-  final base = hasPngExtension(pngTitle)
+  final base = _imageExtensions.contains(p.extension(pngTitle).toLowerCase())
       ? p.basenameWithoutExtension(pngTitle)
       : pngTitle;
   return "${base.isEmpty ? "image" : base}.jpg";

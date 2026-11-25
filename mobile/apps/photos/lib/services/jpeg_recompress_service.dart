@@ -107,6 +107,11 @@ class JpegRecompressService {
   static const outcomeOtherFormat = "Android reports another format";
   static const outcomeNotJpeg = "Not readable as JPG";
 
+  /// The file has a JPG name, but its data is another format.
+  static String outcomeMisnamed(String format) => format == "PNG"
+      ? "Is a PNG with a JPG name (see the PNG tool)"
+      : "Is a $format file with a JPG name";
+
   /// Folder to outcome to count, for the scan that is in progress.
   final Map<String, Map<String, int>> _outcomes = {};
 
@@ -233,7 +238,21 @@ class JpegRecompressService {
       // and the bytes after the end of the image.
       final bytes = await source.readAsBytes();
       final header = parseJpegHeader(bytes);
-      if (header == null) return out(outcomeNotJpeg);
+      if (header == null) {
+        final format = sniffImageFormat(bytes);
+        if (format != null && format != "JPG") {
+          return out(outcomeMisnamed(format));
+        }
+        final start = bytes
+            .take(16)
+            .map((b) => b.toRadixString(16).padLeft(2, "0"))
+            .join(" ");
+        _logger.warning(
+          "JPEG header not readable: ${bytes.length} bytes, starts with "
+          "$start",
+        );
+        return out(outcomeNotJpeg);
+      }
       final primaryEnd = findJpegPrimaryEnd(bytes) ?? bytes.length;
       if (onlyLarge &&
           !isLargeForItsPixels(

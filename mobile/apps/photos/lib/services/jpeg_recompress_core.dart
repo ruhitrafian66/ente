@@ -96,6 +96,35 @@ bool looksLikeJpeg({String? title, String? mimeType}) {
   return hasJpegExtension(title);
 }
 
+/// The real format of an image file, from its first bytes: "JPG", "PNG",
+/// "WebP", "GIF", "HEIC or AVIF", "BMP", "TIFF", or null when it is not one
+/// of these. A file name and the Android media type can both be wrong.
+String? sniffImageFormat(Uint8List bytes) {
+  bool at(int offset, List<int> values) {
+    if (offset + values.length > bytes.length) return false;
+    for (var i = 0; i < values.length; i++) {
+      if (bytes[offset + i] != values[i]) return false;
+    }
+    return true;
+  }
+
+  if (at(0, const [0xFF, 0xD8, 0xFF])) return "JPG";
+  if (at(0, const [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) {
+    return "PNG";
+  }
+  if (_startsWith(bytes, 0, "RIFF") && _startsWith(bytes, 8, "WEBP")) {
+    return "WebP";
+  }
+  if (_startsWith(bytes, 0, "GIF8")) return "GIF";
+  if (_startsWith(bytes, 4, "ftyp")) return "HEIC or AVIF";
+  if (_startsWith(bytes, 0, "BM")) return "BMP";
+  if (at(0, const [0x49, 0x49, 0x2A, 0x00]) ||
+      at(0, const [0x4D, 0x4D, 0x00, 0x2A])) {
+    return "TIFF";
+  }
+  return null;
+}
+
 /// What the segments before the pixel data say about a JPEG.
 class JpegHeaderInfo {
   /// Stored pixels, before the EXIF orientation is applied.

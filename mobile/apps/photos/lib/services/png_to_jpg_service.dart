@@ -88,10 +88,11 @@ class PngToJpgService {
     final byLocalID = <String, EnteFile>{};
     for (final file in allFiles) {
       final localID = file.localID;
+      // Every image is examined: a PNG can have a wrong name (for example
+      // ".jpg"), and Android then also reports the wrong type.
       if (localID == null ||
           localID.startsWith(sharedMediaIdentifier) ||
-          file.fileType != FileType.image ||
-          !hasPngExtension(file.title)) {
+          file.fileType != FileType.image) {
         continue;
       }
       byLocalID.putIfAbsent(localID, () => file);
@@ -109,28 +110,31 @@ class PngToJpgService {
     items.sort((a, b) => b.modified.compareTo(a.modified));
     lastScanLeftOut = Map.unmodifiable(_leftOut);
     _logger.info(
-      "Found ${items.length} PNG files of ${files.length} with a .png name; "
-      "left out: $lastScanLeftOut",
+      "Found ${items.length} PNG files in ${files.length} images "
+      "(${items.where((i) => !hasPngExtension(i.candidate.title)).length} "
+      "with another extension); left out: $lastScanLeftOut",
     );
     return items;
   }
 
   Future<PngScanItem?> _inspect(EnteFile file) async {
     try {
+      // Only a file with a .png name is counted as "left out": the other
+      // images are normally not PNG files.
+      final hasPngName = hasPngExtension(file.title);
+      Null leaveOut(String reason) => hasPngName ? _leaveOut(reason) : null;
+
       final asset = await AssetEntity.fromId(file.localID!);
-      if (asset == null) return _leaveOut(leftOutNotReadable);
-      if (asset.type != AssetType.image) return _leaveOut(leftOutOtherFormat);
+      if (asset == null) return leaveOut(leftOutNotReadable);
+      if (asset.type != AssetType.image) return leaveOut(leftOutOtherFormat);
       final title = asset.title ?? file.title;
-      if (!looksLikePng(title: title, mimeType: asset.mimeType)) {
-        return _leaveOut(leftOutOtherFormat);
-      }
       final source = await asset.originFile;
-      if (source == null) return _leaveOut(leftOutNotReadable);
+      if (source == null) return leaveOut(leftOutNotReadable);
       final sizeBytes = await source.length();
-      if (sizeBytes <= 0) return _leaveOut(leftOutEmpty);
+      if (sizeBytes <= 0) return leaveOut(leftOutEmpty);
       // The extension and the mime type can be wrong. The signature is not.
       final header = parsePngHeader(await _readPrefix(source.path, 64));
-      if (header == null) return _leaveOut(leftOutNotPng);
+      if (header == null) return leaveOut(leftOutNotPng);
 
       final creationTime = file.creationTime ?? 0;
       return PngScanItem(
@@ -152,7 +156,7 @@ class PngToJpgService {
       );
     } catch (e, s) {
       _logger.warning("Could not inspect a PNG candidate", e, s);
-      return _leaveOut(leftOutNotReadable);
+      return hasPngExtension(file.title) ? _leaveOut(leftOutNotReadable) : null;
     }
   }
 

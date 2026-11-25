@@ -297,7 +297,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
         Text(
           _scanTotal == 0
               ? "Looking for PNG images…"
-              : "Checked $_scanDone of $_scanTotal PNG files",
+              : "Checked $_scanDone of $_scanTotal images",
           style: TextStyles.body.copyWith(color: colors.textLight),
           textAlign: TextAlign.center,
         ),

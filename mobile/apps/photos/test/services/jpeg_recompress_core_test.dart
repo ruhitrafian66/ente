@@ -207,6 +207,33 @@ void main() {
     });
   });
 
+  group("sniffImageFormat", () {
+    test("names the real format of the data", () {
+      expect(sniffImageFormat(_jpeg(_smooth())), "JPG");
+      expect(sniffImageFormat(img.encodePng(_smooth())), "PNG");
+      expect(sniffImageFormat(img.encodeGif(_smooth())), "GIF");
+      expect(sniffImageFormat(img.encodeBmp(_smooth())), "BMP");
+      expect(
+        sniffImageFormat(
+          Uint8List.fromList("RIFF\x00\x00\x00\x00WEBPVP8 ".codeUnits),
+        ),
+        "WebP",
+      );
+      expect(
+        sniffImageFormat(
+          Uint8List.fromList("\x00\x00\x00\x18ftypheic".codeUnits),
+        ),
+        "HEIC or AVIF",
+      );
+      expect(sniffImageFormat(Uint8List.fromList([1, 2, 3, 4])), isNull);
+      expect(sniffImageFormat(Uint8List(0)), isNull);
+    });
+
+    test("a PNG is not readable as a JPEG", () {
+      expect(parseJpegHeader(img.encodePng(_smooth())), isNull);
+    });
+  });
+
   group("findJpegPrimaryEnd", () {
     test("is the file length for a plain JPEG", () {
       final bytes = _jpeg(_noise(), quality: 100);
