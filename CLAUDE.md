@@ -2,7 +2,7 @@
 
 Personal, Android-only fork of [ente-io/ente](https://github.com/ente-io/ente). The app shows on-device photos only, runs face recognition on device, and has no Ente account. Its only network use is the one-time download of the CLIP models, which the owner starts by hand (since 2026-11-25). Personal use only: do not assume anything here may be redistributed (see "Models").
 
-- Fork: `<owner>/ente` (remote `origin`). Upstream: remote `upstream`. Work branch: `offline-faces`.
+- Fork: the owner's GitHub fork (remote `origin`; `git remote -v` shows it). Upstream: remote `upstream`. Work branch: `offline-faces`.
 - Forked from upstream commit `6ace5d3` (2026-11-23), shallow clone (`--depth 1`).
 - Target device: Samsung Galaxy S25 (arm64, Snapdragon 8 Elite, 12 GB RAM).
 - Owner decisions so far are recorded under "Decisions". Do not reopen them without being asked.
@@ -63,7 +63,7 @@ Run from `mobile/apps/photos` unless noted.
 
 ## Testing on the phone
 
-The owner's S25 is connected over adb (serial `<serial>`). It is their daily phone with their real photo library (about 2,240 files).
+The owner's S25 is connected over adb (`adb devices` shows the serial; do not write it into a file). It is their daily phone with their real photo library (about 2,240 files).
 
 - Do not access the phone without the owner's explicit permission (owner, 2026-11-25). The install of a new build is the only adb action with standing permission. Media queries, file reads, logcat, screenshots and UI input each need a request. A question about the owner's photos is not a request to read the phone.
 - Installs need no request any more (standing order of 2026-11-25, see "Decisions"). A UI session still needs the owner's request: the owner does the tests.
@@ -101,6 +101,7 @@ Upstream already had an account-free "local gallery" mode (`AppMode.localGallery
 ## Decisions
 
 - Personal use only. InsightFace weights (non-commercial licence) are acceptable.
+- No identifying information in the repository (owner, 2026-11-25): never commit a device serial number, a personal name, an e-mail address, an account or user name, an absolute home path (`/Users/<name>/...`), a phone number, a location, or the name or content of one of the owner's files or folders. This applies to code, comments, documents, CLAUDE.md, test data and commit messages. Write "the owner", "the fork", `~` or a repository-relative path. Before each commit run `git diff --cached | grep -inE "/Users/|@[a-z0-9-]+\.[a-z]{2,}|serial"` and read the hits. Commits before 2026-11-25 still hold such details in the history; a history rewrite needs the owner's explicit request.
 - Planned second step, not started: SCRFD-10G detector + ArcFace R50 (`w600k_r50`, 512-d, from the InsightFace `buffalo_l` pack) behind a build option. Needs DB schema, vector index and cluster threshold changes, and a check that the detector's 5-landmark alignment matches. Do it after the removal.
 - Video faces: one thumbnail frame per video is acceptable. No frame sampling.
 - Full removal of network and account code was chosen over keeping it switched off ("Full removal" option: also upload, sync, server collections, keys, gateways). Follow `mobile/apps/photos/docs/offline-fork-removal-plan.md` stage by stage; `flutter analyze` must be clean after each stage. Keep the `EnteFile` fields and the `FilesDB` schema and migrations untouched (the plan explains why).
