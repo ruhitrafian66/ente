@@ -541,7 +541,29 @@ void main() {
       expect(plan.recordUpdates.single.originalFolder, _camera);
     });
 
-    test("a video is skipped", () {
+    test("a video moves, and a video from Movies returns to Movies", () {
+      final plan = PersonFolderPlanner.plan(
+        files: const [
+          PersonFolderFile(
+            id: "1",
+            folder: "Movies/Trips",
+            name: "1.mp4",
+            isVideo: true,
+          ),
+          PersonFolderFile(id: "2", folder: "Movies/Trips", name: "2.jpg"),
+        ],
+        faces: [_face("1", "p1"), _face("2", "p1")],
+        persons: [anna],
+      );
+      expect(plan.skips, isEmpty);
+      final byId = {for (final move in plan.moves) move.fileId: move};
+      expect(byId["1"]!.toFolder, "Pictures/People/Anna");
+      expect(byId["1"]!.originalFolder, "Movies/Trips");
+      // Android cannot put an image below Movies.
+      expect(byId["2"]!.originalFolder, "Pictures/Trips");
+    });
+
+    test("a file that is not an image or a video is skipped", () {
       final plan = PersonFolderPlanner.plan(
         files: const [
           PersonFolderFile(id: "1", folder: "", name: "1.mp4", isImage: false),

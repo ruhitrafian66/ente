@@ -66,12 +66,14 @@ class PersonFolderDeviceImage {
   final String? folder;
   final String name;
   final bool isTrashed;
+  final bool isVideo;
 
   const PersonFolderDeviceImage({
     required this.id,
     required this.folder,
     required this.name,
     this.isTrashed = false,
+    this.isVideo = false,
   });
 }
 
@@ -630,7 +632,12 @@ class PersonFolderService {
       final folder = image.folder;
       if (folder == null || !seen.add(image.id)) continue;
       files.add(
-        PersonFolderFile(id: image.id, folder: folder, name: image.name),
+        PersonFolderFile(
+          id: image.id,
+          folder: folder,
+          name: image.name,
+          isVideo: image.isVideo,
+        ),
       );
     }
 
@@ -646,7 +653,14 @@ class PersonFolderService {
       final folder = image?.folder;
       if (image != null && !image.isTrashed && folder != null) {
         seen.add(id);
-        files.add(PersonFolderFile(id: id, folder: folder, name: image.name));
+        files.add(
+          PersonFolderFile(
+            id: id,
+            folder: folder,
+            name: image.name,
+            isVideo: image.isVideo,
+          ),
+        );
       } else if (image != null || !await _platform.isConfirmedAbsent(id)) {
         unavailable.add(id);
       }
@@ -660,8 +674,9 @@ class PersonFolderService {
       );
     }
 
-    // Videos of named persons, so that the plan can report them as "not an
-    // image". This has no effect on the moves.
+    // Files of named persons that the device list does not have (not an
+    // image, not a video), so that the plan can report them. This has no
+    // effect on the moves.
     final notListed = <String>{
       for (final face in faces) face.fileId,
       for (final ids in manual.values) ...ids,
@@ -671,6 +686,7 @@ class PersonFolderService {
         final localId = file.localID;
         if (localId == null ||
             file.fileType == FileType.image ||
+            file.fileType == FileType.video ||
             !notListed.contains(localId) ||
             !seen.add(localId)) {
           continue;
@@ -907,12 +923,20 @@ class _PhotoManagerPlatform implements PersonFolderPlatform {
         needTitle: true,
         sizeConstraint: SizeConstraint(ignoreSize: true),
       ),
+      videoOption: const FilterOption(
+        needTitle: true,
+        sizeConstraint: SizeConstraint(ignoreSize: true),
+        durationConstraint: DurationConstraint(
+          max: Duration(days: 365),
+          allowNullable: true,
+        ),
+      ),
       createTimeCond: DateTimeCond.def().copyWith(ignore: true),
     );
     final paths = await PhotoManager.getAssetPathList(
       hasAll: true,
       onlyAll: true,
-      type: RequestType.image,
+      type: RequestType.common,
       filterOption: filter,
     );
     final images = <PersonFolderDeviceImage>[];
@@ -942,7 +966,9 @@ class _PhotoManagerPlatform implements PersonFolderPlatform {
   }
 
   PersonFolderDeviceImage? _imageOf(AssetEntity asset) {
-    if (asset.type != AssetType.image) return null;
+    if (asset.type != AssetType.image && asset.type != AssetType.video) {
+      return null;
+    }
     final relativePath = asset.relativePath;
     return PersonFolderDeviceImage(
       id: asset.id,
@@ -951,6 +977,7 @@ class _PhotoManagerPlatform implements PersonFolderPlatform {
           : normalizePersonFolderPath(relativePath),
       name: asset.title ?? "",
       isTrashed: asset.isTrashed,
+      isVideo: asset.type == AssetType.video,
     );
   }
 

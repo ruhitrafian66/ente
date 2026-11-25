@@ -13,7 +13,7 @@
 //
 // Rules (owner decisions):
 //
-// * Only images move. Only named persons (not ignored, not hidden) count.
+// * Images and videos move. Only named persons (not ignored, not hidden) count.
 // * The target is `Pictures/People/<person name>`.
 // * An image with two or more named persons goes to the person with the
 //   largest face box. Ties: higher face score, then smaller person ID.
@@ -23,7 +23,8 @@
 //   folder.
 // * A file in `Pictures/People` that the tool did not put there stays there.
 // * Android permits images only below `DCIM` and `Pictures` (see
-//   [kPersonFolderSourceRoots]). An image from another folder (for example
+//   [kPersonFolderSourceRoots]), and videos also below `Movies`. A file
+//   from another folder (for example
 //   `Download`) is still sorted (owner's decision), but it cannot go back to
 //   that folder: its recorded "original" folder is a folder below `Pictures`
 //   (see [restoreFolderForPersonFolderSource]).
@@ -36,6 +37,10 @@ const String kPersonFoldersRoot = "Pictures/People";
 /// collection). An image moves out of a folder only when the folder is below
 /// one of these, because only then can Android put the image back.
 const List<String> kPersonFolderSourceRoots = ["DCIM", "Pictures"];
+
+/// Top-level folder in which Android permits video files in addition to
+/// [kPersonFolderSourceRoots] (MediaStore video collection).
+const String kPersonFolderVideoSourceRoot = "Movies";
 
 /// Folder name for a person whose name has no usable character.
 const String kPersonFolderFallbackName = "Person";
@@ -61,11 +66,15 @@ bool isInPersonFoldersRoot(String? folder) {
   return key == root || key.startsWith("$root/");
 }
 
-/// True when Android can put an image back into [folder].
-bool isRestorablePersonFolderSource(String? folder) {
+/// True when Android can put an image (or, with [isVideo], a video) back
+/// into [folder].
+bool isRestorablePersonFolderSource(String? folder, {bool isVideo = false}) {
   final key = personFolderKey(folder);
   if (key.isEmpty) return false;
   final top = key.split("/").first;
+  if (isVideo && top == kPersonFolderVideoSourceRoot.toLowerCase()) {
+    return true;
+  }
   return kPersonFolderSourceRoots.any((root) => root.toLowerCase() == top);
 }
 
@@ -81,9 +90,16 @@ const String kPersonFolderRestoreFallback = "Pictures/Restored";
 /// `Pictures/Download`, and
 /// `Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images` becomes
 /// `Pictures/WhatsApp Images`.
-String restoreFolderForPersonFolderSource(String? folder) {
+///
+/// A video (with [isVideo]) can also return to a folder below `Movies`.
+String restoreFolderForPersonFolderSource(
+  String? folder, {
+  bool isVideo = false,
+}) {
   final normalized = normalizePersonFolderPath(folder);
-  if (isRestorablePersonFolderSource(normalized)) return normalized;
+  if (isRestorablePersonFolderSource(normalized, isVideo: isVideo)) {
+    return normalized;
+  }
   if (normalized.isEmpty) return kPersonFolderRestoreFallback;
   final last = normalized.split("/").last;
   // Never restore into the people root itself.
@@ -103,13 +119,19 @@ class PersonFolderFile {
   /// File name with extension.
   final String name;
 
+  /// True for a file that the tool can move: an image or a video. The name
+  /// is historical.
   final bool isImage;
+
+  /// True for a video. A video can also return to a folder below `Movies`.
+  final bool isVideo;
 
   const PersonFolderFile({
     required this.id,
     required this.folder,
     required this.name,
     this.isImage = true,
+    this.isVideo = false,
   });
 }
 
@@ -292,7 +314,7 @@ class PersonFolderMove {
 }
 
 enum PersonFolderSkipReason {
-  /// A video (or other non-image) of a named person.
+  /// A file of a named person that is not an image and not a video.
   notImage,
 
   /// The file is in `Pictures/People`, but the tool did not put it there.
@@ -683,7 +705,10 @@ class PersonFolderPlanner {
           toFolder: target,
           kind: PersonFolderMoveKind.sort,
           personId: personId,
-          originalFolder: restoreFolderForPersonFolderSource(from),
+          originalFolder: restoreFolderForPersonFolderSource(
+            from,
+            isVideo: file.isVideo,
+          ),
         ),
       );
     }

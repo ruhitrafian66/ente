@@ -131,10 +131,10 @@ class _PersonFoldersPageState extends State<PersonFoldersPage>
             ? "Turn on person folders?"
             : "Move ${_photos(moveCount)} into person folders?",
         message:
-            "The app moves each photo of a named person out of its current "
-            "folder and into $kPersonFoldersRoot/<person name>. A photo "
-            "with two or more named persons goes to the person with the "
-            "largest face. Videos do not move.\n\n"
+            "The app moves each photo and video of a named person out of its "
+            "current folder and into $kPersonFoldersRoot/<person name>. A "
+            "file with two or more named persons goes to the person with "
+            "the largest face.\n\n"
             "$now\n\n"
             "Other apps and albums will not find these photos in the old "
             "folders. The app keeps a list of the original folders, and "
@@ -306,11 +306,10 @@ class _PersonFoldersPageState extends State<PersonFoldersPage>
           title: "Person folders",
           children: [
             Text(
-              "Move the photos of each named person into "
-              "$kPersonFoldersRoot/<person name> on this device. A photo "
+              "Move the photos and videos of each named person into "
+              "$kPersonFoldersRoot/<person name> on this device. A file "
               "with two or more named persons goes to the person with the "
-              "largest face. Videos and persons without a name stay where "
-              "they are.",
+              "largest face. Persons without a name stay where they are.",
               style: TextStyles.body.copyWith(color: colors.textLight),
             ),
             const SizedBox(height: Spacing.lg),
@@ -494,7 +493,7 @@ class _PersonFoldersPageState extends State<PersonFoldersPage>
     }
     switch (reason) {
       case PersonFolderSkipReason.notImage:
-        return "Videos (only images move)";
+        return "Not a photo or a video";
       case PersonFolderSkipReason.foreignInPeopleFolder:
         return "Already in $kPersonFoldersRoot, not put there by the app";
       case PersonFolderSkipReason.sourceNotRestorable:
