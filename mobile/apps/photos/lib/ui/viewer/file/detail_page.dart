@@ -391,6 +391,7 @@ class _BodyState extends State<_Body> {
                   showEditAction: widget.config.showEditAction,
                   onBackPressed: widget.config.onBackPressed,
                   playbackSpeed: _playbackSpeed,
+                  onFileRemoved: _onFileRemoved,
                 );
               },
               valueListenable: _selectedIndexNotifier,

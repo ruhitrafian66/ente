@@ -467,7 +467,11 @@ class JpegCandidate {
       jpegBitsPerPixel(sizeBytes: sizeBytes, width: width, height: height);
 
   /// Null when the file can be recompressed.
-  JpegSkipReason? get skipReason {
+  JpegSkipReason? get skipReason => skipReasonFor();
+
+  /// [ignoreSourceQuality] is for a file that the user chose by hand: the
+  /// picture check and the saving rule still protect it.
+  JpegSkipReason? skipReasonFor({bool ignoreSourceQuality = false}) {
     if (trailerBytes > kJpegRecompressMaxTrailerBytes) {
       return JpegSkipReason.embeddedData;
     }
@@ -478,7 +482,9 @@ class JpegCandidate {
       return JpegSkipReason.tooManyPixels;
     }
     final quality = estimatedQuality;
-    if (quality != null && quality < kJpegRecompressMinSourceQuality) {
+    if (!ignoreSourceQuality &&
+        quality != null &&
+        quality < kJpegRecompressMinSourceQuality) {
       return JpegSkipReason.alreadyCompressed;
     }
     if (!isImageFolderWritable(relativePath)) {
@@ -711,6 +717,7 @@ class JpegRecompressor {
   Future<JpegRecompressSummary> run(
     List<JpegCandidate> candidates, {
     required int quality,
+    bool ignoreSourceQuality = false,
     JpegProgressCallback? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -725,7 +732,11 @@ class JpegRecompressor {
       }
       final candidate = candidates[i];
       onProgress?.call(i, candidates.length, candidate);
-      final result = await recompressOne(candidate, quality: quality);
+      final result = await recompressOne(
+        candidate,
+        quality: quality,
+        ignoreSourceQuality: ignoreSourceQuality,
+      );
       if (result.status == JpegRecompressStatus.originalKept) {
         pendingDelete.add(results.length);
       }
@@ -805,6 +816,7 @@ class JpegRecompressor {
   Future<JpegRecompressResult> recompressOne(
     JpegCandidate candidate, {
     required int quality,
+    bool ignoreSourceQuality = false,
   }) async {
     JpegRecompressResult done(
       JpegRecompressStatus status, {
@@ -821,7 +833,9 @@ class JpegRecompressor {
       );
     }
 
-    final skipReason = candidate.skipReason;
+    final skipReason = candidate.skipReasonFor(
+      ignoreSourceQuality: ignoreSourceQuality,
+    );
     if (skipReason != null) {
       return done(
         JpegRecompressStatus.skippedNotEligible,

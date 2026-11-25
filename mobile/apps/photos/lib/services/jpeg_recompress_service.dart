@@ -99,7 +99,15 @@ class JpegRecompressService {
     return JpegScanResult(items: items, checked: files.length);
   }
 
-  Future<JpegScanItem?> _inspect(EnteFile file) async {
+  /// Reads one JPEG that the user chose in the viewer. Unlike the scan, it
+  /// does not require the file to be large for its pixel count. Returns null
+  /// when the file is not a readable JPEG on the device.
+  Future<JpegScanItem?> inspectSingle(EnteFile file) {
+    if (file.localID == null) return Future.value(null);
+    return _inspect(file, onlyLarge: false);
+  }
+
+  Future<JpegScanItem?> _inspect(EnteFile file, {bool onlyLarge = true}) async {
     try {
       final asset = await AssetEntity.fromId(file.localID!);
       if (asset == null || asset.type != AssetType.image) return null;
@@ -110,7 +118,8 @@ class JpegRecompressService {
       final sizeBytes = await source.length();
       // The media library dimensions are enough for the first filter, so
       // most files are not opened at all.
-      if (asset.width > 0 &&
+      if (onlyLarge &&
+          asset.width > 0 &&
           asset.height > 0 &&
           !isLargeForItsPixels(
             sizeBytes: sizeBytes,
@@ -119,7 +128,7 @@ class JpegRecompressService {
           )) {
         return null;
       }
-      if (sizeBytes < kJpegRecompressMinBytes) return null;
+      if (onlyLarge && sizeBytes < kJpegRecompressMinBytes) return null;
 
       // A large file: read it once to find the real image size, the quality
       // and the bytes after the end of the image.
@@ -127,11 +136,12 @@ class JpegRecompressService {
       final header = parseJpegHeader(bytes);
       if (header == null) return null;
       final primaryEnd = findJpegPrimaryEnd(bytes) ?? bytes.length;
-      if (!isLargeForItsPixels(
-        sizeBytes: sizeBytes,
-        width: header.width,
-        height: header.height,
-      )) {
+      if (onlyLarge &&
+          !isLargeForItsPixels(
+            sizeBytes: sizeBytes,
+            width: header.width,
+            height: header.height,
+          )) {
         return null;
       }
 

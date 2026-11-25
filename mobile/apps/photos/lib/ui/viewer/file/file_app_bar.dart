@@ -17,10 +17,13 @@ import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
 import 'package:photos/module/download/file.dart';
 import "package:photos/service_locator.dart";
+import "package:photos/services/jpeg_recompress_core.dart"
+    show hasJpegExtension;
 import "package:photos/states/detail_page_state.dart";
 import "package:photos/theme/colors.dart";
 import "package:photos/ui/actions/file/file_actions.dart";
 import 'package:photos/ui/notification/toast.dart';
+import "package:photos/ui/tools/jpeg_recompress_single.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/file/video_control/video_speed_bottom_sheet.dart";
 import "package:photos/ui/viewer/file/viewer_app_bar.dart";
@@ -39,6 +42,9 @@ class FileAppBar extends StatefulWidget {
   final FutureOr<void> Function(BuildContext context)? onBackPressed;
   final ValueNotifier<double> playbackSpeed;
 
+  /// Offline fork: called after "Compress" removed the file from the device.
+  final FutureOr<void> Function(EnteFile file)? onFileRemoved;
+
   const FileAppBar(
     this.file,
     this.onEditRequested, {
@@ -47,6 +53,7 @@ class FileAppBar extends StatefulWidget {
     this.showEditAction = true,
     this.onBackPressed,
     required this.playbackSpeed,
+    this.onFileRemoved,
     super.key,
   });
 
@@ -250,6 +257,19 @@ class FileAppBarState extends State<FileAppBar> {
         );
       }
 
+      // Offline fork: recompress this JPEG (not localized).
+      if (widget.file.fileType == FileType.image &&
+          widget.file.localID != null &&
+          hasJpegExtension(widget.file.title)) {
+        items.add(
+          _fileMenuOption(
+            "Compress",
+            value: 13,
+            hugeIcon: HugeIcons.strokeRoundedImageCrop,
+          ),
+        );
+      }
+
       items.add(
         _fileMenuOption(
           context.strings.guestView,
@@ -356,6 +376,12 @@ class FileAppBarState extends State<FileAppBar> {
       widget.onEditRequested(widget.file);
     } else if (value == 12) {
       await showDetailsSheet(context, widget.file);
+    } else if (value == 13) {
+      final file = widget.file;
+      final removed = await recompressSingleImage(context, file);
+      if (removed) {
+        await widget.onFileRemoved?.call(file);
+      }
     }
   }
 

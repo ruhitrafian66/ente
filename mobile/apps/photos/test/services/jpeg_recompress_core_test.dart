@@ -518,6 +518,27 @@ void main() {
       ]);
     });
 
+    test("a file chosen by hand ignores the source quality rule", () async {
+      final io = _FakeIo();
+      final candidate = io.add("1", _jpeg(_smooth(), quality: 85));
+      expect(candidate.skipReason, JpegSkipReason.alreadyCompressed);
+      expect(candidate.skipReasonFor(ignoreSourceQuality: true), isNull);
+
+      final recompressor = JpegRecompressor(io);
+      final scanned = await recompressor.recompressOne(candidate, quality: 90);
+      expect(scanned.status, JpegRecompressStatus.skippedNotEligible);
+      expect(io.encodeCalls, isEmpty);
+
+      // The saving rule still protects the file: quality 90 is not smaller.
+      final manual = await recompressor.recompressOne(
+        candidate,
+        quality: 90,
+        ignoreSourceQuality: true,
+      );
+      expect(manual.status, JpegRecompressStatus.skippedNoSaving);
+      expect(io.savedBytes, isEmpty);
+    });
+
     test("uses the next free name in the folder", () async {
       final io = _FakeIo();
       final candidate = io.add("1", _jpeg(_smooth()));
