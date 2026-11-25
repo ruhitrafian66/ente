@@ -2,8 +2,8 @@ import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:image/image.dart" as img;
-import "package:photos/services/jpeg_recompress_core.dart";
-import "package:photos/services/jpeg_recompress_decode.dart";
+import "package:photos/services/image_compress_core.dart";
+import "package:photos/services/image_compress_decode.dart";
 import "package:photos/services/png_to_jpg_core.dart"
     show SavedJpeg, parseJpegDimensions;
 
@@ -18,6 +18,25 @@ img.Image _smooth({int width = 160, int height = 120}) {
       ..r = pixel.x * 255 ~/ width
       ..g = pixel.y * 255 ~/ height
       ..b = (pixel.x + pixel.y) * 255 ~/ (width + height);
+  }
+  return image;
+}
+
+/// Photo-like: gradients with light noise. A PNG of it is large, and a JPEG
+/// is much smaller and still very near to it.
+img.Image _photo({int width = 160, int height = 120}) {
+  final image = _smooth(width: width, height: height);
+  var seed = 99;
+  int noise() {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return (seed >> 8) % 4;
+  }
+
+  for (final pixel in image) {
+    pixel
+      ..r = (pixel.r.toInt() + noise()).clamp(0, 255)
+      ..g = (pixel.g.toInt() + noise()).clamp(0, 255)
+      ..b = (pixel.b.toInt() + noise()).clamp(0, 255);
   }
   return image;
 }
@@ -49,7 +68,7 @@ Uint8List _jpeg(img.Image image, {int quality = 100, int? orientation}) {
 }
 
 DecodedRgba? _decode(Uint8List bytes) {
-  final decoded = img.decodeJpg(bytes);
+  final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
   final upright = img.bakeOrientation(decoded);
   final rgba = upright.convert(numChannels: 4);
@@ -60,7 +79,7 @@ DecodedRgba? _decode(Uint8List bytes) {
   );
 }
 
-class _FakeIo implements JpegRecompressIo {
+class _FakeIo implements ImageCompressIo {
   final Map<String, Uint8List> files = {};
 
   /// Quality that the fake encoder really uses for a requested quality.
@@ -91,7 +110,7 @@ class _FakeIo implements JpegRecompressIo {
   @override
   Future<Uint8List> encodeJpeg(String path, int quality) async {
     encodeCalls.add(quality);
-    final upright = img.bakeOrientation(img.decodeJpg(files[path]!)!);
+    final upright = img.bakeOrientation(img.decodeImage(files[path]!)!);
     upright.exif = img.ExifData();
     return img.encodeJpg(upright, quality: realQuality[quality] ?? quality);
   }
@@ -104,7 +123,7 @@ class _FakeIo implements JpegRecompressIo {
   Future<SavedJpeg> saveJpeg(
     Uint8List bytes, {
     required String name,
-    required JpegCandidate source,
+    required ImageCandidate source,
   }) async {
     final saved = SavedJpeg(
       id: "new_${source.id}",
@@ -127,34 +146,44 @@ class _FakeIo implements JpegRecompressIo {
   }
 
   @override
-  Future<Set<String>> deleteOriginals(List<JpegCandidate> originals) async {
+  Future<Set<String>> deleteOriginals(List<ImageCandidate> originals) async {
     deleteRequests.add(originals.map((o) => o.id).toList());
     if (refuseDelete) return {};
     return originals.map((o) => o.id).toSet();
   }
 
-  JpegCandidate add(String id, Uint8List bytes, {String? relativePath}) {
-    final title = "img_$id.jpg";
+  ImageCandidate add(
+    String id,
+    Uint8List bytes, {
+    String? relativePath,
+    String extension = "jpg",
+  }) {
+    final title = "img_$id.$extension";
     final path = "$_folder/$title";
     files[path] = bytes;
-    final header = parseJpegHeader(bytes)!;
-    return JpegCandidate(
+    final format = sniffImageFormat(bytes)!;
+    final header = format == "JPG" ? parseJpegHeader(bytes)! : null;
+    final decoded = img.decodeImage(bytes)!;
+    return ImageCandidate(
       id: id,
       title: title,
       path: path,
       sizeBytes: bytes.length,
-      width: header.width,
-      height: header.height,
-      components: header.components,
-      estimatedQuality: header.estimatedQuality,
-      trailerBytes: bytes.length - findJpegPrimaryEnd(bytes)!,
+      format: format,
+      width: header?.width ?? decoded.width,
+      height: header?.height ?? decoded.height,
+      components: header?.components ?? 3,
+      estimatedQuality: header?.estimatedQuality,
+      trailerBytes: header == null
+          ? 0
+          : bytes.length - findJpegPrimaryEnd(bytes)!,
       captureTime: DateTime(2024, 3, 9, 18, 5, 42),
       relativePath: relativePath ?? "DCIM/Test/",
     );
   }
 }
 
-JpegCandidate _candidate({
+ImageCandidate _candidate({
   int sizeBytes = 5 * 1024 * 1024,
   int width = 2000,
   int height = 2000,
@@ -162,9 +191,13 @@ JpegCandidate _candidate({
   int? quality = 100,
   int trailerBytes = 0,
   String? relativePath = "DCIM/Camera/",
+  String format = "JPG",
+  bool isAnimated = false,
 }) {
-  return JpegCandidate(
+  return ImageCandidate(
     id: "1",
+    format: format,
+    isAnimated: isAnimated,
     title: "a.jpg",
     path: "/storage/emulated/0/DCIM/Camera/a.jpg",
     sizeBytes: sizeBytes,
@@ -210,7 +243,7 @@ void main() {
   group("sniffImageFormat", () {
     test("names the real format of the data", () {
       expect(sniffImageFormat(_jpeg(_smooth())), "JPG");
-      expect(sniffImageFormat(img.encodePng(_smooth())), "PNG");
+      expect(sniffImageFormat(img.encodePng(_photo())), "PNG");
       expect(sniffImageFormat(img.encodeGif(_smooth())), "GIF");
       expect(sniffImageFormat(img.encodeBmp(_smooth())), "BMP");
       expect(
@@ -230,7 +263,7 @@ void main() {
     });
 
     test("a PNG is not readable as a JPEG", () {
-      expect(parseJpegHeader(img.encodePng(_smooth())), isNull);
+      expect(parseJpegHeader(img.encodePng(_photo())), isNull);
     });
   });
 
@@ -357,26 +390,40 @@ void main() {
       expect(_candidate(quality: null).skipReason, isNull);
       expect(
         _candidate(trailerBytes: 3 * 1024 * 1024).skipReason,
-        JpegSkipReason.embeddedData,
+        ImageSkipReason.embeddedData,
       );
       expect(_candidate(trailerBytes: 500).skipReason, isNull);
       expect(
         _candidate(quality: 85).skipReason,
-        JpegSkipReason.alreadyCompressed,
+        ImageSkipReason.alreadyCompressed,
       );
       expect(
         _candidate(components: 4).skipReason,
-        JpegSkipReason.unsupportedColour,
+        ImageSkipReason.unsupportedColour,
       );
       expect(
         _candidate(width: 9000, height: 9000).skipReason,
-        JpegSkipReason.tooManyPixels,
+        ImageSkipReason.tooManyPixels,
       );
       expect(
         _candidate(relativePath: "Download/").skipReason,
-        JpegSkipReason.folderNotWritable,
+        ImageSkipReason.folderNotWritable,
       );
       expect(_candidate(relativePath: "Pictures/a/").skipReason, isNull);
+      expect(_candidate(format: "PNG", quality: null).skipReason, isNull);
+      expect(_candidate(format: "WebP", quality: null).skipReason, isNull);
+      expect(
+        _candidate(format: "GIF").skipReason,
+        ImageSkipReason.unsupportedFormat,
+      );
+      expect(
+        _candidate(format: "HEIC or AVIF").skipReason,
+        ImageSkipReason.unsupportedFormat,
+      );
+      expect(
+        _candidate(format: "PNG", isAnimated: true).skipReason,
+        ImageSkipReason.animated,
+      );
     });
 
     test("the estimate is zero when the rule would reject the result", () {
@@ -384,40 +431,46 @@ void main() {
       expect(_candidate(sizeBytes: 1100 * 1024).estimatedSavingBytes(90), 0);
     });
 
-    test("names", () async {
-      expect(recompressedNameFor("IMG_1.jpg"), "IMG_1_small.jpg");
-      expect(recompressedNameFor("IMG_1.JPEG", 2), "IMG_1_small (2).jpg");
-      expect(
-        await pickRecompressedName(
-          "a.jpg",
-          (name) async => name == "a_small.jpg",
-        ),
-        "a_small (1).jpg",
-      );
+    test("an animated WebP is recognised", () {
+      Uint8List webp(int flags) => Uint8List.fromList([
+        ..."RIFF".codeUnits,
+        0,
+        0,
+        0,
+        0,
+        ..."WEBPVP8X".codeUnits,
+        10,
+        0,
+        0,
+        0,
+        flags,
+      ]);
+      expect(isAnimatedWebp(webp(0x02)), isTrue);
+      expect(isAnimatedWebp(webp(0x10)), isFalse);
+      expect(isAnimatedWebp(Uint8List(4)), isFalse);
     });
   });
 
-  group("JpegRecompressor", () {
+  group("ImageCompressor", () {
     test(
       "recompresses, keeps the EXIF data and deletes the original",
       () async {
         final io = _FakeIo();
         final candidate = io.add("1", _jpeg(_smooth(), orientation: 6));
-        final summary = await JpegRecompressor(
-          io,
-        ).run([candidate], quality: 90);
+        final summary = await ImageCompressor(io).run([candidate], quality: 90);
 
         final result = summary.results.single;
-        expect(result.status, JpegRecompressStatus.recompressed);
+        expect(result.status, ImageCompressStatus.compressed);
         expect(result.quality, 90);
-        expect(result.psnr, greaterThanOrEqualTo(kJpegRecompressMinPsnr));
+        expect(result.psnr, greaterThanOrEqualTo(kImageCompressMinPsnr));
         expect(summary.savedBytes, candidate.sizeBytes - result.outputBytes);
         expect(io.encodeCalls, [90]);
         expect(io.deleteRequests, [
           ["1"],
         ]);
 
-        final saved = io.savedBytes["$_folder/img_1_small.jpg"]!;
+        // The original still has the name "img_1.jpg".
+        final saved = io.savedBytes["$_folder/img_1 (1).jpg"]!;
         // The pixels are upright now, and the tag says so.
         expect(parseJpegDimensions(saved), (width: 120, height: 160));
         final exif = img.decodeJpgExif(saved)!;
@@ -426,10 +479,82 @@ void main() {
       },
     );
 
+    test("a PNG becomes a JPG with the same base name", () async {
+      final io = _FakeIo();
+      final candidate = io.add("1", img.encodePng(_photo()), extension: "png");
+      expect(candidate.format, "PNG");
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
+
+      final result = summary.results.single;
+      expect(result.status, ImageCompressStatus.compressed);
+      expect(result.saved!.name, "img_1.jpg");
+      expect(result.psnr, greaterThanOrEqualTo(kImageCompressMinPsnr));
+      final saved = io.savedBytes["$_folder/img_1.jpg"]!;
+      expect(sniffImageFormat(saved), "JPG");
+      expect(parseJpegDimensions(saved), (width: 160, height: 120));
+      expect(
+        img.decodeJpgExif(saved)!.exifIfd[0x9003]!.toString(),
+        "2024:03:09 18:05:42",
+      );
+      expect(io.deleteRequests, [
+        ["1"],
+      ]);
+    });
+
+    test("the name of the file does not matter, only its data", () async {
+      final io = _FakeIo();
+      // PNG data in a file with a JPG name.
+      final candidate = io.add("1", img.encodePng(_photo()));
+      expect(candidate.title, "img_1.jpg");
+      expect(candidate.format, "PNG");
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
+
+      final result = summary.results.single;
+      expect(result.status, ImageCompressStatus.compressed);
+      expect(result.saved!.name, "img_1 (1).jpg");
+    });
+
+    test("an image with transparent pixels is kept as it is", () async {
+      final io = _FakeIo();
+      final image = _photo().convert(numChannels: 4);
+      image.getPixel(3, 3).a = 0;
+      final candidate = io.add("1", img.encodePng(image), extension: "png");
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
+
+      expect(
+        summary.results.single.status,
+        ImageCompressStatus.skippedTransparency,
+      );
+      expect(io.encodeCalls, isEmpty);
+      expect(io.savedBytes, isEmpty);
+      expect(io.deleteRequests, isEmpty);
+    });
+
+    test("an opaque image with an alpha channel is compressed", () async {
+      final io = _FakeIo();
+      final image = _photo().convert(numChannels: 4);
+      final candidate = io.add("1", img.encodePng(image), extension: "png");
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
+
+      expect(summary.results.single.status, ImageCompressStatus.compressed);
+    });
+
+    test("a format that cannot be converted is not touched", () async {
+      final io = _FakeIo();
+      final candidate = io.add("1", img.encodeGif(_smooth()), extension: "gif");
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
+
+      expect(
+        summary.results.single.status,
+        ImageCompressStatus.skippedNotEligible,
+      );
+      expect(io.encodeCalls, isEmpty);
+    });
+
     test("a source without EXIF gets the capture time", () async {
       final io = _FakeIo();
       final candidate = io.add("1", _jpeg(_smooth()));
-      await JpegRecompressor(io).run([candidate], quality: 90);
+      await ImageCompressor(io).run([candidate], quality: 90);
 
       final exif = img.decodeJpgExif(io.savedBytes.values.single)!;
       expect(exif.exifIfd[0x9003]!.toString(), "2024:03:09 18:05:42");
@@ -438,11 +563,11 @@ void main() {
     test("uses the fallback quality when the first one loses detail", () async {
       final io = _FakeIo()..realQuality[90] = 5;
       final candidate = io.add("1", _jpeg(_smooth()));
-      final summary = await JpegRecompressor(io).run([candidate], quality: 90);
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
 
       final result = summary.results.single;
-      expect(result.status, JpegRecompressStatus.recompressed);
-      expect(result.quality, kJpegRecompressFallbackQuality);
+      expect(result.status, ImageCompressStatus.compressed);
+      expect(result.quality, kImageCompressFallbackQuality);
       expect(io.encodeCalls, [90, 95]);
     });
 
@@ -451,11 +576,11 @@ void main() {
         ..realQuality[90] = 5
         ..realQuality[95] = 8;
       final candidate = io.add("1", _jpeg(_smooth()));
-      final summary = await JpegRecompressor(io).run([candidate], quality: 90);
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
 
       final result = summary.results.single;
-      expect(result.status, JpegRecompressStatus.skippedQualityLoss);
-      expect(result.psnr, lessThan(kJpegRecompressMinPsnr));
+      expect(result.status, ImageCompressStatus.skippedQualityLoss);
+      expect(result.psnr, lessThan(kImageCompressMinPsnr));
       expect(io.savedBytes, isEmpty);
       expect(io.deleteRequests, isEmpty);
     });
@@ -463,11 +588,11 @@ void main() {
     test("keeps the original when the saving is too small", () async {
       final io = _FakeIo();
       final candidate = io.add("1", _jpeg(_noise(), quality: 92));
-      final summary = await JpegRecompressor(io).run([candidate], quality: 90);
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
 
       expect(
         summary.results.single.status,
-        JpegRecompressStatus.skippedNoSaving,
+        ImageCompressStatus.skippedNoSaving,
       );
       expect(io.savedBytes, isEmpty);
       expect(io.deleteRequests, isEmpty);
@@ -477,14 +602,14 @@ void main() {
       final io = _FakeIo();
       final bytes = Uint8List.fromList([
         ..._jpeg(_smooth()),
-        ...List.filled(kJpegRecompressMaxTrailerBytes + 1, 7),
+        ...List.filled(kImageCompressMaxTrailerBytes + 1, 7),
       ]);
       final candidate = io.add("1", bytes);
-      final summary = await JpegRecompressor(io).run([candidate], quality: 90);
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
 
       expect(
         summary.results.single.status,
-        JpegRecompressStatus.skippedNotEligible,
+        ImageCompressStatus.skippedNotEligible,
       );
       expect(io.encodeCalls, isEmpty);
     });
@@ -492,9 +617,9 @@ void main() {
     test("removes a saved copy that fails the check", () async {
       final io = _FakeIo()..corruptSaved = true;
       final candidate = io.add("1", _jpeg(_smooth()));
-      final summary = await JpegRecompressor(io).run([candidate], quality: 90);
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
 
-      expect(summary.results.single.status, JpegRecompressStatus.failed);
+      expect(summary.results.single.status, ImageCompressStatus.failed);
       expect(io.discarded, hasLength(1));
       expect(io.deleteRequests, isEmpty);
     });
@@ -503,29 +628,23 @@ void main() {
       "a refused delete keeps both files, then retry or roll back",
       () async {
         final io = _FakeIo()..refuseDelete = true;
-        final recompressor = JpegRecompressor(io);
+        final recompressor = ImageCompressor(io);
         final candidate = io.add("1", _jpeg(_smooth()));
         final summary = await recompressor.run([candidate], quality: 90);
 
-        expect(
-          summary.results.single.status,
-          JpegRecompressStatus.originalKept,
-        );
+        expect(summary.results.single.status, ImageCompressStatus.originalKept);
         expect(summary.savedBytes, 0);
 
         final rolledBack = await recompressor.rollBack(summary);
         expect(
           rolledBack.results.single.status,
-          JpegRecompressStatus.rolledBack,
+          ImageCompressStatus.rolledBack,
         );
         expect(io.discarded, hasLength(1));
 
         io.refuseDelete = false;
         final retried = await recompressor.retryDelete(summary);
-        expect(
-          retried.results.single.status,
-          JpegRecompressStatus.recompressed,
-        );
+        expect(retried.results.single.status, ImageCompressStatus.compressed);
       },
     );
 
@@ -534,7 +653,7 @@ void main() {
       final first = io.add("1", _jpeg(_smooth()));
       final second = io.add("2", _jpeg(_smooth()));
       var calls = 0;
-      final summary = await JpegRecompressor(
+      final summary = await ImageCompressor(
         io,
       ).run([first, second], quality: 90, isCancelled: () => calls++ >= 1);
 
@@ -548,31 +667,31 @@ void main() {
     test("a file chosen by hand ignores the source quality rule", () async {
       final io = _FakeIo();
       final candidate = io.add("1", _jpeg(_smooth(), quality: 85));
-      expect(candidate.skipReason, JpegSkipReason.alreadyCompressed);
+      expect(candidate.skipReason, ImageSkipReason.alreadyCompressed);
       expect(candidate.skipReasonFor(ignoreSourceQuality: true), isNull);
 
-      final recompressor = JpegRecompressor(io);
-      final scanned = await recompressor.recompressOne(candidate, quality: 90);
-      expect(scanned.status, JpegRecompressStatus.skippedNotEligible);
+      final recompressor = ImageCompressor(io);
+      final scanned = await recompressor.compressOne(candidate, quality: 90);
+      expect(scanned.status, ImageCompressStatus.skippedNotEligible);
       expect(io.encodeCalls, isEmpty);
 
       // The saving rule still protects the file: quality 90 is not smaller.
-      final manual = await recompressor.recompressOne(
+      final manual = await recompressor.compressOne(
         candidate,
         quality: 90,
         ignoreSourceQuality: true,
       );
-      expect(manual.status, JpegRecompressStatus.skippedNoSaving);
+      expect(manual.status, ImageCompressStatus.skippedNoSaving);
       expect(io.savedBytes, isEmpty);
     });
 
     test("uses the next free name in the folder", () async {
       final io = _FakeIo();
       final candidate = io.add("1", _jpeg(_smooth()));
-      io.files["$_folder/img_1_small.jpg"] = Uint8List(1);
-      final summary = await JpegRecompressor(io).run([candidate], quality: 90);
+      io.files["$_folder/img_1 (1).jpg"] = Uint8List(1);
+      final summary = await ImageCompressor(io).run([candidate], quality: 90);
 
-      expect(summary.results.single.saved!.name, "img_1_small (1).jpg");
+      expect(summary.results.single.saved!.name, "img_1 (2).jpg");
     });
   });
 
@@ -597,7 +716,7 @@ void main() {
         final b = await decodeUprightRgbaFromBytes(copy, maxPixels: 1000000);
         return rgbPsnr(a!.rgba, b!.rgba);
       });
-      expect(psnr, greaterThan(kJpegRecompressMinPsnr));
+      expect(psnr, greaterThan(kImageCompressMinPsnr));
     });
 
     testWidgets("refuses an image above the pixel limit", (tester) async {

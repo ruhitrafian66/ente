@@ -6,9 +6,8 @@ import "package:flutter/material.dart";
 import "package:photos/ui/settings/file_access_section.dart";
 import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/exact_duplicates_page.dart";
-import "package:photos/ui/tools/jpeg_recompress_page.dart";
+import "package:photos/ui/tools/image_compress_page.dart";
 import "package:photos/ui/tools/person_folders_page.dart";
-import "package:photos/ui/tools/png_to_jpg_page.dart";
 import "package:photos/ui/tools/video_compress_page.dart";
 import "package:photos/ui/viewer/gallery/trash_page.dart";
 
@@ -85,21 +84,12 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
           },
         ),
         _buildFreeSpaceOption(
-          title: "Convert PNG to JPG", // Offline fork: not localized
+          title: "Compress images", // Offline fork: not localized
           subtitle:
-              "Compress PNG images to save space", // Offline fork: not localized
+              "Find images that are large for their pixel count and save them as smaller JPG files", // Offline fork: not localized
           icon: HugeIcons.strokeRoundedImageCrop,
           onTap: () async {
-            await routeToPage(context, const PngToJpgPage());
-          },
-        ),
-        _buildFreeSpaceOption(
-          title: "Recompress large JPGs", // Offline fork: not localized
-          subtitle:
-              "Find JPG images that are large for their pixel count", // Offline fork: not localized
-          icon: HugeIcons.strokeRoundedImage01,
-          onTap: () async {
-            await routeToPage(context, const JpegRecompressPage());
+            await routeToPage(context, const ImageCompressPage());
           },
         ),
         _buildFreeSpaceOption(

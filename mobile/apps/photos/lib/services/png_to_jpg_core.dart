@@ -1,9 +1,14 @@
-// Offline fork: pure logic for the "Convert PNG to JPG" tool.
+// Offline fork: PNG and JPEG helper functions (PNG header, transparency,
+// JPEG dimensions, capture-time EXIF, output names).
+//
+// The "Compress images" tool (image_compress_core.dart) uses these helpers.
+// The separate "Convert PNG to JPG" tool was merged into that tool on
+// 2026-11-25: its screens and its device service are gone, and the
+// [PngToJpgConverter] state machine below has no caller in the app any more.
+// It stays with its unit tests until someone removes both together.
 //
 // This file must stay free of Flutter, plugin and app imports so that the unit
-// tests can run it in isolation. All device work (decode, encode, MediaStore
-// save, delete) goes through [PngToJpgIo], which the app implements in
-// png_to_jpg_service.dart and the tests replace with fakes.
+// tests can run it in isolation.
 
 import "dart:typed_data";
 

@@ -1,22 +1,29 @@
-// Offline fork: pure logic for the "Recompress large JPGs" tool.
+// Offline fork: pure logic for the "Compress images" tool.
 //
 // This file must stay free of Flutter, plugin and app imports so that the unit
 // tests can run it in isolation. All device work (decode, encode, MediaStore
-// save, delete) goes through [JpegRecompressIo], which the app implements in
-// jpeg_recompress_service.dart and the tests replace with fakes.
+// save, delete) goes through [ImageCompressIo], which the app implements in
+// image_compress_service.dart and the tests replace with fakes.
 //
-// The tool finds JPEG files that use many more bytes than their pixel count
-// needs, and encodes them again at a normal quality. Unlike the video tool,
-// it measures the result: the new image is decoded and compared with the
-// original pixel by pixel (PSNR), and it is kept only when the difference is
-// below a limit and the file is clearly smaller.
+// One rule for every image: a file that uses many more bytes than its pixel
+// count needs is encoded again as a JPEG of normal quality. The format of the
+// file (JPG, PNG, WebP, BMP) and its name do not matter; the format is read
+// from the file data. The tool measures the result: the new image is decoded
+// and compared with the original pixel by pixel (PSNR), and it is kept only
+// when the difference is below a limit and the file is clearly smaller.
 
 import "dart:math" as math;
 import "dart:typed_data";
 
 import "package:path/path.dart" as p;
 import "package:photos/services/png_to_jpg_core.dart"
-    show ImageDimensions, SavedJpeg, jpegWithCaptureTime, parseJpegDimensions;
+    show
+        ImageDimensions,
+        SavedJpeg,
+        jpegWithCaptureTime,
+        parseJpegDimensions,
+        pickJpgName,
+        rgbaHasTransparency;
 
 // ---------------------------------------------------------------------------
 // Tuning
@@ -24,44 +31,43 @@ import "package:photos/services/png_to_jpg_core.dart"
 
 /// A JPEG is "large for its pixels" from this many bits per pixel. A phone
 /// camera photo has about 2 to 3.5.
-const double kJpegRecompressMinBitsPerPixel = 4.0;
+const double kImageCompressMinBitsPerPixel = 4.0;
 
 /// Smaller files are not worth the work.
-const int kJpegRecompressMinBytes = 300 * 1024;
+const int kImageCompressMinBytes = 300 * 1024;
 
-/// Default quality, and the values the page offers.
-const int kJpegRecompressDefaultQuality = 90;
-const List<int> kJpegRecompressQualityOptions = [85, 90, 95];
+/// JPEG quality of the first try.
+const int kImageCompressDefaultQuality = 90;
 
 /// When the first quality fails the picture check, this one is tried.
-const int kJpegRecompressFallbackQuality = 95;
+const int kImageCompressFallbackQuality = 95;
 
 /// Minimum PSNR (dB, over the RGB channels) between the original and the new
 /// image. 40 dB is a difference that is not visible at normal viewing size.
-const double kJpegRecompressMinPsnr = 40.0;
+const double kImageCompressMinPsnr = 40.0;
 
 /// A new file is kept only if it is at least this much smaller.
-const double kJpegRecompressMinSavingFraction = 0.25;
+const double kImageCompressMinSavingFraction = 0.25;
 
 /// A source whose own quality is below this value is large because of its
 /// content (noise, fine detail), not because of a wasteful quality setting.
-const int kJpegRecompressMinSourceQuality = 92;
+const int kImageCompressMinSourceQuality = 92;
 
 /// Bytes after the end of the image that are tolerated. More than this means
 /// embedded data (motion photo video, HDR gain map, depth map), which a
 /// re-encode would delete.
-const int kJpegRecompressMaxTrailerBytes = 64 * 1024;
+const int kImageCompressMaxTrailerBytes = 64 * 1024;
 
 /// Images above this pixel count are not checked (two RGBA buffers of this
 /// size would need more than 320 MB).
-const int kJpegRecompressMaxPixels = 40 * 1000 * 1000;
+const int kImageCompressMaxPixels = 40 * 1000 * 1000;
 
 /// How many bytes of a JPEG are read to inspect the segments before the
 /// pixel data.
 const int kJpegHeaderPrefixBytes = 512 * 1024;
 
 /// Android lets an app create an image only below these top-level folders.
-const Set<String> kJpegRecompressWritableRoots = {"dcim", "pictures"};
+const Set<String> kImageCompressWritableRoots = {"dcim", "pictures"};
 
 // Standard JPEG luminance quantization table (quality 50).
 const List<int> _standardLumaTable = [
@@ -94,6 +100,17 @@ bool looksLikeJpeg({String? title, String? mimeType}) {
     return mime == "image/jpeg" || mime == "image/jpg";
   }
   return hasJpegExtension(title);
+}
+
+/// The formats that the tool can read and encode again as JPEG.
+const Set<String> kImageCompressFormats = {"JPG", "PNG", "WebP", "BMP"};
+
+/// True when [bytes] (the start of a WebP file) is an animation.
+bool isAnimatedWebp(Uint8List bytes) {
+  // "RIFF", size, "WEBP", "VP8X", chunk size, then the flags byte.
+  return bytes.length > 20 &&
+      _startsWith(bytes, 12, "VP8X") &&
+      (bytes[20] & 0x02) != 0;
 }
 
 /// The real format of an image file, from its first bytes: "JPG", "PNG",
@@ -431,10 +448,10 @@ bool isImageFolderWritable(String? relativePath) {
   if (relativePath == null) return false;
   final parts = relativePath.split("/").where((part) => part.isNotEmpty);
   if (parts.isEmpty) return false;
-  return kJpegRecompressWritableRoots.contains(parts.first.toLowerCase());
+  return kImageCompressWritableRoots.contains(parts.first.toLowerCase());
 }
 
-double jpegBitsPerPixel({
+double imageBitsPerPixel({
   required int sizeBytes,
   required int width,
   required int height,
@@ -451,7 +468,9 @@ double estimatedBitsPerPixel(int quality) {
   return 1.6;
 }
 
-enum JpegSkipReason {
+enum ImageSkipReason {
+  unsupportedFormat("Format cannot be converted"),
+  animated("Animated image"),
   embeddedData("Motion photo, HDR or depth data"),
   alreadyCompressed("Large because of detail, not quality"),
   unsupportedColour("Colour format is not supported"),
@@ -460,21 +479,30 @@ enum JpegSkipReason {
 
   final String label;
 
-  const JpegSkipReason(this.label);
+  const ImageSkipReason(this.label);
 }
 
-/// One JPEG on the device that is large for its pixel count.
-class JpegCandidate {
+/// One image on the device that is large for its pixel count.
+class ImageCandidate {
   /// Media library id (`EnteFile.localID`).
   final String id;
   final String title;
   final String path;
   final int sizeBytes;
 
+  /// The real format of the data ([sniffImageFormat]), for example "PNG".
+  /// The file name can say something else.
+  final String format;
+  final bool isAnimated;
+
   /// Stored pixels, before the EXIF orientation is applied.
   final int width;
   final int height;
+
+  /// JPEG only: 1 grey, 3 colour, 4 CMYK.
   final int components;
+
+  /// JPEG only.
   final int? estimatedQuality;
 
   /// Bytes after the end of the first image in the file.
@@ -488,11 +516,13 @@ class JpegCandidate {
   /// save that Android refuses fails the file and keeps the original.
   final bool canWriteAnyFolder;
 
-  const JpegCandidate({
+  const ImageCandidate({
     required this.id,
     required this.title,
     required this.path,
     required this.sizeBytes,
+    this.format = "JPG",
+    this.isAnimated = false,
     required this.width,
     required this.height,
     this.components = 3,
@@ -504,31 +534,37 @@ class JpegCandidate {
   });
 
   double get bitsPerPixel =>
-      jpegBitsPerPixel(sizeBytes: sizeBytes, width: width, height: height);
+      imageBitsPerPixel(sizeBytes: sizeBytes, width: width, height: height);
 
-  /// Null when the file can be recompressed.
-  JpegSkipReason? get skipReason => skipReasonFor();
+  /// Null when the file can be compressed.
+  ImageSkipReason? get skipReason => skipReasonFor();
 
   /// [ignoreSourceQuality] is for a file that the user chose by hand: the
   /// picture check and the saving rule still protect it.
-  JpegSkipReason? skipReasonFor({bool ignoreSourceQuality = false}) {
-    if (trailerBytes > kJpegRecompressMaxTrailerBytes) {
-      return JpegSkipReason.embeddedData;
+  ImageSkipReason? skipReasonFor({bool ignoreSourceQuality = false}) {
+    if (!kImageCompressFormats.contains(format)) {
+      return ImageSkipReason.unsupportedFormat;
+    }
+    if (isAnimated) {
+      return ImageSkipReason.animated;
+    }
+    if (trailerBytes > kImageCompressMaxTrailerBytes) {
+      return ImageSkipReason.embeddedData;
     }
     if (components != 1 && components != 3) {
-      return JpegSkipReason.unsupportedColour;
+      return ImageSkipReason.unsupportedColour;
     }
-    if (width * height > kJpegRecompressMaxPixels) {
-      return JpegSkipReason.tooManyPixels;
+    if (width * height > kImageCompressMaxPixels) {
+      return ImageSkipReason.tooManyPixels;
     }
     final quality = estimatedQuality;
     if (!ignoreSourceQuality &&
         quality != null &&
-        quality < kJpegRecompressMinSourceQuality) {
-      return JpegSkipReason.alreadyCompressed;
+        quality < kImageCompressMinSourceQuality) {
+      return ImageSkipReason.alreadyCompressed;
     }
     if (!canWriteAnyFolder && !isImageFolderWritable(relativePath)) {
-      return JpegSkipReason.folderNotWritable;
+      return ImageSkipReason.folderNotWritable;
     }
     return null;
   }
@@ -548,50 +584,29 @@ class JpegCandidate {
   }
 }
 
-/// True when a JPEG of this size and pixel count is worth a closer look.
+/// True when an image of this size and pixel count is worth a closer look.
 bool isLargeForItsPixels({
   required int sizeBytes,
   required int width,
   required int height,
 }) {
-  if (sizeBytes < kJpegRecompressMinBytes) return false;
-  return jpegBitsPerPixel(sizeBytes: sizeBytes, width: width, height: height) >=
-      kJpegRecompressMinBitsPerPixel;
+  if (sizeBytes < kImageCompressMinBytes) return false;
+  return imageBitsPerPixel(
+        sizeBytes: sizeBytes,
+        width: width,
+        height: height,
+      ) >=
+      kImageCompressMinBitsPerPixel;
 }
 
 /// The "keep only if smaller" rule.
 bool isRecompressedJpegWorthKeeping({
   required int sourceBytes,
   required int outputBytes,
-  double minSavingFraction = kJpegRecompressMinSavingFraction,
+  double minSavingFraction = kImageCompressMinSavingFraction,
 }) {
   if (sourceBytes <= 0 || outputBytes <= 0) return false;
   return outputBytes <= sourceBytes * (1 - minSavingFraction);
-}
-
-// ---------------------------------------------------------------------------
-// Output naming
-// ---------------------------------------------------------------------------
-
-/// "IMG_1.jpg" -> "IMG_1_small.jpg". The original still exists when the new
-/// file is saved, so the name must differ.
-String recompressedNameFor(String title, [int attempt = 0]) {
-  final base = hasJpegExtension(title)
-      ? p.basenameWithoutExtension(title)
-      : title;
-  final suffix = attempt == 0 ? "" : " ($attempt)";
-  return "${base.isEmpty ? "image" : base}_small$suffix.jpg";
-}
-
-Future<String> pickRecompressedName(
-  String title,
-  Future<bool> Function(String name) isTaken,
-) async {
-  for (var i = 0; i < 1000; i++) {
-    final name = recompressedNameFor(title, i);
-    if (!await isTaken(name)) return name;
-  }
-  throw StateError("No free file name for $title");
 }
 
 // ---------------------------------------------------------------------------
@@ -611,9 +626,9 @@ class DecodedRgba {
   });
 }
 
-enum JpegRecompressStatus {
+enum ImageCompressStatus {
   /// New file saved and verified, original removed.
-  recompressed,
+  compressed,
 
   /// New file saved and verified, but the device did not remove the original
   /// (for example the user denied the system prompt). Both files exist.
@@ -623,15 +638,18 @@ enum JpegRecompressStatus {
   rolledBack,
   skippedNotEligible,
 
+  /// The image has pixels that are not opaque. A JPEG cannot keep them.
+  skippedTransparency,
+
   /// No tried quality passed the picture check.
   skippedQualityLoss,
   skippedNoSaving,
   failed,
 }
 
-class JpegRecompressResult {
-  final JpegCandidate candidate;
-  final JpegRecompressStatus status;
+class ImageCompressResult {
+  final ImageCandidate candidate;
+  final ImageCompressStatus status;
   final int outputBytes;
 
   /// The quality of the kept result, and its measured PSNR.
@@ -643,7 +661,7 @@ class JpegRecompressResult {
   /// The original had an ICC profile. The new file is sRGB without one.
   final bool droppedIccProfile;
 
-  const JpegRecompressResult({
+  const ImageCompressResult({
     required this.candidate,
     required this.status,
     this.outputBytes = 0,
@@ -654,8 +672,8 @@ class JpegRecompressResult {
     this.droppedIccProfile = false,
   });
 
-  JpegRecompressResult withStatus(JpegRecompressStatus status) {
-    return JpegRecompressResult(
+  ImageCompressResult withStatus(ImageCompressStatus status) {
+    return ImageCompressResult(
       candidate: candidate,
       status: status,
       outputBytes: outputBytes,
@@ -667,44 +685,44 @@ class JpegRecompressResult {
     );
   }
 
-  int get savedBytes => status == JpegRecompressStatus.recompressed
+  int get savedBytes => status == ImageCompressStatus.compressed
       ? candidate.sizeBytes - outputBytes
       : 0;
 }
 
-class JpegRecompressSummary {
-  final List<JpegRecompressResult> results;
+class ImageCompressSummary {
+  final List<ImageCompressResult> results;
 
   /// Selected files that were not started because the user cancelled.
   final int notProcessed;
 
-  const JpegRecompressSummary({
+  const ImageCompressSummary({
     required this.results,
     required this.notProcessed,
   });
 
-  int count(JpegRecompressStatus status) =>
+  int count(ImageCompressStatus status) =>
       results.where((r) => r.status == status).length;
 
   int get savedBytes => results.fold(0, (sum, r) => sum + r.savedBytes);
 
-  List<JpegRecompressResult> get originalsKept => results
-      .where((r) => r.status == JpegRecompressStatus.originalKept)
+  List<ImageCompressResult> get originalsKept => results
+      .where((r) => r.status == ImageCompressStatus.originalKept)
       .toList();
 
   int get droppedIccProfiles => results
       .where(
         (r) =>
             r.droppedIccProfile &&
-            (r.status == JpegRecompressStatus.recompressed ||
-                r.status == JpegRecompressStatus.originalKept),
+            (r.status == ImageCompressStatus.compressed ||
+                r.status == ImageCompressStatus.originalKept),
       )
       .length;
 }
 
 /// Device operations. Every method may throw; the recompressor turns a throw
 /// into a failed file and keeps the original.
-abstract class JpegRecompressIo {
+abstract class ImageCompressIo {
   /// The first [maxBytes] bytes of the file.
   Future<Uint8List> readPrefix(String path, int maxBytes);
 
@@ -725,7 +743,7 @@ abstract class JpegRecompressIo {
   Future<SavedJpeg> saveJpeg(
     Uint8List bytes, {
     required String name,
-    required JpegCandidate source,
+    required ImageCandidate source,
   });
 
   /// The bytes of the saved file as the device now has them. An empty list or
@@ -737,16 +755,16 @@ abstract class JpegRecompressIo {
 
   /// Removes the given originals in one batch (one system prompt). Returns
   /// the ids that are gone.
-  Future<Set<String>> deleteOriginals(List<JpegCandidate> originals);
+  Future<Set<String>> deleteOriginals(List<ImageCandidate> originals);
 }
 
-typedef JpegProgressCallback =
-    void Function(int done, int total, JpegCandidate? current);
+typedef ImageProgressCallback =
+    void Function(int done, int total, ImageCandidate? current);
 
-class JpegRecompressor {
-  final JpegRecompressIo io;
+class ImageCompressor {
+  final ImageCompressIo io;
 
-  JpegRecompressor(this.io);
+  ImageCompressor(this.io);
 
   /// Recompresses [candidates] one at a time, then removes the originals of
   /// all verified results in one batch.
@@ -754,14 +772,14 @@ class JpegRecompressor {
   /// [isCancelled] is checked before each file. A cancel never interrupts a
   /// file, and the originals of the files that are already done are still
   /// removed.
-  Future<JpegRecompressSummary> run(
-    List<JpegCandidate> candidates, {
+  Future<ImageCompressSummary> run(
+    List<ImageCandidate> candidates, {
     required int quality,
     bool ignoreSourceQuality = false,
-    JpegProgressCallback? onProgress,
+    ImageProgressCallback? onProgress,
     bool Function()? isCancelled,
   }) async {
-    final results = <JpegRecompressResult>[];
+    final results = <ImageCompressResult>[];
     final pendingDelete = <int>[];
     var notProcessed = 0;
 
@@ -772,12 +790,12 @@ class JpegRecompressor {
       }
       final candidate = candidates[i];
       onProgress?.call(i, candidates.length, candidate);
-      final result = await recompressOne(
+      final result = await compressOne(
         candidate,
         quality: quality,
         ignoreSourceQuality: ignoreSourceQuality,
       );
-      if (result.status == JpegRecompressStatus.originalKept) {
+      if (result.status == ImageCompressStatus.originalKept) {
         pendingDelete.add(results.length);
       }
       results.add(result);
@@ -785,20 +803,18 @@ class JpegRecompressor {
     onProgress?.call(candidates.length - notProcessed, candidates.length, null);
 
     await _deleteVerified(results, pendingDelete);
-    return JpegRecompressSummary(results: results, notProcessed: notProcessed);
+    return ImageCompressSummary(results: results, notProcessed: notProcessed);
   }
 
   /// Asks again to remove the originals that are still on the device.
-  Future<JpegRecompressSummary> retryDelete(
-    JpegRecompressSummary summary,
-  ) async {
-    final results = List<JpegRecompressResult>.of(summary.results);
+  Future<ImageCompressSummary> retryDelete(ImageCompressSummary summary) async {
+    final results = List<ImageCompressResult>.of(summary.results);
     final pending = <int>[
       for (var i = 0; i < results.length; i++)
-        if (results[i].status == JpegRecompressStatus.originalKept) i,
+        if (results[i].status == ImageCompressStatus.originalKept) i,
     ];
     await _deleteVerified(results, pending);
-    return JpegRecompressSummary(
+    return ImageCompressSummary(
       results: results,
       notProcessed: summary.notProcessed,
     );
@@ -806,33 +822,33 @@ class JpegRecompressor {
 
   /// Removes the new files whose original is still on the device, so that no
   /// duplicate stays behind.
-  Future<JpegRecompressSummary> rollBack(JpegRecompressSummary summary) async {
-    final results = List<JpegRecompressResult>.of(summary.results);
+  Future<ImageCompressSummary> rollBack(ImageCompressSummary summary) async {
+    final results = List<ImageCompressResult>.of(summary.results);
     for (var i = 0; i < results.length; i++) {
       final result = results[i];
-      if (result.status != JpegRecompressStatus.originalKept) continue;
+      if (result.status != ImageCompressStatus.originalKept) continue;
       try {
         await io.discardJpeg(result.saved!);
-        results[i] = result.withStatus(JpegRecompressStatus.rolledBack);
+        results[i] = result.withStatus(ImageCompressStatus.rolledBack);
       } catch (_) {
         // Both files stay. The status stays originalKept.
       }
     }
-    return JpegRecompressSummary(
+    return ImageCompressSummary(
       results: results,
       notProcessed: summary.notProcessed,
     );
   }
 
   Future<void> _deleteVerified(
-    List<JpegRecompressResult> results,
+    List<ImageCompressResult> results,
     List<int> pending,
   ) async {
     if (pending.isEmpty) return;
     // Only files with a saved and verified copy reach this point.
     final originals = [
       for (final index in pending)
-        if (results[index].status == JpegRecompressStatus.originalKept &&
+        if (results[index].status == ImageCompressStatus.originalKept &&
             results[index].saved != null)
           results[index].candidate,
     ];
@@ -845,26 +861,26 @@ class JpegRecompressor {
     for (final index in pending) {
       final result = results[index];
       if (result.saved != null && removed.contains(result.candidate.id)) {
-        results[index] = result.withStatus(JpegRecompressStatus.recompressed);
+        results[index] = result.withStatus(ImageCompressStatus.compressed);
       }
     }
   }
 
   /// encode -> compare -> save -> verify. Returns
-  /// [JpegRecompressStatus.originalKept] when the new file is saved and
+  /// [ImageCompressStatus.originalKept] when the new file is saved and
   /// verified; the original is never removed here.
-  Future<JpegRecompressResult> recompressOne(
-    JpegCandidate candidate, {
+  Future<ImageCompressResult> compressOne(
+    ImageCandidate candidate, {
     required int quality,
     bool ignoreSourceQuality = false,
   }) async {
-    JpegRecompressResult done(
-      JpegRecompressStatus status, {
+    ImageCompressResult done(
+      ImageCompressStatus status, {
       String? message,
       int outputBytes = 0,
       double? psnr,
     }) {
-      return JpegRecompressResult(
+      return ImageCompressResult(
         candidate: candidate,
         status: status,
         message: message,
@@ -878,44 +894,62 @@ class JpegRecompressor {
     );
     if (skipReason != null) {
       return done(
-        JpegRecompressStatus.skippedNotEligible,
+        ImageCompressStatus.skippedNotEligible,
         message: skipReason.label,
       );
     }
 
     SavedJpeg? saved;
     try {
-      final header = parseJpegHeader(
-        await io.readPrefix(candidate.path, kJpegHeaderPrefixBytes),
+      // The format comes from the data, never from the name.
+      final prefix = await io.readPrefix(
+        candidate.path,
+        kJpegHeaderPrefixBytes,
       );
-      if (header == null) {
+      final format = sniffImageFormat(prefix);
+      if (format == null || !kImageCompressFormats.contains(format)) {
         return done(
-          JpegRecompressStatus.failed,
-          message: "The file is not a readable JPEG",
+          ImageCompressStatus.skippedNotEligible,
+          message: ImageSkipReason.unsupportedFormat.label,
         );
       }
-      final expected = header.displaySize;
+      JpegHeaderInfo? header;
+      if (format == "JPG") {
+        header = parseJpegHeader(prefix);
+        if (header == null) {
+          return done(
+            ImageCompressStatus.failed,
+            message: "The file is not a readable JPG",
+          );
+        }
+      }
       final original = await io.decodeFile(candidate.path);
       if (original == null) {
         return done(
-          JpegRecompressStatus.failed,
+          ImageCompressStatus.failed,
           message: "Could not decode the original",
         );
       }
-      if (original.width != expected.width ||
-          original.height != expected.height) {
+      final ImageDimensions expected = (
+        width: original.width,
+        height: original.height,
+      );
+      if (header != null && header.displaySize != expected) {
         return done(
-          JpegRecompressStatus.failed,
+          ImageCompressStatus.failed,
           message: "The decoder gives an unexpected image size",
         );
+      }
+      if (format != "JPG" && rgbaHasTransparency(original.rgba)) {
+        return done(ImageCompressStatus.skippedTransparency);
       }
 
       // Try the requested quality, then the fallback. Keep the first result
       // that passes the picture check.
       final qualities = [
         quality,
-        if (quality < kJpegRecompressFallbackQuality)
-          kJpegRecompressFallbackQuality,
+        if (quality < kImageCompressFallbackQuality)
+          kImageCompressFallbackQuality,
       ];
       Uint8List? accepted;
       int? acceptedQuality;
@@ -928,7 +962,7 @@ class JpegRecompressor {
             encodedSize.width != expected.width ||
             encodedSize.height != expected.height) {
           return done(
-            JpegRecompressStatus.failed,
+            ImageCompressStatus.failed,
             message: "Encoder output does not match the image dimensions",
           );
         }
@@ -938,7 +972,7 @@ class JpegRecompressor {
         )) {
           // A higher quality only gives a larger file.
           return done(
-            JpegRecompressStatus.skippedNoSaving,
+            ImageCompressStatus.skippedNoSaving,
             outputBytes: encoded.length,
             psnr: bestPsnr,
           );
@@ -948,13 +982,13 @@ class JpegRecompressor {
             decoded.width != original.width ||
             decoded.height != original.height) {
           return done(
-            JpegRecompressStatus.failed,
+            ImageCompressStatus.failed,
             message: "The new image does not decode to the same size",
           );
         }
         final psnr = rgbPsnr(original.rgba, decoded.rgba);
         if (bestPsnr == null || psnr > bestPsnr) bestPsnr = psnr;
-        if (psnr >= kJpegRecompressMinPsnr) {
+        if (psnr >= kImageCompressMinPsnr) {
           accepted = encoded;
           acceptedQuality = tryQuality;
           acceptedPsnr = psnr;
@@ -963,7 +997,7 @@ class JpegRecompressor {
       }
       if (accepted == null) {
         return done(
-          JpegRecompressStatus.skippedQualityLoss,
+          ImageCompressStatus.skippedQualityLoss,
           psnr: bestPsnr,
           message:
               "The picture check failed "
@@ -973,7 +1007,7 @@ class JpegRecompressor {
 
       // Keep the metadata of the original. The encoder output is upright,
       // so the orientation tag must say "upright".
-      final Uint8List? jpeg = header.exifSegments.isEmpty
+      final Uint8List? jpeg = header == null || header.exifSegments.isEmpty
           ? jpegWithCaptureTime(accepted, candidate.captureTime)
           : jpegWithExifSegments(
               accepted,
@@ -981,7 +1015,7 @@ class JpegRecompressor {
             );
       if (jpeg == null) {
         return done(
-          JpegRecompressStatus.failed,
+          ImageCompressStatus.failed,
           message: "Could not write the metadata",
         );
       }
@@ -990,14 +1024,16 @@ class JpegRecompressor {
         outputBytes: jpeg.length,
       )) {
         return done(
-          JpegRecompressStatus.skippedNoSaving,
+          ImageCompressStatus.skippedNoSaving,
           outputBytes: jpeg.length,
           psnr: acceptedPsnr,
         );
       }
 
       final folder = p.dirname(candidate.path);
-      final name = await pickRecompressedName(
+      // "a.png" becomes "a.jpg". When that name is in use (a JPG source has
+      // it), the name gets a counter: "a (1).jpg".
+      final name = await pickJpgName(
         candidate.title,
         (name) => io.fileExists(p.join(folder, name)),
       );
@@ -1006,23 +1042,23 @@ class JpegRecompressor {
       final problem = await _verify(saved, jpeg, expected, folder);
       if (problem != null) {
         await _discardQuietly(saved);
-        return done(JpegRecompressStatus.failed, message: problem);
+        return done(ImageCompressStatus.failed, message: problem);
       }
 
-      return JpegRecompressResult(
+      return ImageCompressResult(
         candidate: candidate,
-        status: JpegRecompressStatus.originalKept,
+        status: ImageCompressStatus.originalKept,
         outputBytes: jpeg.length,
         quality: acceptedQuality,
         psnr: acceptedPsnr,
         saved: saved,
-        droppedIccProfile: header.hasIccProfile,
+        droppedIccProfile: header?.hasIccProfile ?? false,
       );
     } catch (e) {
       if (saved != null) {
         await _discardQuietly(saved);
       }
-      return done(JpegRecompressStatus.failed, message: e.toString());
+      return done(ImageCompressStatus.failed, message: e.toString());
     }
   }
 

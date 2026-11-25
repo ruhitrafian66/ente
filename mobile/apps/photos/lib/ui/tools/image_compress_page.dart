@@ -1,4 +1,5 @@
-// Offline fork: "Convert PNG to JPG" tool page.
+// Offline fork: "Compress images" tool page. One list for every image that
+// is large for its pixel count, whatever its format (JPG, PNG, WebP, BMP).
 //
 // Offline fork: not localized. The new user-facing strings in this file are
 // hardcoded English.
@@ -12,32 +13,40 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:logging/logging.dart";
 import "package:photos/models/file/file.dart";
-import "package:photos/services/png_to_jpg_core.dart";
-import "package:photos/services/png_to_jpg_service.dart";
+import "package:photos/services/image_compress_core.dart";
+import "package:photos/services/image_compress_service.dart";
+import "package:photos/ui/tools/image_scan_report_page.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
 import "package:photos/utils/delete_file_util.dart";
 
 enum _Stage { scanning, ready, running, done }
 
-class PngToJpgPage extends StatefulWidget {
-  const PngToJpgPage({super.key});
+class ImageCompressPage extends StatefulWidget {
+  const ImageCompressPage({super.key});
 
   @override
-  State<PngToJpgPage> createState() => _PngToJpgPageState();
+  State<ImageCompressPage> createState() => _ImageCompressPageState();
 }
 
-class _PngToJpgPageState extends State<PngToJpgPage> {
+class _ImageCompressPageState extends State<ImageCompressPage> {
   static const _crossAxisCount = 3;
   static const _gridSpacing = 8.0;
   static const _maxListedProblems = 30;
 
-  final _logger = Logger("PngToJpgPage");
+  final _logger = Logger("ImageCompressPage");
 
   _Stage _stage = _Stage.scanning;
-  List<PngScanItem> _items = [];
+
+  /// The large images that can be compressed.
+  List<ImageScanItem> _items = [];
+
+  /// Large JPEGs that the tool leaves alone, by reason.
+  Map<ImageSkipReason, int> _skipped = {};
+  int _checked = 0;
+  ImageScanResult? _scanResult;
   final Set<String> _selected = {};
-  int _quality = kPngToJpgDefaultQuality;
+  static const _quality = kImageCompressDefaultQuality;
   Object? _scanError;
 
   int _scanDone = 0;
@@ -49,8 +58,8 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
   bool _cancelRequested = false;
   bool _isFinishing = false;
 
-  PngToJpgConverter? _converter;
-  PngRunSummary? _summary;
+  ImageCompressor? _converter;
+  ImageCompressSummary? _summary;
   bool _isResolvingKept = false;
 
   @override
@@ -68,7 +77,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
       _summary = null;
     });
     try {
-      final items = await PngToJpgService.instance.scan(
+      final result = await ImageCompressService.instance.scan(
         onProgress: (done, total) {
           if (!mounted) return;
           setState(() {
@@ -78,18 +87,34 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
         },
       );
       if (!mounted) return;
+      final items = <ImageScanItem>[];
+      final skipped = <ImageSkipReason, int>{};
+      for (final item in result.items) {
+        final reason = item.candidate.skipReason;
+        if (reason == null) {
+          items.add(item);
+        } else {
+          skipped[reason] = (skipped[reason] ?? 0) + 1;
+        }
+      }
       setState(() {
         _items = items;
+        _skipped = skipped;
+        _checked = result.checked;
+        _scanResult = result;
         _selected
           ..clear()
           ..addAll(items.map((item) => item.candidate.id));
         _stage = _Stage.ready;
       });
     } catch (e, s) {
-      _logger.severe("PNG scan failed", e, s);
+      _logger.severe("JPEG scan failed", e, s);
       if (!mounted) return;
       setState(() {
         _items = [];
+        _skipped = {};
+        _checked = 0;
+        _scanResult = null;
         _selected.clear();
         _scanError = e;
         _stage = _Stage.ready;
@@ -97,7 +122,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
     }
   }
 
-  List<PngScanItem> get _selectedItems =>
+  List<ImageScanItem> get _selectedItems =>
       _items.where((item) => _selected.contains(item.candidate.id)).toList();
 
   int get _totalBytes =>
@@ -108,14 +133,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
 
   int get _estimatedSaving => _selectedItems.fold(
     0,
-    (sum, item) =>
-        sum +
-        estimateSavingBytes(
-          pngBytes: item.candidate.sizeBytes,
-          width: item.candidate.width,
-          height: item.candidate.height,
-          quality: _quality,
-        ),
+    (sum, item) => sum + item.candidate.estimatedSavingBytes(_quality),
   );
 
   Future<void> _confirmAndRun() async {
@@ -124,19 +142,21 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
     final confirmed = await showBottomSheetComponent<bool>(
       context: context,
       builder: (sheetContext) => BottomSheetComponent(
-        title: "Convert ${_images(selected.length)} to JPG?",
+        title: "Compress ${_images(selected.length)}?",
         message:
-            "The app saves a JPG copy (quality $_quality) in the same folder "
-            "and checks each copy. Then the app deletes the original PNG "
-            "files. Android moves the PNG files to the device trash if the "
-            "device has a trash. If not, the delete is permanent.\n\n"
-            "Android can ask you one time to permit the delete. The app does "
-            "not convert images that have transparency.",
+            "The app saves a smaller JPG copy of each image in the same "
+            "folder. It compares each copy with its original, pixel by "
+            "pixel, and keeps a copy only if the difference is not visible "
+            "and the copy is at least 25% smaller.\n\n"
+            "Then the app deletes the originals that have a good copy. "
+            "Android moves them to the device trash if the device has a "
+            "trash. If not, the delete is permanent. Android can ask you "
+            "one time to permit the delete.",
         illustration: Image.asset("assets/warning-red.png"),
         closeTooltip: sheetContext.strings.close,
         actions: [
           ButtonComponent(
-            label: "Convert and delete originals",
+            label: "Compress and delete originals",
             variant: ButtonComponentVariant.critical,
             shouldSurfaceExecutionStates: false,
             onTap: () => Navigator.of(sheetContext).pop(true),
@@ -159,8 +179,8 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
     return deleteFilesOnDeviceOnly(context, files);
   }
 
-  Future<void> _run(List<PngScanItem> selected) async {
-    final converter = PngToJpgService.instance.converter(
+  Future<void> _run(List<ImageScanItem> selected) async {
+    final converter = ImageCompressService.instance.compressor(
       items: selected,
       deleteOriginals: _deleteOriginals,
     );
@@ -174,7 +194,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
       _isFinishing = false;
     });
 
-    PngRunSummary summary;
+    ImageCompressSummary summary;
     try {
       summary = await converter.run(
         selected.map((item) => item.candidate).toList(),
@@ -191,15 +211,11 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
         },
       );
     } catch (e, s) {
-      _logger.severe("PNG conversion run failed", e, s);
-      summary = const PngRunSummary(results: [], notProcessed: 0);
+      _logger.severe("Image compression run failed", e, s);
+      summary = const ImageCompressSummary(results: [], notProcessed: 0);
     }
-    for (final result in summary.results) {
-      if (result.status == PngConversionStatus.failed) {
-        _logger.warning("PNG conversion failed: ${result.message}");
-      }
-    }
-    await PngToJpgService.instance.refreshGallery();
+    summary.results.forEach(ImageCompressService.instance.logResult);
+    await ImageCompressService.instance.refreshGallery();
     if (!mounted) return;
     setState(() {
       _summary = summary;
@@ -216,7 +232,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
       final updated = rollBack
           ? await converter.rollBack(summary)
           : await converter.retryDelete(summary);
-      await PngToJpgService.instance.refreshGallery();
+      await ImageCompressService.instance.refreshGallery();
       if (!mounted) return;
       setState(() => _summary = updated);
     } finally {
@@ -244,7 +260,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
     });
   }
 
-  String _images(int count) => count == 1 ? "1 PNG image" : "$count PNG images";
+  String _images(int count) => count == 1 ? "1 image" : "$count images";
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +276,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
       child: Scaffold(
         backgroundColor: colors.backgroundBase,
         body: AppBarComponent(
-          title: "Convert PNG to JPG",
+          title: "Compress images",
           backgroundColor: colors.backgroundBase,
           slivers: switch (_stage) {
             _Stage.scanning => [_centered(_buildScanning())],
@@ -296,7 +312,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
         const SizedBox(height: Spacing.lg),
         Text(
           _scanTotal == 0
-              ? "Looking for PNG images…"
+              ? "Looking for large images…"
               : "Checked $_scanDone of $_scanTotal images",
           style: TextStyles.body.copyWith(color: colors.textLight),
           textAlign: TextAlign.center,
@@ -314,12 +330,11 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
         const SizedBox(height: Spacing.lg),
         Text(
           _scanError == null
-              ? "No PNG images on this device"
+              ? "No image is large for its pixel count"
               : "The scan failed",
           style: TextStyles.large.copyWith(color: colors.textBase),
           textAlign: TextAlign.center,
         ),
-        _buildLeftOut(),
         if (_scanError != null) ...[
           const SizedBox(height: Spacing.sm),
           Text(
@@ -329,24 +344,51 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
           ),
+        ] else ...[
+          const SizedBox(height: Spacing.sm),
+          Text(
+            "Checked $_checked images.",
+            style: TextStyles.mini.copyWith(color: colors.textLight),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: Spacing.sm),
+          _buildSkippedLines(),
         ],
       ],
     );
   }
 
-  /// Offline fork: why files with a .png name are not in the list.
-  Widget _buildLeftOut() {
-    final leftOut = PngToJpgService.instance.lastScanLeftOut;
-    if (leftOut.isEmpty) return const SizedBox.shrink();
+  Widget _buildSkippedLines() {
     final colors = context.componentColors;
-    return Padding(
-      padding: const EdgeInsets.only(top: Spacing.xs),
-      child: Text(
-        "Not listed: ${[for (final e in leftOut.entries) "${e.value} × ${e.key}"].join(", ")}. "
-        "The list has only the PNG files that Android shows to the app "
-        "(Settings > Free up space > File access).",
-        style: TextStyles.mini.copyWith(color: colors.textLight),
-      ),
+    final lines = [
+      for (final entry in _skipped.entries)
+        "${entry.value} × ${entry.key.label}",
+    ];
+    final result = _scanResult;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (lines.isNotEmpty)
+          Text(
+            "Large, but not offered: ${lines.join(", ")}",
+            style: TextStyles.mini.copyWith(color: colors.textLight),
+          ),
+        if (result != null && result.folders.isNotEmpty)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () =>
+                routeToPage(context, ImageScanReportPage(result: result)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+              child: Text(
+                "Checked $_checked images in ${result.folders.length} "
+                "folders. Show the result for each folder",
+                style: TextStyles.mini.copyWith(color: colors.primary),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -395,36 +437,17 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
                     ),
                     const SizedBox(height: Spacing.xs),
                     Text(
-                      "This is a rough estimate from the image dimensions. "
-                      "The real saving can be different. The app keeps a JPG "
-                      "only if it is at least 10% smaller than the PNG.",
+                      "These images use at least "
+                      "${kImageCompressMinBitsPerPixel.toStringAsFixed(0)} "
+                      "bits for each pixel; a camera photo uses 2 to 3.5. The "
+                      "estimate is rough. The app keeps a copy only if it is "
+                      "at least 25% smaller and passes the picture check.",
                       style: TextStyles.mini.copyWith(color: colors.textLight),
                     ),
-                    _buildLeftOut(),
+                    const SizedBox(height: Spacing.xs),
+                    _buildSkippedLines(),
                   ],
                 ),
-              ),
-              const SizedBox(height: Spacing.lg),
-              Text(
-                "JPG quality",
-                style: TextStyles.bodyBold.copyWith(color: colors.textBase),
-              ),
-              const SizedBox(height: Spacing.sm),
-              Wrap(
-                spacing: Spacing.sm,
-                children: [
-                  for (final quality in kPngToJpgQualityOptions)
-                    FilterChipComponent(
-                      label: quality == kPngToJpgDefaultQuality
-                          ? "$quality (default)"
-                          : "$quality",
-                      state: quality == _quality
-                          ? FilterChipComponentState.selected
-                          : FilterChipComponentState.unselected,
-                      showSelectedTrailing: false,
-                      onChanged: (_) => setState(() => _quality = quality),
-                    ),
-                ],
               ),
               const SizedBox(height: Spacing.lg),
               Row(
@@ -475,7 +498,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
     ];
   }
 
-  Widget _buildTile(PngScanItem item) {
+  Widget _buildTile(ImageScanItem item) {
     final colors = context.componentColors;
     final isSelected = _selected.contains(item.candidate.id);
     return GestureDetector(
@@ -489,7 +512,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
             DetailPageConfiguration(
               files,
               files.indexOf(item.file),
-              "png_to_jpg_",
+              "image_compress_",
               mode: DetailPageMode.minimalistic,
             ),
           ),
@@ -502,11 +525,11 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
           fit: StackFit.expand,
           children: [
             Hero(
-              tag: "png_to_jpg_" + item.file.tag,
+              tag: "image_compress_" + item.file.tag,
               child: ThumbnailWidget(
                 item.file,
                 shouldShowSyncStatus: false,
-                key: Key("png_to_jpg_" + item.file.tag),
+                key: Key("image_compress_" + item.file.tag),
               ),
             ),
             if (!isSelected)
@@ -525,7 +548,9 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
                   ),
                 ),
                 child: Text(
-                  formatBytes(item.candidate.sizeBytes),
+                  "${item.candidate.format} · "
+                  "${formatBytes(item.candidate.sizeBytes)} · "
+                  "${(item.candidate.width * item.candidate.height / 1000000).toStringAsFixed(1)} MP",
                   style: TextStyles.mini.copyWith(color: Colors.white),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -552,11 +577,11 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
     final colors = context.componentColors;
     final String status;
     if (_isFinishing) {
-      status = "Deleting the original PNG files…";
+      status = "Deleting the originals…";
     } else if (_cancelRequested) {
       status = "Stopping after the current image…";
     } else {
-      status = "Converting ${_runDone + 1} of $_runTotal";
+      status = "Compressing ${_runDone + 1} of $_runTotal";
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -585,8 +610,8 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
         ),
         const SizedBox(height: Spacing.lg),
         Text(
-          "Keep the app open. The app deletes a PNG only after its JPG copy "
-          "is saved and checked.",
+          "Keep the app open. The app deletes an original only after its "
+          "copy is compared, saved and checked.",
           style: TextStyles.mini.copyWith(color: colors.textLight),
           textAlign: TextAlign.center,
         ),
@@ -594,17 +619,17 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
     );
   }
 
-  Widget _buildSummary(PngRunSummary summary) {
+  Widget _buildSummary(ImageCompressSummary summary) {
     final colors = context.componentColors;
-    final converted = summary.count(PngConversionStatus.converted);
+    final converted = summary.count(ImageCompressStatus.compressed);
     final kept = summary.originalsKept.length;
-    final rolledBack = summary.count(PngConversionStatus.rolledBack);
-    final transparency = summary.count(PngConversionStatus.skippedTransparency);
-    final noSaving = summary.count(PngConversionStatus.skippedNoSaving);
-    final animated = summary.count(PngConversionStatus.skippedAnimated);
-    final notPng = summary.count(PngConversionStatus.skippedNotPng);
+    final rolledBack = summary.count(ImageCompressStatus.rolledBack);
+    final qualityLoss = summary.count(ImageCompressStatus.skippedQualityLoss);
+    final noSaving = summary.count(ImageCompressStatus.skippedNoSaving);
+    final notEligible = summary.count(ImageCompressStatus.skippedNotEligible);
+    final transparency = summary.count(ImageCompressStatus.skippedTransparency);
     final failed = summary.results
-        .where((r) => r.status == PngConversionStatus.failed)
+        .where((r) => r.status == ImageCompressStatus.failed)
         .toList();
 
     Widget line(String label, String value, {Color? color}) {
@@ -644,40 +669,43 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
         children: [
           Text(
             converted == 0
-                ? "No images converted"
+                ? "No images compressed"
                 : "Saved ${formatBytes(summary.savedBytes)}",
             style: TextStyles.h2.copyWith(color: colors.textBase),
           ),
           const SizedBox(height: Spacing.md),
-          line("Converted", "$converted"),
+          line("Compressed", "$converted"),
           if (transparency > 0)
-            line("Skipped: has transparency", "$transparency"),
-          if (noSaving > 0) line("Skipped: no saving", "$noSaving"),
-          if (animated > 0) line("Skipped: animated PNG", "$animated"),
-          if (notPng > 0) line("Skipped: not a PNG file", "$notPng"),
+            line("Kept as is: has transparency", "$transparency"),
+          if (qualityLoss > 0)
+            line("Kept as is: a copy would lose detail", "$qualityLoss"),
+          if (noSaving > 0) line("Kept as is: saving below 25%", "$noSaving"),
+          if (notEligible > 0) line("Kept as is: not eligible", "$notEligible"),
           if (failed.isNotEmpty)
             line(
-              "Failed (PNG kept)",
+              "Failed (original kept)",
               "${failed.length}",
               color: colors.warning,
             ),
-          if (rolledBack > 0) line("JPG copy removed, PNG kept", "$rolledBack"),
+          if (rolledBack > 0)
+            line("Copy removed, original kept", "$rolledBack"),
           if (summary.notProcessed > 0)
             line("Not started (cancelled)", "${summary.notProcessed}"),
           if (converted > 0) ...[
             const SizedBox(height: Spacing.md),
             Text(
-              "If the device has a trash, the original PNG files are in the "
-              "device trash. They use storage until you empty the trash.",
+              "If the device has a trash, the originals are in the device "
+              "trash. They use storage until you empty the trash. Look at "
+              "some of the new images before you empty the trash.",
               style: TextStyles.mini.copyWith(color: colors.textLight),
             ),
           ],
           if (summary.droppedIccProfiles > 0) ...[
             const SizedBox(height: Spacing.sm),
             Text(
-              "${summary.droppedIccProfiles} PNG files had a colour profile. "
-              "The app converted their colours to sRGB. The JPG files do not "
-              "contain the profile.",
+              "${summary.droppedIccProfiles} originals had a colour profile. "
+              "The app converted their colours to sRGB. The new files do "
+              "not contain the profile.",
               style: TextStyles.mini.copyWith(color: colors.textLight),
             ),
           ],
@@ -694,20 +722,20 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "$kept original PNG files are not deleted",
+                    "$kept originals are not deleted",
                     style: TextStyles.bodyBold.copyWith(color: colors.warning),
                   ),
                   const SizedBox(height: Spacing.xs),
                   Text(
-                    "The JPG copies are saved, but the device did not delete "
-                    "the PNG files. The PNG and the JPG are now both on the "
-                    "device. Delete the PNG files again, or remove the new "
-                    "JPG copies.",
+                    "The copies are saved, but the device did not delete the "
+                    "originals. The original and the copy are now both on "
+                    "the device. Delete the originals again, or remove the "
+                    "new copies.",
                     style: TextStyles.body.copyWith(color: colors.textBase),
                   ),
                   const SizedBox(height: Spacing.md),
                   ButtonComponent(
-                    label: "Delete the PNG files",
+                    label: "Delete the originals",
                     variant: ButtonComponentVariant.critical,
                     isDisabled: _isResolvingKept,
                     shouldSurfaceExecutionStates: false,
@@ -715,7 +743,7 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
                   ),
                   const SizedBox(height: Spacing.sm),
                   ButtonComponent(
-                    label: "Remove the new JPG copies",
+                    label: "Remove the new copies",
                     variant: ButtonComponentVariant.secondary,
                     isDisabled: _isResolvingKept,
                     shouldSurfaceExecutionStates: false,
@@ -773,8 +801,8 @@ class _PngToJpgPageState extends State<PngToJpgPage> {
           buttons = [
             ButtonComponent(
               label: _selected.isEmpty
-                  ? "Select images to convert"
-                  : "Convert ${_images(_selected.length)}",
+                  ? "Select images to compress"
+                  : "Compress ${_images(_selected.length)}",
               isDisabled: _selected.isEmpty,
               shouldSurfaceExecutionStates: false,
               onTap: _confirmAndRun,

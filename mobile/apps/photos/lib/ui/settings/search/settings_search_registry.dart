@@ -234,13 +234,23 @@ class SettingsSearchRegistry {
         ],
       ),
       SettingsSearchItem(
-        title: "Convert PNG to JPG", // Offline fork: not localized
+        title: "Compress images", // Offline fork: not localized
         subtitle: l10n.freeUpSpace,
         sectionPath: l10n.freeUpSpace,
         icon: HugeIcons.strokeRoundedImageCrop,
         routeBuilder: (_) => const FreeUpSpaceOptionsScreen(),
         isSubPage: true,
-        keywords: ["png", "jpg", "jpeg", "convert", "compress"],
+        keywords: [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "convert",
+          "compress",
+          "recompress",
+          "large",
+          "size",
+        ],
       ),
     ]);
 

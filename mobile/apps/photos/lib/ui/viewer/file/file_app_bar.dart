@@ -17,13 +17,11 @@ import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
 import 'package:photos/module/download/file.dart';
 import "package:photos/service_locator.dart";
-import "package:photos/services/jpeg_recompress_core.dart"
-    show hasJpegExtension;
 import "package:photos/states/detail_page_state.dart";
 import "package:photos/theme/colors.dart";
 import "package:photos/ui/actions/file/file_actions.dart";
 import 'package:photos/ui/notification/toast.dart';
-import "package:photos/ui/tools/jpeg_recompress_single.dart";
+import "package:photos/ui/tools/image_compress_single.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/file/video_control/video_speed_bottom_sheet.dart";
 import "package:photos/ui/viewer/file/viewer_app_bar.dart";
@@ -257,10 +255,10 @@ class FileAppBarState extends State<FileAppBar> {
         );
       }
 
-      // Offline fork: recompress this JPEG (not localized).
+      // Offline fork: compress this image, whatever its format (not
+      // localized).
       if (widget.file.fileType == FileType.image &&
-          widget.file.localID != null &&
-          hasJpegExtension(widget.file.title)) {
+          widget.file.localID != null) {
         items.add(
           _fileMenuOption(
             "Compress",

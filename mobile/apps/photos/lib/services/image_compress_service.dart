@@ -1,8 +1,8 @@
-// Offline fork: device side of the "Recompress large JPGs" tool.
+// Offline fork: device side of the "Compress images" tool.
 //
-// The rules (which JPEG is large for its pixels, the picture check, the
+// The rules (which image is large for its pixels, the picture check, the
 // encode -> compare -> save -> verify -> delete order) live in
-// jpeg_recompress_core.dart. This file only connects them to photo_manager,
+// image_compress_core.dart. This file only connects them to photo_manager,
 // the Rust image bridge and the local database.
 
 import "dart:io";
@@ -19,98 +19,87 @@ import "package:photos/events/files_updated_event.dart";
 import "package:photos/events/local_photos_updated_event.dart";
 import "package:photos/models/file/file.dart";
 import "package:photos/models/file/file_type.dart";
-import "package:photos/services/jpeg_recompress_core.dart";
-import "package:photos/services/jpeg_recompress_decode.dart";
-import "package:photos/services/png_to_jpg_core.dart" show SavedJpeg;
+import "package:photos/services/image_compress_core.dart";
+import "package:photos/services/image_compress_decode.dart";
+import "package:photos/services/png_to_jpg_core.dart"
+    show SavedJpeg, parsePngHeader;
 import "package:photos/services/search_service.dart";
 import "package:photos/services/sync/local_sync_service.dart";
 import "package:photos/src/rust/api/image_processing_api.dart" as rust_image;
 import "package:photos/ui/settings/file_access_section.dart"
     show hasAllFilesAccess;
 
-/// A large JPEG found on the device, with the gallery file that shows its
+/// A large image found on the device, with the gallery file that shows its
 /// thumbnail.
-class JpegScanItem {
-  final JpegCandidate candidate;
+class ImageScanItem {
+  final ImageCandidate candidate;
   final EnteFile file;
 
   /// When the file was last changed on the device (MediaStore
   /// DATE_MODIFIED). The page sorts by it.
   final DateTime modified;
 
-  const JpegScanItem({
+  const ImageScanItem({
     required this.candidate,
     required this.file,
     required this.modified,
   });
 }
 
-/// What the scan did with the JPEG files of one device folder.
-class JpegFolderReport {
+/// What the scan did with the images of one device folder.
+class ImageFolderReport {
   /// MediaStore RELATIVE_PATH, for example "Pictures/People/Ann/".
   final String folder;
 
-  /// Outcome (one of the `JpegRecompressService.outcome...` texts) to the
+  /// Outcome (one of the `ImageCompressService.outcome...` texts) to the
   /// number of files.
   final Map<String, int> counts;
 
-  const JpegFolderReport({required this.folder, required this.counts});
+  const ImageFolderReport({required this.folder, required this.counts});
 
   int get total => counts.values.fold(0, (a, b) => a + b);
 
-  int get listed => counts[JpegRecompressService.outcomeListed] ?? 0;
+  int get listed => counts[ImageCompressService.outcomeListed] ?? 0;
 }
 
-class JpegScanResult {
-  /// Every JPEG that is large for its pixel count, last modified first. The
+class ImageScanResult {
+  /// Every image that is large for its pixel count, last modified first. The
   /// page separates the ones with a skip reason.
-  final List<JpegScanItem> items;
+  final List<ImageScanItem> items;
 
-  /// How many JPEG files the scan looked at.
+  /// How many images the scan looked at.
   final int checked;
 
-  /// One entry for each folder that has a file with a JPEG name, by name.
-  final List<JpegFolderReport> folders;
+  /// One entry for each folder that has an image, by name.
+  final List<ImageFolderReport> folders;
 
-  /// Image files that the scan did not look at, because their name is not a
-  /// JPEG name: file extension (for example ".png") to the number of files.
-  final Map<String, int> otherImageTypes;
-
-  const JpegScanResult({
+  const ImageScanResult({
     required this.items,
     required this.checked,
     this.folders = const [],
-    this.otherImageTypes = const {},
   });
 }
 
 /// Removes the given gallery files from the device in one request. Returns
 /// the files that are gone.
-typedef JpegOriginalsDeleter =
+typedef ImageOriginalsDeleter =
     Future<List<EnteFile>> Function(List<EnteFile> files);
 
-class JpegRecompressService {
-  JpegRecompressService._();
+class ImageCompressService {
+  ImageCompressService._();
 
-  static final JpegRecompressService instance = JpegRecompressService._();
+  static final ImageCompressService instance = ImageCompressService._();
 
   static const _scanConcurrency = 12;
 
   /// The system delete request takes a limited number of items.
   static const _deleteChunkSize = 1500;
 
-  final _logger = Logger("JpegRecompressService");
+  final _logger = Logger("ImageCompressService");
 
   static const outcomeListed = "Large for its pixels";
   static const outcomeNormal = "Normal size for its pixels";
   static const outcomeNotReadable = "The app cannot read the file";
-  static const outcomeOtherFormat = "Android reports another format";
-  static const outcomeNotJpeg = "Not readable as JPG";
-
-  /// The file has a JPG name, but its data is another format.
-  static String outcomeMisnamed(String format) => format == "PNG"
-      ? "Is a PNG with a JPG name (see the PNG tool)"
-      : "Is a $format file with a JPG name";
 
   /// Folder to outcome to count, for the scan that is in progress.
   final Map<String, Map<String, int>> _outcomes = {};
@@ -123,16 +112,15 @@ class JpegRecompressService {
     counts[outcome] = (counts[outcome] ?? 0) + 1;
   }
 
-  /// Finds the JPEG images that are large for their pixel count.
-  Future<JpegScanResult> scan({
+  /// Finds the images that are large for their pixel count, whatever
+  /// their format or their name.
+  Future<ImageScanResult> scan({
     void Function(int done, int total)? onProgress,
   }) async {
     _outcomes.clear();
     final allFiles = await SearchService.instance.getAllFilesForSearch();
     // The same asset is listed once for each device folder.
     final byLocalID = <String, EnteFile>{};
-    final otherTypes = <String, int>{};
-    final seenOther = <String>{};
     for (final file in allFiles) {
       final localID = file.localID;
       if (localID == null ||
@@ -140,62 +128,52 @@ class JpegRecompressService {
           file.fileType != FileType.image) {
         continue;
       }
-      if (!hasJpegExtension(file.title)) {
-        if (seenOther.add(localID)) {
-          final extension = p.extension(file.title ?? "").toLowerCase();
-          final key = extension.isEmpty ? "(no extension)" : extension;
-          otherTypes[key] = (otherTypes[key] ?? 0) + 1;
-        }
-        continue;
-      }
       byLocalID.putIfAbsent(localID, () => file);
     }
 
     final files = byLocalID.values.toList();
-    final items = <JpegScanItem>[];
+    final items = <ImageScanItem>[];
     for (var i = 0; i < files.length; i += _scanConcurrency) {
       final end = min(i + _scanConcurrency, files.length);
       final batch = await Future.wait(
         files.sublist(i, end).map((file) => _inspect(file, report: true)),
       );
-      items.addAll(batch.whereType<JpegScanItem>());
+      items.addAll(batch.whereType<ImageScanItem>());
       onProgress?.call(end, files.length);
     }
     // Newest change first.
     items.sort((a, b) => b.modified.compareTo(a.modified));
     final folders = [
       for (final entry in _outcomes.entries)
-        JpegFolderReport(
+        ImageFolderReport(
           folder: entry.key,
           counts: Map.unmodifiable(entry.value),
         ),
     ]..sort((a, b) => a.folder.toLowerCase().compareTo(b.folder.toLowerCase()));
     _logger.info(
-      "Checked ${files.length} JPEG files in ${folders.length} folders, "
-      "${items.length} are large for their pixel count; other image types: "
-      "$otherTypes",
+      "Checked ${files.length} images in ${folders.length} folders, "
+      "${items.length} are large for their pixel count",
     );
     for (final folder in folders) {
-      _logger.info("JPEG scan, ${folder.folder}: ${folder.counts}");
+      _logger.info("Image scan, ${folder.folder}: ${folder.counts}");
     }
-    return JpegScanResult(
+    return ImageScanResult(
       items: items,
       checked: files.length,
       folders: folders,
-      otherImageTypes: Map.unmodifiable(otherTypes),
     );
   }
 
-  /// Reads one JPEG that the user chose in the viewer. Unlike the scan, it
+  /// Reads one image that the user chose in the viewer. Unlike the scan, it
   /// does not require the file to be large for its pixel count. Returns null
-  /// when the file is not a readable JPEG on the device.
-  Future<JpegScanItem?> inspectSingle(EnteFile file) {
+  /// when the app cannot read the file on the device.
+  Future<ImageScanItem?> inspectSingle(EnteFile file) {
     if (file.localID == null) return Future.value(null);
     return _inspect(file, onlyLarge: false);
   }
 
   /// [report] counts the outcome for the folder report of a scan.
-  Future<JpegScanItem?> _inspect(
+  Future<ImageScanItem?> _inspect(
     EnteFile file, {
     bool onlyLarge = true,
     bool report = false,
@@ -210,14 +188,14 @@ class JpegRecompressService {
       final asset = await AssetEntity.fromId(file.localID!);
       if (asset == null) return out(outcomeNotReadable);
       folder = asset.relativePath ?? folder;
-      if (asset.type != AssetType.image) return out(outcomeOtherFormat);
-      final title = asset.title ?? file.title;
-      if (!looksLikeJpeg(title: title, mimeType: asset.mimeType)) {
-        return out(outcomeOtherFormat);
-      }
+      if (asset.type != AssetType.image) return out(outcomeNotReadable);
       final source = await asset.originFile;
       if (source == null) return out(outcomeNotReadable);
       final sizeBytes = await source.length();
+      if (sizeBytes <= 0) return out(outcomeNotReadable);
+      if (onlyLarge && sizeBytes < kImageCompressMinBytes) {
+        return out(outcomeNormal);
+      }
       // The media library dimensions are enough for the first filter, so
       // most files are not opened at all.
       if (onlyLarge &&
@@ -230,54 +208,75 @@ class JpegRecompressService {
           )) {
         return out(outcomeNormal);
       }
-      if (onlyLarge && sizeBytes < kJpegRecompressMinBytes) {
-        return out(outcomeNormal);
-      }
 
-      // A large file: read it once to find the real image size, the quality
-      // and the bytes after the end of the image.
-      final bytes = await source.readAsBytes();
-      final header = parseJpegHeader(bytes);
-      if (header == null) {
-        final format = sniffImageFormat(bytes);
-        if (format != null && format != "JPG") {
-          return out(outcomeMisnamed(format));
+      // A large file. Its format comes from its data: the name and the
+      // Android media type can both be wrong.
+      final prefix = await _readPrefix(source.path, kJpegHeaderPrefixBytes);
+      final format = sniffImageFormat(prefix) ?? "unknown";
+      var width = asset.width;
+      var height = asset.height;
+      var components = 3;
+      int? quality;
+      var trailerBytes = 0;
+      var isAnimated = false;
+      if (format == "JPG") {
+        // The whole file is necessary to find the end of the image.
+        final bytes = await source.readAsBytes();
+        final header = parseJpegHeader(bytes);
+        if (header == null) {
+          final start = bytes
+              .take(16)
+              .map((b) => b.toRadixString(16).padLeft(2, "0"))
+              .join(" ");
+          _logger.warning(
+            "JPEG header not readable: ${bytes.length} bytes, starts with "
+            "$start",
+          );
+          return out(outcomeNotReadable);
         }
-        final start = bytes
-            .take(16)
-            .map((b) => b.toRadixString(16).padLeft(2, "0"))
-            .join(" ");
-        _logger.warning(
-          "JPEG header not readable: ${bytes.length} bytes, starts with "
-          "$start",
-        );
-        return out(outcomeNotJpeg);
+        width = header.width;
+        height = header.height;
+        components = header.components;
+        quality = header.estimatedQuality;
+        trailerBytes =
+            bytes.length - (findJpegPrimaryEnd(bytes) ?? bytes.length);
+      } else if (format == "PNG") {
+        final header = parsePngHeader(prefix);
+        if (header != null) {
+          width = header.width;
+          height = header.height;
+          isAnimated = header.isAnimated;
+        }
+      } else if (format == "WebP") {
+        isAnimated = isAnimatedWebp(prefix);
       }
-      final primaryEnd = findJpegPrimaryEnd(bytes) ?? bytes.length;
+      if (width <= 0 || height <= 0) return out(outcomeNotReadable);
       if (onlyLarge &&
           !isLargeForItsPixels(
             sizeBytes: sizeBytes,
-            width: header.width,
-            height: header.height,
+            width: width,
+            height: height,
           )) {
         return out(outcomeNormal);
       }
       if (report) _note(folder, outcomeListed);
 
       final creationTime = file.creationTime ?? 0;
-      return JpegScanItem(
+      return ImageScanItem(
         file: file,
         modified: asset.modifiedDateTime,
-        candidate: JpegCandidate(
+        candidate: ImageCandidate(
           id: asset.id,
-          title: title ?? p.basename(source.path),
+          title: asset.title ?? file.title ?? p.basename(source.path),
           path: source.path,
           sizeBytes: sizeBytes,
-          width: header.width,
-          height: header.height,
-          components: header.components,
-          estimatedQuality: header.estimatedQuality,
-          trailerBytes: bytes.length - primaryEnd,
+          format: format,
+          isAnimated: isAnimated,
+          width: width,
+          height: height,
+          components: components,
+          estimatedQuality: quality,
+          trailerBytes: trailerBytes,
           // The gallery time is what places the file in the timeline.
           captureTime: creationTime > 0
               ? DateTime.fromMicrosecondsSinceEpoch(creationTime)
@@ -287,18 +286,18 @@ class JpegRecompressService {
         ),
       );
     } catch (e, s) {
-      _logger.warning("Could not inspect a JPEG candidate", e, s);
+      _logger.warning("Could not inspect an image", e, s);
       return out(outcomeNotReadable);
     }
   }
 
-  /// A recompressor whose delete step uses [deleteOriginals] (the page
+  /// A compressor whose delete step uses [deleteOriginals] (the page
   /// supplies it, because the delete helpers need a BuildContext).
-  JpegRecompressor recompressor({
-    required List<JpegScanItem> items,
-    required JpegOriginalsDeleter deleteOriginals,
+  ImageCompressor compressor({
+    required List<ImageScanItem> items,
+    required ImageOriginalsDeleter deleteOriginals,
   }) {
-    return JpegRecompressor(
+    return ImageCompressor(
       _DeviceIo(
         filesByID: {for (final item in items) item.candidate.id: item.file},
         deleteOriginalFiles: deleteOriginals,
@@ -308,10 +307,11 @@ class JpegRecompressService {
   }
 
   /// One log line for each result: the record of what the tool did.
-  void logResult(JpegRecompressResult result) {
+  void logResult(ImageCompressResult result) {
     final candidate = result.candidate;
     _logger.info(
-      "${result.status.name}: ${candidate.width}x${candidate.height} "
+      "${result.status.name}: ${candidate.format} "
+      "${candidate.width}x${candidate.height} "
       "${candidate.bitsPerPixel.toStringAsFixed(1)} bpp, source quality "
       "${candidate.estimatedQuality ?? "?"}, ${candidate.sizeBytes} -> "
       "${result.outputBytes} bytes, quality ${result.quality ?? "-"}, PSNR "
@@ -326,16 +326,25 @@ class JpegRecompressService {
     try {
       await LocalSyncService.instance.checkAndSync();
     } catch (e, s) {
-      _logger.warning("Local sync after JPEG recompression failed", e, s);
+      _logger.warning("Local sync after image compression failed", e, s);
     }
   }
 }
 
-class _DeviceIo implements JpegRecompressIo {
+Future<Uint8List> _readPrefix(String path, int maxBytes) async {
+  final file = await File(path).open();
+  try {
+    return await file.read(maxBytes);
+  } finally {
+    await file.close();
+  }
+}
+
+class _DeviceIo implements ImageCompressIo {
   final Map<String, EnteFile> filesByID;
-  final JpegOriginalsDeleter deleteOriginalFiles;
+  final ImageOriginalsDeleter deleteOriginalFiles;
   final int chunkSize;
-  final _logger = Logger("JpegRecompressDeviceIo");
+  final _logger = Logger("ImageCompressDeviceIo");
 
   _DeviceIo({
     required this.filesByID,
@@ -355,14 +364,14 @@ class _DeviceIo implements JpegRecompressIo {
 
   @override
   Future<DecodedRgba?> decodeFile(String path) {
-    return decodeUprightRgbaFromPath(path, maxPixels: kJpegRecompressMaxPixels);
+    return decodeUprightRgbaFromPath(path, maxPixels: kImageCompressMaxPixels);
   }
 
   @override
   Future<DecodedRgba?> decodeBytes(Uint8List bytes) {
     return decodeUprightRgbaFromBytes(
       bytes,
-      maxPixels: kJpegRecompressMaxPixels,
+      maxPixels: kImageCompressMaxPixels,
     );
   }
 
@@ -380,7 +389,7 @@ class _DeviceIo implements JpegRecompressIo {
   Future<SavedJpeg> saveJpeg(
     Uint8List bytes, {
     required String name,
-    required JpegCandidate source,
+    required ImageCandidate source,
   }) async {
     final relativePath = source.relativePath;
     if (relativePath == null || relativePath.trim().isEmpty) {
@@ -445,7 +454,7 @@ class _DeviceIo implements JpegRecompressIo {
   }
 
   @override
-  Future<Set<String>> deleteOriginals(List<JpegCandidate> originals) async {
+  Future<Set<String>> deleteOriginals(List<ImageCandidate> originals) async {
     final removed = <String>{};
     for (var i = 0; i < originals.length; i += chunkSize) {
       final end = min(i + chunkSize, originals.length);

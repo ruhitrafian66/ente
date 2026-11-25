@@ -1,10 +1,10 @@
-// Offline fork: image decode for the picture check of the "Recompress large
-// JPGs" tool. Only dart:ui, so that a test can run it.
+// Offline fork: image decode for the picture check of the "Compress images"
+// tool. Only dart:ui, so that a test can run it.
 
 import "dart:typed_data";
 import "dart:ui" as ui;
 
-import "package:photos/services/jpeg_recompress_core.dart";
+import "package:photos/services/image_compress_core.dart";
 
 /// Decodes an encoded image to upright 8-bit RGBA. The engine applies the
 /// EXIF orientation and decodes on its own worker threads. Returns null when
