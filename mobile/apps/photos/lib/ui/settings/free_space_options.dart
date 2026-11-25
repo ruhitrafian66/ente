@@ -5,6 +5,7 @@ import "package:ente_strings/ente_strings.dart";
 import "package:flutter/material.dart";
 import "package:photos/ui/tools/debug/app_storage_viewer.dart";
 import "package:photos/ui/tools/exact_duplicates_page.dart";
+import "package:photos/ui/tools/jpeg_recompress_page.dart";
 import "package:photos/ui/tools/person_folders_page.dart";
 import "package:photos/ui/tools/png_to_jpg_page.dart";
 import "package:photos/ui/tools/video_compress_page.dart";
@@ -80,6 +81,15 @@ class _FreeUpSpaceOptionsScreenState extends State<FreeUpSpaceOptionsScreen> {
           icon: HugeIcons.strokeRoundedImageCrop,
           onTap: () async {
             await routeToPage(context, const PngToJpgPage());
+          },
+        ),
+        _buildFreeSpaceOption(
+          title: "Recompress large JPGs", // Offline fork: not localized
+          subtitle:
+              "Find JPG images that are large for their pixel count", // Offline fork: not localized
+          icon: HugeIcons.strokeRoundedImage01,
+          onTap: () async {
+            await routeToPage(context, const JpegRecompressPage());
           },
         ),
         _buildFreeSpaceOption(
